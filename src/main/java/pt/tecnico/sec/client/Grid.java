@@ -2,6 +2,7 @@ package pt.tecnico.sec.client;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 public class Grid {
 
@@ -9,11 +10,13 @@ public class Grid {
     private static Grid _instance = null;
 
     /* The environment */
+    private int _epoch;
     private int _nX, _nY;
     private boolean[][] _grid;
     private List<User> _users;
 
     private Grid(int nX, int nY) {
+        _epoch = 0;
         _nX = nX;
         _nY = nY;
 
@@ -34,7 +37,16 @@ public class Grid {
     }
 
     public void join(User user) {
-        // TODO : assign random location
+        // create instance of Random class
+        Random rand = new Random();
+        int x, y;
+        do {
+            // generate random integers in range 0 to _nX - 1 and _nY - 1
+            x = rand.nextInt(_nX);
+            y = rand.nextInt(_nY);
+        } while(_grid[x][y]);
+        user.setLocation(x, y);
+        _grid[x][y] = true;
         _users.add(user);
     }
 
