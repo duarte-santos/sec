@@ -1,4 +1,4 @@
-package pt.tecnico.sec.client;
+package pt.tecnico.sec.healthauthority;
 
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
@@ -10,12 +10,12 @@ import org.springframework.web.client.RestTemplate;
 import java.util.Collections;
 
 @SpringBootApplication
-public class ClientApplication {
+public class HealthAuthorityApplication {
 
     public static void main(String[] args) {
-        //SpringApplication.run(ClientApplication.class, args);
-        SpringApplication app = new SpringApplication(ClientApplication.class);
-        app.setDefaultProperties(Collections.singletonMap("server.port", "8083"));
+        //SpringApplication.run(HealthAuthorityApplication.class, args);
+        SpringApplication app = new SpringApplication(HealthAuthorityApplication.class);
+        app.setDefaultProperties(Collections.singletonMap("server.port", "8084"));
         app.run(args);
     }
 
