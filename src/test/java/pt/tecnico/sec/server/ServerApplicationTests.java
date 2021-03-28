@@ -1,10 +1,10 @@
-package pt.tecnico.sec;
+package pt.tecnico.sec.server;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class SecApplicationTests {
+class ServerApplicationTests {
 
     @Test
     void contextLoads() {
