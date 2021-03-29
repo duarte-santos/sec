@@ -12,11 +12,21 @@ import java.util.Collections;
 @SpringBootApplication
 public class ClientApplication {
 
+    // USAGE:  ./mvnw spring-boot:run -Dspring-boot.run.arguments="8083" -Dstart-class=pt.tecnico.sec.client.ClientApplication
+
     public static void main(String[] args) {
-        //SpringApplication.run(ClientApplication.class, args);
-        SpringApplication app = new SpringApplication(ClientApplication.class);
-        app.setDefaultProperties(Collections.singletonMap("server.port", "8083"));
-        app.run(args);
+        try {
+            int port = Integer.parseInt(args[0]);
+            if (port < 1024 || port > 65535)
+                throw new NumberFormatException();
+        }
+        catch (Exception e) {
+            System.out.println("Please choose a Port value between 1024 and 65535.");
+            return;
+        }
+        SpringApplication springApplication = new SpringApplication(ClientApplication.class);
+        springApplication.setDefaultProperties(Collections.singletonMap("server.port", args[0]));
+        springApplication.run(args);
     }
 
     @Bean

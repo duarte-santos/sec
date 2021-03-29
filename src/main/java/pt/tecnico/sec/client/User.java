@@ -4,6 +4,7 @@ public class User {
 
     private final Grid _grid;
     private int _x, _y;
+    private int _id;
 
     public User() {
         _grid = Grid.getInstance();
@@ -13,5 +14,17 @@ public class User {
     public void setLocation(int x, int y) {
         _x = x;
         _y = y;
+    }
+
+    public int getX() {
+        return _x;
+    }
+
+    public int getY() {
+        return _y;
+    }
+
+    public void proveLocation() {
+        // TODO
     }
 }
