@@ -2,29 +2,31 @@ package pt.tecnico.sec.client;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 public class ClientController {
 
-    User _user; //FIXME hooooow
+    private final ClientApplication _clientApp; //FIXME hooooow
 
     @Autowired
-    private ClientController(User user) {
-        _user = user;
+    private ClientController(ClientApplication clientApp) {
+        _clientApp = clientApp;
     }
 
-    @GetMapping("/location-proof")
-    public LocationProof locationProof(@RequestParam(value = "proverId") int proverId, @RequestParam(value = "location") Location location) {
-        int witnessId = _user.getId();
+    //FIXMEE
+    @GetMapping("/location-proof/{proverId}")
+    public LocationProof locationProof(@PathVariable(value = "proverId") int proverId) {
+        int witnessId = _clientApp.getUser().getId();
 
-        String type = (_user.getGrid().isNearby(witnessId, proverId)) ? "success" : "failure";
-        Value value = new Value(location, proverId, witnessId);
+        String type = (_clientApp.getUser().getGrid().isNearby(witnessId, proverId)) ? "success" : "failure";
+        Value value = new Value(_clientApp.getUser().getLocation(), proverId, witnessId);
+
+        System.out.print("\r\nSent proof to user " + proverId + " with value \"" + type + "\"\n\n> ");
 
         return new LocationProof(type, value);
     }
-
-
 }
 
