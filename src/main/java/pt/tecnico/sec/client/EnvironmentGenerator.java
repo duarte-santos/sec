@@ -19,13 +19,15 @@ public class EnvironmentGenerator {
         int userCount = 3;
 
         JSONObject environmentJSON = new JSONObject();
+        // generate one grid for each epoch
         for (int epoch = 0; epoch < epochCount; epoch++) {
             JSONObject gridJSON = new JSONObject();
+            // generate one location for each user
             for (int userId = 0; userId < userCount; userId++) {
-                // generate location inside the grid limits
+                // generate random location inside the grid limits
                 Random random = new Random();
-                int x = random.nextInt(nX);
-                int y = random.nextInt(nY);
+                int x = random.nextInt(nX + 1);
+                int y = random.nextInt(nY + 1);
                 // add location to user
                 JSONObject userJSON = new JSONObject();
                 userJSON.put("x", x);
