@@ -1,7 +1,6 @@
 package pt.tecnico.sec.client;
 
 import org.springframework.http.HttpEntity;
-import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.ArrayList;
@@ -13,7 +12,7 @@ public class User {
     private static final int BASE_PORT = 8000;
     private static final int SERVER_PORT = 9000;
 
-    private final RestTemplate _restTemplate;
+    private RestTemplate _restTemplate;
     private final Environment _environment;
     private final int _id;
     private final Map<Integer, List<LocationProof>> _proofs =  new HashMap<>();
@@ -24,12 +23,15 @@ public class User {
 
     private int _epoch = 0;
 
-    public User(RestTemplate restTemplate, Environment environment, int id) {
-        _restTemplate = restTemplate;
+    public User(Environment environment, int id) {
         _environment = environment;
         _id = id;
 
         updateMe();
+    }
+
+    public void setRestTemplate(RestTemplate restTemplate) {
+        _restTemplate = restTemplate;
     }
 
     public int getId() {
@@ -42,6 +44,10 @@ public class User {
 
     public Grid getGrid() {
         return _grid;
+    }
+
+    public int getEpoch() {
+        return _epoch;
     }
 
     /* ========================================================== */
@@ -57,14 +63,18 @@ public class User {
         return "http://localhost:" + SERVER_PORT;
     }
 
+
     /* ========================================================== */
     /* ====[                      Step                      ]==== */
     /* ========================================================== */
 
     public void step() {
         // TODO : the visitor design pattern might be useful in the future
-        // TODO: warn other users to make a step?
-        //TODO check that is covered by environment
+        // TODO : warn other users to make a step?
+
+        if (_epoch >= _environment.getMaxEpoch()) // check if epoch is covered by environment
+            throw new IllegalArgumentException("No more steps available in environment.");
+
         proveLocation();
 
         System.out.println("Leaving epoch " + _epoch + " and location " + _location + ". Bye!!");
@@ -84,8 +94,7 @@ public class User {
     /* ========================================================== */
 
     private LocationProof requestLocationProof(int userId) {
-        //FIXME URL port (and server?)
-        //TODO how to send user/location?
+        //FIXME URL server?
         Map<String, Integer> params = new HashMap<>();
         params.put("proverId", _id);
         System.out.println("Sending location proof request to url " + getUserURL(userId) + "/location-proof/" + _id);
@@ -110,7 +119,7 @@ public class User {
     /* ========================================================== */
 
     private void submitLocationReport(LocationReport locationReport) {
-        //FIXME URL port (and server?) of server
+        //FIXME URL server and port?
         HttpEntity<LocationReport> request = new HttpEntity<>(locationReport);
         _restTemplate.postForObject(getServerURL() + "/location-report", request, LocationReport.class);
     }
@@ -131,7 +140,7 @@ public class User {
     /* ========================================================== */
 
     private LocationReport obtainLocationReport(int epoch) {
-        //FIXME URL port (and server?)
+        //FIXME URL server?
         //TODO how to send epoch?
         return _restTemplate.getForObject(getServerURL() + "/location-report", LocationReport.class);
     }

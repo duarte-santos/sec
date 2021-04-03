@@ -15,8 +15,16 @@ public class Environment {
         return _environment.get(epoch);
     }
 
+    public int getMaxEpoch() {
+        Set<Integer> epochs = _environment.keySet();
+        return Collections.max(epochs);
+    }
+
+    public List<Integer> getUserList() {
+        return new ArrayList<>( _environment.get(0).getAllUserIds() );
+    }
+
     public void addEpochGrid(int epoch, Grid grid) {
-        //TODO checks
         _environment.put(epoch, grid);
     }
 

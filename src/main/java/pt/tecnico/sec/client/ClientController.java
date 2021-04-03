@@ -3,7 +3,6 @@ package pt.tecnico.sec.client;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -16,7 +15,6 @@ public class ClientController {
         _clientApp = clientApp;
     }
 
-    //FIXMEE
     @GetMapping("/location-proof/{proverId}")
     public LocationProof locationProof(@PathVariable(value = "proverId") int proverId) {
         int witnessId = _clientApp.getUser().getId();
