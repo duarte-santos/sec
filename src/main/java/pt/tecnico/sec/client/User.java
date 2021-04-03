@@ -17,17 +17,11 @@ public class User {
     private final int _id;
     private final Map<Integer, List<LocationProof>> _proofs =  new HashMap<>();
 
-    // used for easy access
-    private Grid _grid;
-    private Location _location;
-
     private int _epoch = 0;
 
     public User(Environment environment, int id) {
         _environment = environment;
         _id = id;
-
-        updateMe();
     }
 
     public void setRestTemplate(RestTemplate restTemplate) {
@@ -36,14 +30,6 @@ public class User {
 
     public int getId() {
         return _id;
-    }
-
-    public Location getLocation() {
-        return _location;
-    }
-
-    public Grid getGrid() {
-        return _grid;
     }
 
     public int getEpoch() {
@@ -63,6 +49,22 @@ public class User {
         return "http://localhost:" + SERVER_PORT;
     }
 
+    public List<Integer> getUserList() {
+        return _environment.getUserList();
+    }
+
+    public boolean isNearby(int epoch, int userId) {
+        return _environment.getGrid(epoch).isNearby(_id, userId);
+    }
+
+    public Location getEpochLocation(int epoch) {
+        return _environment.getGrid(epoch).getUserLocation(_id);
+    }
+
+    public List<Integer> findNearbyUsers() {
+        return _environment.getGrid(_epoch).findNearbyUsers(_id);
+    }
+
 
     /* ========================================================== */
     /* ====[                      Step                      ]==== */
@@ -70,24 +72,31 @@ public class User {
 
     public void step() {
         // TODO : the visitor design pattern might be useful in the future
-        // TODO : warn other users to make a step?
+        proveLocation();
 
         if (_epoch >= _environment.getMaxEpoch()) // check if epoch is covered by environment
             throw new IllegalArgumentException("No more steps available in environment.");
 
-        proveLocation();
-
-        System.out.println("Leaving epoch " + _epoch + " and location " + _location + ". Bye!!");
+        System.out.println("Leaving: epoch " + _epoch + ", location " + getEpochLocation(_epoch) + ". Bye!!");
         _epoch++;
-        updateMe();
-        System.out.println("New epoch " + _epoch + " and location " + _location + ". So fresh!\n");
+        System.out.println("Current: epoch " + _epoch + ", location " + getEpochLocation(_epoch) + ". So fresh!");
     }
 
-    public void updateMe() {
-        _grid = _environment.getGrid(_epoch);
-        _location = _grid.getUserLocation(_id);
-
+    private void stepRequest(int userId) {
+        System.out.println("[Request sent] Type: Step To: " + getUserURL(userId) + ", From: " + _id);
+        _restTemplate.getForObject(getUserURL(userId)+ "/step/", LocationProof.class);
     }
+
+    public void globalStep() {
+        step();
+
+        List<Integer> userList = getUserList();
+        for (int userId : userList) {
+            if (userId == _id) continue; // do not send request to myself
+            stepRequest(userId);
+        }
+    }
+
 
     /* ========================================================== */
     /* ====[             Request Location Proof             ]==== */
@@ -96,13 +105,14 @@ public class User {
     private LocationProof requestLocationProof(int userId) {
         //FIXME URL server?
         Map<String, Integer> params = new HashMap<>();
+        params.put("epoch", _epoch);
         params.put("proverId", _id);
-        System.out.println("Sending location proof request to url " + getUserURL(userId) + "/location-proof/" + _id);
-        return _restTemplate.getForObject(getUserURL(userId)+ "/location-proof/{proverId}", LocationProof.class, params);
+        System.out.println("[Request sent] Type: LocationProof To: " + getUserURL(userId) + ", From: " + _id + ", Epoch: " + _epoch);
+        return _restTemplate.getForObject(getUserURL(userId)+ "/location-proof/{epoch}/{proverId}", LocationProof.class, params);
     }
 
     public void proveLocation() {
-        List<Integer> nearbyUsers = _grid.findNearbyUsers(_id);
+        List<Integer> nearbyUsers = findNearbyUsers();
         List<LocationProof> epochProofs = new ArrayList<>();
 
         for (int userId : nearbyUsers) {
@@ -134,6 +144,7 @@ public class User {
 
         submitLocationReport(locationReport);
     }
+
 
     /* ========================================================== */
     /* ====[             Obtain Location Report             ]==== */

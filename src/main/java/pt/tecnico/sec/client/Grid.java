@@ -7,14 +7,10 @@ public class Grid {
     private static final int DetectionRange = 2;
 
     // Map UserID -> Location
-    private Map<Integer, Location> _grid = new HashMap<>();
+    private final Map<Integer, Location> _grid = new HashMap<>();
 
     public Grid() {
         // empty constructor
-    }
-
-    public void setGrid(Map<Integer, Location> grid) {
-        _grid = grid;
     }
 
     public void addUserLocation(int userId, Location location) {

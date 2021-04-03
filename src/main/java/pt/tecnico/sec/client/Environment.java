@@ -5,7 +5,7 @@ import java.util.*;
 public class Environment {
 
     // Map Epoch -> Grid
-    private Map<Integer, Grid> _environment = new HashMap<>();
+    private final Map<Integer, Grid> _environment = new HashMap<>();
 
     public Environment() {
         // empty constructor
@@ -27,12 +27,5 @@ public class Environment {
     public void addEpochGrid(int epoch, Grid grid) {
         _environment.put(epoch, grid);
     }
-
-
-    public Location getUserLocation(int epoch, int userId) {
-        return _environment.get(epoch).getUserLocation(userId);
-    }
-
-
 
 }

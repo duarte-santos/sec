@@ -20,30 +20,6 @@ public class LocationReport {
         _proofs = proofs;
     }
 
-    public int getUserId() {
-        return _userId;
-    }
-
-    public void setUserId(int userId) {
-        _userId = userId;
-    }
-
-    public Location getLocation() {
-        return _location;
-    }
-
-    public void setLocation(Location location) {
-        _location = location;
-    }
-
-    public List<LocationProof> getProofs() {
-        return _proofs;
-    }
-
-    public void setProofs(List<LocationProof> proofs) {
-        _proofs = proofs;
-    }
-
     @Override
     public String toString() {
         return "LocationReport{" +

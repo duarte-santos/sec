@@ -5,25 +5,37 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 
+import javax.servlet.http.HttpServletRequest;
+
 @RestController
 public class ClientController {
 
-    private final ClientApplication _clientApp; //FIXME hooooow
+    private final User _user;
 
     @Autowired
     private ClientController(ClientApplication clientApp) {
-        _clientApp = clientApp;
+        _user = clientApp.getUser();
     }
 
-    @GetMapping("/location-proof/{proverId}")
-    public LocationProof locationProof(@PathVariable(value = "proverId") int proverId) {
-        int witnessId = _clientApp.getUser().getId();
+    @GetMapping("/step/")
+    public void step(HttpServletRequest request) {
+        System.out.println("\r  \n[Request received] Type: Step, From: " + request.getRemoteAddr() + ":" + request.getRemotePort());
+        _user.step();
+        System.out.print("\n> ");
+    }
 
-        String type = (_clientApp.getUser().getGrid().isNearby(witnessId, proverId)) ? "success" : "failure";
-        Value value = new Value(_clientApp.getUser().getLocation(), proverId, witnessId);
+    @GetMapping("/location-proof/{epoch}/{proverId}")
+    public LocationProof locationProof(@PathVariable(value = "epoch") int proverEpoch, @PathVariable(value = "proverId") int proverId) {
+        if (proverEpoch > _user.getEpoch()) // do not accept requests regarding the future
+            throw new IllegalArgumentException("Cannot prove location requests regarding future epochs");
 
-        System.out.print("\r\nSent proof to user " + proverId + " with value \"" + type + "\"\n\n> ");
+        int witnessId = _user.getId();
+        Location witnessLoc = _user.getEpochLocation(proverEpoch);
+        String type = _user.isNearby(proverEpoch, proverId) ? "success" : "failure";
 
+        Value value = new Value(witnessLoc, proverId, witnessId);
+
+        System.out.println("\r[Request received] Type: LocationProof, From: " + proverId + ", Epoch: " + proverEpoch + ", Result: " + type);
         return new LocationProof(type, value);
     }
 }

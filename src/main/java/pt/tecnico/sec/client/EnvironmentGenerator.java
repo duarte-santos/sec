@@ -13,7 +13,7 @@ public class EnvironmentGenerator {
 
     public static final String ENVIRONMENT_PATH = "src/main/resources/environment.json";
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) {
         try {
             int nX = Integer.parseInt(args[0]);
             int nY = Integer.parseInt(args[1]);
