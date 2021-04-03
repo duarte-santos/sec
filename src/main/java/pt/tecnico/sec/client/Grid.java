@@ -1,6 +1,9 @@
 package pt.tecnico.sec.client;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class Grid {
     // Constants
@@ -14,12 +17,11 @@ public class Grid {
     }
 
     public void addUserLocation(int userId, Location location) {
-        //TODO checks
         _grid.put(userId, location);
     }
 
-    public Set<Integer> getAllUserIds() {
-        return _grid.keySet();
+    public List<Integer> getUserList() {
+        return new ArrayList<>( _grid.keySet() );
     }
 
     public Location getUserLocation(int userId) {
@@ -38,7 +40,7 @@ public class Grid {
 
     public List<Integer> findNearbyUsers(int userId1) {
         List<Integer> nearbyUsers = new ArrayList<>();
-        for (int userId2 : getAllUserIds()) {
+        for (int userId2 : getUserList()) {
             // skip if comparing with the same user
             if (userId2 == userId1)
                 continue;

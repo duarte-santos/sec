@@ -10,32 +10,41 @@ import javax.servlet.http.HttpServletRequest;
 @RestController
 public class ClientController {
 
-    private final User _user;
+    private final ClientApplication _clientApp;
 
     @Autowired
     private ClientController(ClientApplication clientApp) {
-        _user = clientApp.getUser();
+        _clientApp = clientApp;
     }
 
     @GetMapping("/step/")
     public void step(HttpServletRequest request) {
         System.out.println("\r  \n[Request received] Type: Step, From: " + request.getRemoteAddr() + ":" + request.getRemotePort());
-        _user.step();
+        _clientApp.step();
         System.out.print("\n> ");
     }
 
     @GetMapping("/location-proof/{epoch}/{proverId}")
     public LocationProof locationProof(@PathVariable(value = "epoch") int proverEpoch, @PathVariable(value = "proverId") int proverId) {
-        if (proverEpoch > _user.getEpoch()) // do not accept requests regarding the future
-            throw new IllegalArgumentException("Cannot prove location requests regarding future epochs");
+        User witness = _clientApp.getUser();
+        int currentEpoch = witness.getEpoch();
+        int witnessId = witness.getId();
 
-        int witnessId = _user.getId();
-        Location witnessLoc = _user.getEpochLocation(proverEpoch);
-        String type = _user.isNearby(proverEpoch, proverId) ? "success" : "failure";
+        Location witnessLoc;
+        String type;
+        if (proverEpoch == currentEpoch) { // users are synchronized
+            witnessLoc = witness.getLocation();
+            type = witness.isNearby(proverId) ? "success" : "failure";
+        }
+        else if (proverEpoch == currentEpoch - 1) { // prover is not synchronized yet
+            witnessLoc = witness.getPrevLocation();
+            type = witness.wasNearby(proverId) ? "success" : "failure";
+        }
+        else
+            throw new IllegalArgumentException("Can only prove location requests regarding current or previous epoch");
 
         Value value = new Value(witnessLoc, proverId, witnessId);
-
-        System.out.println("\r[Request received] Type: LocationProof, From: " + proverId + ", Epoch: " + proverEpoch + ", Result: " + type);
+        System.out.print("\r[Request received] Type: LocationProof, From: " + proverId + ", Epoch: " + proverEpoch + ", Result: " + type + "\n> ");
         return new LocationProof(type, value);
     }
 }

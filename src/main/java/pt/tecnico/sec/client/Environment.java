@@ -21,7 +21,7 @@ public class Environment {
     }
 
     public List<Integer> getUserList() {
-        return new ArrayList<>( _environment.get(0).getAllUserIds() );
+        return getGrid(0).getUserList();
     }
 
     public void addEpochGrid(int epoch, Grid grid) {

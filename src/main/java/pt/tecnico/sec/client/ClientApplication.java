@@ -28,21 +28,24 @@ public class ClientApplication {
     private static final int BASE_PORT = 8000;
     private static final int SERVER_PORT = 9000;
 
+    private static Environment _environment;
+    private static int _epoch;
     private static User _user;
 
     public static void main(String[] args) {
 
         try {
             // create environment
-            Environment environment = EnvironmentGenerator.parseEnvironmentJSON(); // import from randomly generated JSON
-            List<Integer> userIds = environment.getUserList();
+            _environment = EnvironmentGenerator.parseEnvironmentJSON(); // import from randomly generated JSON
+            List<Integer> userIds = _environment.getUserList();
             System.out.println("Valid IDs: " + userIds);
+            _epoch = 0;
 
             // create user
             int id = Integer.parseInt(args[0]);
             if ( !userIds.contains(id) )  // client must exist in environment
                 throw new NumberFormatException("Invalid user ID. Please choose an ID value from the ones shown.");
-            _user = new User(environment, id);
+            _user = new User(_environment.getGrid(_epoch), id);
             System.out.println("The user \"C00lD0060 No." + id + "\" has SPAWNED.\n");
 
             // create spring application
@@ -82,19 +85,34 @@ public class ClientApplication {
 
                         // step - increase epoch
                         else if (line.equals(STEP_CMD)) {
-                            _user.globalStep();
+                            // check if epoch is covered by environment
+                            if (_epoch > _environment.getMaxEpoch()) {
+                                System.out.println("No more steps available in environment.");
+                                continue;
+                            }
+
+                            // perform the step on _user
+                            step();
+
+                            // signal other users to step
+                            for (int userId : _environment.getUserList()) {
+                                if (userId == _user.getId()) continue; // do not send request to myself
+                                _user.stepRequest(userId);
+                            }
                         }
 
                         // submit [epoch] - user submits the location report of the given epoch to the server
                         else if (tokens[0].equals(SUBMIT_CMD) && tokens.length == 2) {
                             int ep = Integer.parseInt(tokens[1]);
-                            _user.reportLocation(ep);
+                            Location location = _environment.getGrid(ep).getUserLocation(_user.getId());
+                            _user.reportLocation(ep, location);
                         }
 
                         // obtain [epoch] - user asks server for its location report at the given epoch
                         else if (tokens[0].equals(OBTAIN_CMD) && tokens.length == 2) {
                             int ep = Integer.parseInt(tokens[1]);
-                            _user.obtainReport(ep);
+                            LocationReport locationReport = _user.obtainReport(ep);
+                            System.out.println("Location Report: " + locationReport);
                         }
 
                         // help
@@ -118,7 +136,7 @@ public class ClientApplication {
         };
     }
 
-    /* auxiliary function: returns a string with the help message */
+    // auxiliary function: returns a string with the help message
     private static String getHelpString() {
         return """
                   ====================== Available Commands ======================
@@ -134,5 +152,14 @@ public class ClientApplication {
 
     public static User getUser() {
         return _user;
+    }
+
+    // can be called by controller - step to synchronize
+    public void step() {
+        Grid nextGrid;
+        int maxEpoch = _environment.getMaxEpoch();
+        if (++_epoch < maxEpoch) nextGrid = _environment.getGrid(_epoch);
+        else nextGrid = _environment.getGrid(maxEpoch); // after last epoch grid will remain as it was
+        _user.step(nextGrid);
     }
 }
