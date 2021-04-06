@@ -10,18 +10,17 @@ import java.util.Map;
 
 public class User {
     private static final int BASE_PORT = 8000;
-    private static final int SERVER_PORT = 9000;
+    private static final int SERVER_PORT = 8001;
 
     private RestTemplate _restTemplate;
-    private Grid _prevGrid = null; // useful for synchronization
-    private Grid _grid;
+    private final Environment _environment;
     private final int _id;
     private final Map<Integer, List<LocationProof>> _proofs =  new HashMap<>();
 
     private int _epoch = 0;
 
-    public User(Grid grid, int id) {
-        _grid = grid;
+    public User(Environment environment, int id) {
+        _environment = environment;
         _id = id;
     }
 
@@ -50,24 +49,20 @@ public class User {
         return "http://localhost:" + SERVER_PORT;
     }
 
-    public boolean isNearby(int userId) {
-        return _grid.isNearby(_id, userId);
+    public List<Integer> getUserList() {
+        return _environment.getUserList();
     }
 
-    public boolean wasNearby(int userId) {
-        return _prevGrid.isNearby(_id, userId);
+    public boolean isNearby(int epoch, int userId) {
+        return _environment.getGrid(epoch).isNearby(_id, userId);
     }
 
-    public Location getLocation() {
-        return _grid.getUserLocation(_id);
-    }
-
-    public Location getPrevLocation() {
-        return _prevGrid.getUserLocation(_id);
+    public Location getEpochLocation(int epoch) {
+        return _environment.getGrid(epoch).getUserLocation(_id);
     }
 
     public List<Integer> findNearbyUsers() {
-        return _grid.findNearbyUsers(_id);
+        return _environment.getGrid(_epoch).findNearbyUsers(_id);
     }
 
 
@@ -75,29 +70,40 @@ public class User {
     /* ====[                      Step                      ]==== */
     /* ========================================================== */
 
-    public void step(Grid nextGrid) {
+    public void step() {
         // TODO : the visitor design pattern might be useful in the future
-        System.out.println("Previous epoch " + _epoch + ", location " + getLocation());
         proveLocation();
+
+        if (_epoch >= _environment.getMaxEpoch()) // check if epoch is covered by environment
+            throw new IllegalArgumentException("No more steps available in environment.");
+
+        System.out.println("Leaving: epoch " + _epoch + ", location " + getEpochLocation(_epoch) + ". Bye!!");
         _epoch++;
-        _prevGrid = _grid;
-        _grid = nextGrid;
-        System.out.println("Current epoch " + _epoch + ", location " + getLocation());
+        System.out.println("Current: epoch " + _epoch + ", location " + getEpochLocation(_epoch) + ". So fresh!");
     }
 
-    public void stepRequest(int userId) {
+    private void stepRequest(int userId) {
         System.out.println("[Request sent] Type: Step To: " + getUserURL(userId) + ", From: " + _id);
         _restTemplate.getForObject(getUserURL(userId)+ "/step/", LocationProof.class);
     }
 
+    public void globalStep() {
+        step();
 
-    //FIXME spring -> different servers for clients??
+        List<Integer> userList = getUserList();
+        for (int userId : userList) {
+            if (userId == _id) continue; // do not send request to myself
+            stepRequest(userId);
+        }
+    }
+
 
     /* ========================================================== */
     /* ====[             Request Location Proof             ]==== */
     /* ========================================================== */
 
     private LocationProof requestLocationProof(int userId) {
+        //FIXME URL server?
         Map<String, Integer> params = new HashMap<>();
         params.put("epoch", _epoch);
         params.put("proverId", _id);
@@ -123,14 +129,17 @@ public class User {
     /* ========================================================== */
 
     private void submitLocationReport(LocationReport locationReport) {
+        //FIXME URL server and port?
         HttpEntity<LocationReport> request = new HttpEntity<>(locationReport);
-        _restTemplate.postForObject(getServerURL() + "/location-report", request, LocationReport.class);
+        System.out.println(request);
+        _restTemplate.postForEntity(getServerURL() + "/location-report", request, LocationReport.class);
     }
 
-    public void reportLocation(int epoch, Location epochLocation) {
+    public void reportLocation(int epoch) {
         if (!(0 <= epoch && epoch <= _epoch))
             throw new IllegalArgumentException("Epoch must be positive and not exceed the current epoch.");
 
+        Location epochLocation = _environment.getGrid(epoch).getUserLocation(_id);
         List<LocationProof> epochProofs = _proofs.get(epoch);
         LocationReport locationReport = new LocationReport(_id, epochLocation, epochProofs);
 
@@ -143,15 +152,16 @@ public class User {
     /* ========================================================== */
 
     private LocationReport obtainLocationReport(int epoch) {
-        Map<String, Integer> params = new HashMap<>();
-        params.put("epoch", _epoch);
-        return _restTemplate.getForObject(getServerURL() + "/location-report/{epoch}", LocationReport.class, params);
+        //FIXME URL server?
+        //TODO how to send epoch?
+        return _restTemplate.getForObject(getServerURL() + "/location-report", LocationReport.class);
     }
 
-    public LocationReport obtainReport(int epoch) {
+    public void obtainReport(int epoch) {
         if (!(0 <= epoch && epoch <= _epoch))
             throw new IllegalArgumentException("Epoch must be positive and not exceed the current epoch.");
         LocationReport locationReport = obtainLocationReport(epoch);
-        return locationReport;
+
+        //TODO save on the map? why is this even necessary?
     }
 }
