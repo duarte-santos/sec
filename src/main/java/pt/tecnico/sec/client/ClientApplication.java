@@ -83,7 +83,7 @@ public class ClientApplication {
                         if (line.equals(EXIT_CMD))
                             break;
 
-                        // step - increase epoch
+                            // step - increase epoch
                         else if (line.equals(STEP_CMD)) {
                             // check if epoch is covered by environment
                             if (_epoch > _environment.getMaxEpoch()) {

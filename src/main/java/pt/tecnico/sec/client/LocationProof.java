@@ -15,6 +15,22 @@ public class LocationProof {
         _value = value;
     }
 
+    public String get_type() {
+        return _type;
+    }
+
+    public void set_type(String _type) {
+        this._type = _type;
+    }
+
+    public Value get_value() {
+        return _value;
+    }
+
+    public void set_value(Value _value) {
+        this._value = _value;
+    }
+
     @Override
     public String toString() {
         return "LocationProof{" +

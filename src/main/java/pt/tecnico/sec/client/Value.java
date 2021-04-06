@@ -18,6 +18,30 @@ public class Value {
         _witnessId = witnessId;
     }
 
+    public Location get_location() {
+        return _location;
+    }
+
+    public void set_location(Location _location) {
+        this._location = _location;
+    }
+
+    public int get_proverId() {
+        return _proverId;
+    }
+
+    public void set_proverId(int _proverId) {
+        this._proverId = _proverId;
+    }
+
+    public int get_witnessId() {
+        return _witnessId;
+    }
+
+    public void set_witnessId(int _witnessId) {
+        this._witnessId = _witnessId;
+    }
+
     @Override
     public String toString() {
         return "Value{" +
