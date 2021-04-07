@@ -9,13 +9,15 @@ import java.util.List;
 public class LocationReport {
 
     private int _userId;
+    private int _epoch;
     private Location _location;
     private List<LocationProof> _proofs = new ArrayList<>();
 
     public LocationReport() {}
 
-    public LocationReport(int userId, Location location, List<LocationProof> proofs) {
+    public LocationReport(int userId, int epoch, Location location, List<LocationProof> proofs) {
         _userId = userId;
+        _epoch = epoch;
         _location = location;
         _proofs = proofs;
     }
@@ -42,6 +44,14 @@ public class LocationReport {
 
     public void set_proofs(List<LocationProof> _proofs) {
         this._proofs = _proofs;
+    }
+
+    public int get_epoch() {
+        return _epoch;
+    }
+
+    public void set_epoch(int _epoch) {
+        this._epoch = _epoch;
     }
 
     @Override

@@ -14,7 +14,7 @@ public class LocationProof {
 
     private String _type;
 
-    @OneToOne
+    @OneToOne(cascade=CascadeType.ALL)
     private Value _value;
 
     public LocationProof() {}

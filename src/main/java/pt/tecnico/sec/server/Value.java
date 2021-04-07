@@ -8,7 +8,7 @@ import javax.persistence.*;
 @Entity
 public class Value {
 
-    @OneToOne
+    @OneToOne(cascade=CascadeType.ALL)
     private Location _location;
 
     private int _proverId;

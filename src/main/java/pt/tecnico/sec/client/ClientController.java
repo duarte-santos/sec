@@ -47,8 +47,4 @@ public class ClientController {
         return new LocationProof(type, value);
     }
 
-    @PostMapping("/location-report") //FIXME delete pls
-    public void reportLocation(@RequestBody LocationReport report){
-        System.out.println(report);
-    }
 }

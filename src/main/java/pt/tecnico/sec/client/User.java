@@ -102,7 +102,7 @@ public class User {
         params.put("epoch", _epoch);
         params.put("proverId", _id);
         System.out.println("[Request sent] Type: LocationProof To: " + getUserURL(userId) + ", From: " + _id + ", Epoch: " + _epoch);
-        return _restTemplate.getForObject(getUserURL(userId)+ "/location-proof/{epoch}/{proverId}", LocationProof.class, params);
+        return _restTemplate.getForObject(getUserURL(userId)+ "/location-proof/{proverId}/{epoch}", LocationProof.class, params);
     }
 
     public void proveLocation() {
@@ -128,8 +128,7 @@ public class User {
 
     private void submitLocationReport(LocationReport locationReport) {
         HttpEntity<LocationReport> request = new HttpEntity<>(locationReport);
-        // FIXME _restTemplate.postForObject(getServerURL() + "/location-report", request, LocationReport.class);
-        _restTemplate.postForObject(getUserURL(0) + "/location-report", request, LocationReport.class);
+        _restTemplate.postForObject(getServerURL() + "/location-report", request, LocationReport.class);
     }
 
     public void reportLocation(int epoch, Location epochLocation) {
@@ -137,7 +136,7 @@ public class User {
             throw new IllegalArgumentException("Epoch must be positive and not exceed the current epoch.");
 
         List<LocationProof> epochProofs = getEpochProofs(epoch);
-        LocationReport locationReport = new LocationReport(_id, epochLocation, epochProofs);
+        LocationReport locationReport = new LocationReport(_id, epoch, epochLocation, epochProofs);
 
         System.out.println(locationReport); // FIXME delete pls
         submitLocationReport(locationReport);
@@ -150,8 +149,9 @@ public class User {
 
     private LocationReport obtainLocationReport(int epoch) {
         Map<String, Integer> params = new HashMap<>();
-        params.put("epoch", _epoch);
-        return _restTemplate.getForObject(getServerURL() + "/location-report/{epoch}", LocationReport.class, params);
+        params.put("epoch", epoch);
+        params.put("userId", _id);
+        return _restTemplate.getForObject(getServerURL() + "/location-report/{epoch}/{userId}", LocationReport.class, params);
     }
 
     public LocationReport obtainReport(int epoch) {
