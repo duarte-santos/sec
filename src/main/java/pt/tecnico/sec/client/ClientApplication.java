@@ -6,6 +6,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.web.client.RestTemplate;
+import pt.tecnico.sec.EnvironmentGenerator;
 
 import java.util.Collections;
 import java.util.List;
@@ -104,6 +105,7 @@ public class ClientApplication {
                         // submit [epoch] - user submits the location report of the given epoch to the server
                         else if (tokens[0].equals(SUBMIT_CMD) && tokens.length == 2) {
                             int ep = Integer.parseInt(tokens[1]);
+                            //FIXME check epoch has passed
                             Location location = _environment.getGrid(ep).getUserLocation(_user.getId());
                             _user.reportLocation(ep, location);
                         }
@@ -115,7 +117,7 @@ public class ClientApplication {
                             if (locationReport == null){
                                 System.out.println("The requested report doesn't exist\n");
                             }
-                            System.out.println("Location Report: " + locationReport);
+                            else System.out.println("Location Report: " + locationReport);
                         }
 
                         // help

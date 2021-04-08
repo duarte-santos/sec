@@ -102,7 +102,7 @@ public class User {
         params.put("epoch", _epoch);
         params.put("proverId", _id);
         System.out.println("[Request sent] Type: LocationProof To: " + getUserURL(userId) + ", From: " + _id + ", Epoch: " + _epoch);
-        return _restTemplate.getForObject(getUserURL(userId)+ "/location-proof/{proverId}/{epoch}", LocationProof.class, params);
+        return _restTemplate.getForObject(getUserURL(userId)+ "/location-proof/{epoch}/{proverId}", LocationProof.class, params);
     }
 
     public void proveLocation() {

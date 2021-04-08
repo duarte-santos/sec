@@ -1,8 +1,11 @@
-package pt.tecnico.sec.client;
+package pt.tecnico.sec;
 
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
+import pt.tecnico.sec.client.Environment;
+import pt.tecnico.sec.client.Grid;
+import pt.tecnico.sec.client.Location;
 
 import java.io.FileReader;
 import java.io.FileWriter;
@@ -26,7 +29,7 @@ public class EnvironmentGenerator {
         }
         catch (NumberFormatException e) {
             System.out.println("All arguments must be positive integers.");
-            System.out.println("USAGE: ./mvnw spring-boot:run -Dspring-boot.run.arguments=\"[nX] [nY] [epochCount] [userCount]\" -Dstart-class=pt.tecnico.sec.client.EnvironmentGenerator");
+            System.out.println("USAGE: ./mvnw spring-boot:run -Dspring-boot.run.arguments=\"[nX] [nY] [epochCount] [userCount]\" -Dstart-class=pt.tecnico.sec.EnvironmentGenerator");
         }
         catch (IOException e) {
             System.out.println(e.getMessage());
