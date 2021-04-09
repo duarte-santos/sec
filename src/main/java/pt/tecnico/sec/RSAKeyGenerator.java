@@ -2,10 +2,17 @@ package pt.tecnico.sec;
 
 import org.apache.tomcat.util.http.fileupload.FileUtils;
 
+import javax.crypto.BadPaddingException;
+import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.security.*;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.security.spec.X509EncodedKeySpec;
 
 import static javax.xml.bind.DatatypeConverter.printHexBinary;
 
@@ -21,7 +28,10 @@ public class RSAKeyGenerator {
                 throw new NumberFormatException();
 
             FileUtils.cleanDirectory(new File(KEYS_PATH)); // clean key directory before generating new keys
-            generateRSAKeys(userCount);
+            for (int id = 0; id < userCount; id++) {
+                writeKeyPair(KEYS_PATH + id);
+            }
+            writeKeyPair(KEYS_PATH + "server");
         }
         catch (NumberFormatException e) {
             System.out.println("Argument 'number of users' be a positive integer.");
@@ -34,19 +44,16 @@ public class RSAKeyGenerator {
         System.out.println("Done.");
     }
 
-    private static void generateRSAKeys(int userCount) throws GeneralSecurityException, IOException {
-        for (int id = 0; id < userCount; id++) {
-            write(KEYS_PATH + id);
-        }
 
-    }
+    /* ========================================================== */
+    /* ====[                 Manage KeyPair                 ]==== */
+    /* ========================================================== */
 
-
-    private static void write(String keyPath) throws GeneralSecurityException, IOException {
+    private static void writeKeyPair(String keyPath) throws GeneralSecurityException, IOException {
         // get an AES private key
         System.out.println("Generating RSA key ..." );
         KeyPairGenerator keyGen = KeyPairGenerator.getInstance("RSA");
-        keyGen.initialize(1024);
+        keyGen.initialize(2048); //FIXME
         KeyPair keys = keyGen.generateKeyPair();
         System.out.println("Finish generating RSA keys");
 
@@ -69,14 +76,58 @@ public class RSAKeyGenerator {
         pubFos.close();
     }
 
-    /*public static Key read(String keyPath) throws GeneralSecurityException, IOException {
-        System.out.println("Reading key from file " + keyPath + " ...");
-        FileInputStream fis = new FileInputStream(keyPath);
-        byte[] encoded = new byte[fis.available()];
-        fis.read(encoded);
-        fis.close();
+    public static KeyPair readKeyPair(String publicKeyPath, String privateKeyPath) throws GeneralSecurityException, IOException {
+        System.out.println("Reading public key from file " + publicKeyPath + " ...");
+        FileInputStream pubFis = new FileInputStream(publicKeyPath);
+        byte[] pubEncoded = new byte[pubFis.available()];
+        pubFis.read(pubEncoded);
+        pubFis.close();
 
-        return new SecretKeySpec(encoded, "RSA");
-    }*/
+        X509EncodedKeySpec pubSpec = new X509EncodedKeySpec(pubEncoded);
+        KeyFactory keyFacPub = KeyFactory.getInstance("RSA");
+        PublicKey pub = keyFacPub.generatePublic(pubSpec);
+
+        System.out.println("Reading private key from file " + privateKeyPath + " ...");
+        FileInputStream privFis = new FileInputStream(privateKeyPath);
+        byte[] privEncoded = new byte[privFis.available()];
+        privFis.read(privEncoded);
+        privFis.close();
+
+        PKCS8EncodedKeySpec privSpec = new PKCS8EncodedKeySpec(privEncoded);
+        KeyFactory keyFacPriv = KeyFactory.getInstance("RSA");
+        PrivateKey priv = keyFacPriv.generatePrivate(privSpec);
+
+        KeyPair keys = new KeyPair(pub, priv);
+        return keys;
+    }
+
+    public static PublicKey readPublicKey(String publicKeyPath) throws GeneralSecurityException, IOException {
+        System.out.println("Reading public key from file " + publicKeyPath + " ...");
+        FileInputStream pubFis = new FileInputStream(publicKeyPath);
+        byte[] pubEncoded = new byte[pubFis.available()];
+        pubFis.read(pubEncoded);
+        pubFis.close();
+
+        X509EncodedKeySpec pubSpec = new X509EncodedKeySpec(pubEncoded);
+        KeyFactory keyFacPub = KeyFactory.getInstance("RSA");
+        return keyFacPub.generatePublic(pubSpec);
+    }
+
+
+    /* ========================================================== */
+    /* ====[                Encrypt/Decrypt                 ]==== */
+    /* ========================================================== */
+
+    public static byte[] encrypt(byte[] data, PublicKey key) throws BadPaddingException, IllegalBlockSizeException, InvalidKeyException, NoSuchPaddingException, NoSuchAlgorithmException {
+        Cipher cipher = Cipher.getInstance("RSA");
+        cipher.init(Cipher.ENCRYPT_MODE, key);
+        return cipher.doFinal(data);
+    }
+
+    public static byte[] decrypt(byte[] data, PrivateKey key) throws NoSuchPaddingException, NoSuchAlgorithmException, InvalidKeyException, BadPaddingException, IllegalBlockSizeException {
+        Cipher cipher = Cipher.getInstance("RSA");
+        cipher.init(Cipher.DECRYPT_MODE, key);
+        return cipher.doFinal(data);
+    }
 
 }

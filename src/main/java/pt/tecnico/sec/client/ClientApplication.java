@@ -7,7 +7,10 @@ import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.web.client.RestTemplate;
 import pt.tecnico.sec.EnvironmentGenerator;
+import pt.tecnico.sec.RSAKeyGenerator;
 
+import java.security.KeyPair;
+import java.security.PublicKey;
 import java.util.Collections;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -27,7 +30,6 @@ public class ClientApplication {
     private static final String SUBMIT_CMD = "submit";
     private static final String OBTAIN_CMD = "obtain";
     private static final int BASE_PORT = 8000;
-    private static final int SERVER_PORT = 9000;
 
     private static Environment _environment;
     private static int _epoch;
@@ -42,11 +44,18 @@ public class ClientApplication {
             System.out.println("Valid IDs: " + userIds);
             _epoch = 0;
 
-            // create user
+            // get user's id
             int id = Integer.parseInt(args[0]);
-            if ( !userIds.contains(id) )  // client must exist in environment
+            if (!userIds.contains(id))  // client must exist in environment
                 throw new NumberFormatException("Invalid user ID. Please choose an ID value from the ones shown.");
-            _user = new User(_environment.getGrid(_epoch), id);
+
+            // get keys
+            String keysPath = RSAKeyGenerator.KEYS_PATH;
+            KeyPair keyPair = RSAKeyGenerator.readKeyPair(keysPath + id + ".pub", keysPath + id + ".priv");
+            PublicKey serverKey = (PublicKey) RSAKeyGenerator.readPublicKey(keysPath + "server.pub");
+
+            // create user
+            _user = new User(_environment.getGrid(_epoch), id, keyPair, serverKey);
             System.out.println("The user \"C00lD0060 No." + id + "\" has SPAWNED.\n");
 
             // create spring application
@@ -105,7 +114,11 @@ public class ClientApplication {
                         // submit [epoch] - user submits the location report of the given epoch to the server
                         else if (tokens[0].equals(SUBMIT_CMD) && tokens.length == 2) {
                             int ep = Integer.parseInt(tokens[1]);
-                            //FIXME check epoch has passed
+                            if (ep >= _epoch) { // check proofs have been obtained
+                                System.out.println("No proofs to send for this epoch yet.");
+                                continue;
+                            }
+
                             Location location = _environment.getGrid(ep).getUserLocation(_user.getId());
                             _user.reportLocation(ep, location);
                         }
@@ -114,10 +127,9 @@ public class ClientApplication {
                         else if (tokens[0].equals(OBTAIN_CMD) && tokens.length == 2) {
                             int ep = Integer.parseInt(tokens[1]);
                             LocationReport locationReport = _user.obtainReport(ep);
-                            if (locationReport == null){
+                            if (locationReport == null) {
                                 System.out.println("The requested report doesn't exist\n");
-                            }
-                            else System.out.println("Location Report: " + locationReport);
+                            } else System.out.println("Location Report: " + locationReport);
                         }
 
                         // help
@@ -167,4 +179,5 @@ public class ClientApplication {
         else nextGrid = _environment.getGrid(maxEpoch); // after last epoch grid will remain as it was
         _user.step(nextGrid);
     }
+
 }

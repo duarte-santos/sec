@@ -1,8 +1,12 @@
 package pt.tecnico.sec.client;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpEntity;
 import org.springframework.web.client.RestTemplate;
+import pt.tecnico.sec.RSAKeyGenerator;
 
+import java.security.KeyPair;
+import java.security.PublicKey;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -15,15 +19,25 @@ public class User {
     private RestTemplate _restTemplate;
     private Grid _prevGrid = null; // useful for synchronization
     private Grid _grid;
+    private int _epoch = 0;
+
     private final int _id;
     private final Map<Integer, List<LocationProof>> _proofs =  new HashMap<>();
 
-    private int _epoch = 0;
+    private final KeyPair _keyPair;
+    private final PublicKey _serverKey;
 
-    public User(Grid grid, int id) {
+    public User(Grid grid, int id, KeyPair keyPair, PublicKey serverKey) {
         _grid = grid;
         _id = id;
+        _keyPair = keyPair;
+        _serverKey = serverKey;
     }
+
+
+    /* ========================================================== */
+    /* ====[               Getters and Setters              ]==== */
+    /* ========================================================== */
 
     public void setRestTemplate(RestTemplate restTemplate) {
         _restTemplate = restTemplate;
@@ -36,6 +50,15 @@ public class User {
     public int getEpoch() {
         return _epoch;
     }
+
+    public Location getLocation() {
+        return _grid.getUserLocation(_id);
+    }
+
+    public Location getPrevLocation() {
+        return _prevGrid.getUserLocation(_id);
+    }
+
 
     /* ========================================================== */
     /* ====[                   Auxiliary                    ]==== */
@@ -50,6 +73,10 @@ public class User {
         return "http://localhost:" + SERVER_PORT;
     }
 
+    public List<Integer> findNearbyUsers() {
+        return _grid.findNearbyUsers(_id);
+    }
+
     public boolean isNearby(int userId) {
         return _grid.isNearby(_id, userId);
     }
@@ -58,25 +85,12 @@ public class User {
         return _prevGrid.isNearby(_id, userId);
     }
 
-    public Location getLocation() {
-        return _grid.getUserLocation(_id);
-    }
-
-    public Location getPrevLocation() {
-        return _prevGrid.getUserLocation(_id);
-    }
-
-    public List<Integer> findNearbyUsers() {
-        return _grid.findNearbyUsers(_id);
-    }
-
 
     /* ========================================================== */
     /* ====[                      Step                      ]==== */
     /* ========================================================== */
 
     public void step(Grid nextGrid) {
-        // TODO : the visitor design pattern might be useful in the future
         System.out.println("Previous epoch " + _epoch + ", location " + getLocation());
         proveLocation();
         _epoch++;
@@ -90,8 +104,6 @@ public class User {
         _restTemplate.getForObject(getUserURL(userId)+ "/step/", LocationProof.class);
     }
 
-
-    //FIXME spring -> different servers for clients??
 
     /* ========================================================== */
     /* ====[             Request Location Proof             ]==== */
@@ -122,24 +134,32 @@ public class User {
         return (epochProofs != null) ? epochProofs : new ArrayList<>();
     }
 
+
     /* ========================================================== */
     /* ====[             Submit Location Report             ]==== */
     /* ========================================================== */
 
-    private void submitLocationReport(LocationReport locationReport) {
-        HttpEntity<LocationReport> request = new HttpEntity<>(locationReport);
-        _restTemplate.postForObject(getServerURL() + "/location-report", request, LocationReport.class);
+    private byte[] cipherLocationReport(LocationReport locationReport) throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        byte[] reportBytes = objectMapper.writeValueAsBytes(locationReport);
+        return RSAKeyGenerator.encrypt(reportBytes, _serverKey);
     }
 
-    public void reportLocation(int epoch, Location epochLocation) {
+    private void submitLocationReport(byte[] cipheredReport) {
+        HttpEntity<byte[]> request = new HttpEntity<>(cipheredReport);
+        _restTemplate.postForObject(getServerURL() + "/location-report", request, byte[].class);
+    }
+
+    public void reportLocation(int epoch, Location epochLocation) throws Exception {
         if (!(0 <= epoch && epoch <= _epoch))
             throw new IllegalArgumentException("Epoch must be positive and not exceed the current epoch.");
 
         List<LocationProof> epochProofs = getEpochProofs(epoch);
         LocationReport locationReport = new LocationReport(_id, epoch, epochLocation, epochProofs);
+        System.out.println(locationReport);
 
-        System.out.println(locationReport); // FIXME delete pls
-        submitLocationReport(locationReport);
+        byte[] cipheredReport = cipherLocationReport(locationReport);
+        submitLocationReport(cipheredReport);
     }
 
 
@@ -160,4 +180,7 @@ public class User {
         LocationReport locationReport = obtainLocationReport(epoch);
         return locationReport;
     }
+
+
+
 }

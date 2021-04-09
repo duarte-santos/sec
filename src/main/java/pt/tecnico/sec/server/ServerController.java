@@ -1,8 +1,9 @@
 package pt.tecnico.sec.server;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
-import pt.tecnico.sec.client.LocationProof;
+import pt.tecnico.sec.RSAKeyGenerator;
 
 @RestController
 public class ServerController {
@@ -23,23 +24,33 @@ public class ServerController {
     }
 
     @PostMapping("/location-report")
-    public void reportLocation(@RequestBody LocationReport report){
+    public void reportLocation(@RequestBody byte[] cipheredReport){
+        try {
+            // decipher report
+            byte[] data = RSAKeyGenerator.decrypt(cipheredReport, _serverApp.getPrivateKey());
+            ObjectMapper objectMapper = new ObjectMapper();
+            LocationReport report = objectMapper.readValue(data, LocationReport.class);
 
-        _serverApp.reportLocation(report);
-        int userId = report.get_userId();
-        int epoch = report.get_epoch();
+            // handle received report
+            _serverApp.reportLocation(report);
+            int userId = report.get_userId();
+            int epoch = report.get_epoch();
 
-        // Check if already exists a report with the same userId and epoch
-        if (reportRepository.findReportByEpochAndUser(userId, epoch) == null){
-            reportRepository.save(report);
-        } else {
-            System.out.println("Report for userId " + userId + " and epoch " + epoch + " already exists.\n");
+            // Check if already exists a report with the same userId and epoch
+            if (reportRepository.findReportByEpochAndUser(userId, epoch) == null) {
+                reportRepository.save(report);
+            } else {
+                System.out.println("Report for userId " + userId + " and epoch " + epoch + " already exists.\n");
+            }
+
+            /*
+            for (LocationReport r : reportRepository.findAll() ){
+                System.out.println(r.toString());
+            }*/
+
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
         }
-
-        /*
-        for (LocationReport r : reportRepository.findAll() ){
-            System.out.println(r.toString());
-        }*/
     }
 
     @GetMapping("/location-report/{epoch}/{userId}")
