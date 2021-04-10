@@ -1,12 +1,24 @@
 package pt.tecnico.sec.client;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import pt.tecnico.sec.server.DBLocation;
+
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class Location {
     private int _x;
     private int _y;
 
+    public Location() {}
+
     public Location(int x, int y) {
         _x = x;
         _y = y;
+    }
+
+    // convert from server version
+    public Location(DBLocation dbLocation) {
+        _x = dbLocation.get_x();
+        _y = dbLocation.get_y();
     }
 
     public int get_x() {

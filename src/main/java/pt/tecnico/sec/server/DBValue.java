@@ -1,15 +1,16 @@
 package pt.tecnico.sec.server;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import pt.tecnico.sec.client.Value;
 
 import javax.persistence.*;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 @Entity
-public class Value {
+public class DBValue {
 
     @OneToOne(cascade=CascadeType.ALL)
-    private Location _location;
+    private DBLocation _DB_location;
 
     private int _proverId;
     private int _witnessId;
@@ -19,29 +20,37 @@ public class Value {
     @GeneratedValue(strategy= GenerationType.AUTO)
     private Integer id;
 
-    public Value() {}
+    public DBValue() {}
 
-    public Value(Location location, int proverId, int witnessId) {
-        _location = location;
+    public DBValue(DBLocation DBLocation, int proverId, int witnessId) {
+        _DB_location = DBLocation;
         _proverId = proverId;
         _witnessId = witnessId;
     }
 
+    // convert from client version
+    public DBValue(Value value) {
+        _DB_location = new DBLocation( value.get_location() );
+        _proverId = value.get_proverId();
+        _witnessId = value.get_witnessId();
+    }
+
     @Override
     public String toString() {
-        return "Value{" +
-                "location='" + _location + '\'' +
-                ", proverId='" + _proverId + '\'' +
-                ", witnessId=" + _witnessId +
+        return "DBValue{" +
+                "_DB_location=" + _DB_location +
+                ", _proverId=" + _proverId +
+                ", _witnessId=" + _witnessId +
+                ", id=" + id +
                 '}';
     }
 
-    public Location get_location() {
-        return _location;
+    public DBLocation get_location() {
+        return _DB_location;
     }
 
-    public void set_location(Location _location) {
-        this._location = _location;
+    public void set_location(DBLocation _DB_location) {
+        this._DB_location = _DB_location;
     }
 
     public int get_proverId() {

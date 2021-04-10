@@ -1,12 +1,14 @@
 package pt.tecnico.sec.server;
 
+import pt.tecnico.sec.client.Location;
+
 import javax.persistence.Entity;
 import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 import javax.persistence.Id;
 
 @Entity
-public class Location {
+public class DBLocation {
 
     @Id
     @GeneratedValue(strategy= GenerationType.AUTO)
@@ -15,11 +17,17 @@ public class Location {
     private int _x;
     private int _y;
 
-    public Location() {}
+    public DBLocation() {}
 
-    public Location(int x, int y) {
+    public DBLocation(int x, int y) {
         _x = x;
         _y = y;
+    }
+
+    // convert from client version
+    public DBLocation(Location location) {
+        _x = location.get_x();
+        _y = location.get_y();
     }
 
     public int getX() {
@@ -30,9 +38,9 @@ public class Location {
         return _y;
     }
 
-    public double distance(Location location) {
-        int x = location.getX();
-        int y = location.getY();
+    public double distance(DBLocation DBLocation) {
+        int x = DBLocation.getX();
+        int y = DBLocation.getY();
         // euclidean distance
         return Math.sqrt( Math.pow(x - _x, 2) + Math.pow(y - _y, 2) );
     }

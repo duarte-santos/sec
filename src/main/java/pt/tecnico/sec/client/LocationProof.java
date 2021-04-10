@@ -1,6 +1,7 @@
 package pt.tecnico.sec.client;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import pt.tecnico.sec.server.DBLocationProof;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class LocationProof {
@@ -13,6 +14,12 @@ public class LocationProof {
     public LocationProof(String type, Value value) {
         _type = type;
         _value = value;
+    }
+
+    // convert from server version
+    public LocationProof(DBLocationProof dbLocationProof) {
+        _type = dbLocationProof.get_type();
+        _value = new Value( dbLocationProof.get_value() );
     }
 
     public String get_type() {
@@ -29,6 +36,10 @@ public class LocationProof {
 
     public void set_value(Value _value) {
         this._value = _value;
+    }
+
+    public int get_witnessId() {
+        return _value.get_witnessId();
     }
 
     @Override

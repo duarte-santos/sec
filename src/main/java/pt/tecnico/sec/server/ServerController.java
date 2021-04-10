@@ -1,9 +1,11 @@
 package pt.tecnico.sec.server;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
-import pt.tecnico.sec.RSAKeyGenerator;
+import pt.tecnico.sec.client.LocationReport;
+import pt.tecnico.sec.client.SecureLocationReport;
+import pt.tecnico.sec.client.SignedLocationReport;
+
 
 @RestController
 public class ServerController {
@@ -11,8 +13,8 @@ public class ServerController {
     private final ServerApplication _serverApp;
 
     @Autowired
-    private ServerController(ServerApplication clientApp) {
-        _serverApp = clientApp;
+    private ServerController(ServerApplication serverApp) {
+        _serverApp = serverApp;
     }
 
     @Autowired
@@ -24,29 +26,22 @@ public class ServerController {
     }
 
     @PostMapping("/location-report")
-    public void reportLocation(@RequestBody byte[] cipheredReport){
+    public void reportLocation(@RequestBody SecureLocationReport secureLocationReport) {
         try {
-            // decipher report
-            byte[] data = RSAKeyGenerator.decrypt(cipheredReport, _serverApp.getPrivateKey());
-            ObjectMapper objectMapper = new ObjectMapper();
-            LocationReport report = objectMapper.readValue(data, LocationReport.class);
-
-            // handle received report
-            _serverApp.reportLocation(report);
-            int userId = report.get_userId();
-            int epoch = report.get_epoch();
+            // Decipher and check signatures
+            SignedLocationReport signedReport = _serverApp.decipherReport(secureLocationReport);
+            _serverApp.verifyReportSignatures(signedReport); // throws exception
 
             // Check if already exists a report with the same userId and epoch
-            if (reportRepository.findReportByEpochAndUser(userId, epoch) == null) {
-                reportRepository.save(report);
-            } else {
-                System.out.println("Report for userId " + userId + " and epoch " + epoch + " already exists.\n");
-            }
+            int userId = signedReport.get_userId();
+            int epoch = signedReport.get_epoch();
+            if (reportRepository.findReportByEpochAndUser(userId, epoch) != null) // TODO warn client
+                throw new IllegalArgumentException("Report for userId " + userId + " and epoch " + epoch + " already exists.\n");
 
-            /*
-            for (LocationReport r : reportRepository.findAll() ){
-                System.out.println(r.toString());
-            }*/
+            // Save report in database
+            System.out.println(signedReport);
+            DBLocationReport report = new DBLocationReport(signedReport);
+            reportRepository.save(report);
 
         } catch (Exception e) {
             System.out.println(e.getMessage());
@@ -55,6 +50,7 @@ public class ServerController {
 
     @GetMapping("/location-report/{epoch}/{userId}")
     public LocationReport getLocation(@PathVariable(value = "userId") int userId, @PathVariable(value = "epoch") int epoch){
-        return reportRepository.findReportByEpochAndUser(userId, epoch);
+        DBLocationReport dbLocationReport = reportRepository.findReportByEpochAndUser(userId, epoch);
+        return new LocationReport(dbLocationReport);
     }
 }

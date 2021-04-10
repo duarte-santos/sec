@@ -25,27 +25,10 @@ public class ClientController {
     }
 
     @GetMapping("/location-proof/{epoch}/{proverId}")
-    public LocationProof locationProof(@PathVariable(value = "epoch") int proverEpoch, @PathVariable(value = "proverId") int proverId) {
-        User witness = _clientApp.getUser();
-        int currentEpoch = witness.getEpoch();
-        int witnessId = witness.getId();
-
-        Location witnessLoc;
-        String type;
-        if (proverEpoch == currentEpoch) { // users are synchronized
-            witnessLoc = witness.getLocation();
-            type = witness.isNearby(proverId) ? "success" : "failure";
-        }
-        else if (proverEpoch == currentEpoch - 1) { // prover is not synchronized yet
-            witnessLoc = witness.getPrevLocation();
-            type = witness.wasNearby(proverId) ? "success" : "failure";
-        }
-        else
-            throw new IllegalArgumentException("Can only prove location requests regarding current or previous epoch");
-
-        Value value = new Value(witnessLoc, proverId, witnessId);
-        System.out.print("\r[Request received] Type: LocationProof, From: " + proverId + ", Epoch: " + proverEpoch + ", Result: " + type + "\n> ");
-        return new LocationProof(type, value);
+    public SignedLocationProof locationProof(@PathVariable(value = "epoch") int proverEpoch, @PathVariable(value = "proverId") int proverId) throws Exception {
+        SignedLocationProof proof = _clientApp.getUser().makeLocationProof(proverId, proverEpoch);
+        System.out.print("\r[Request received] Type: LocationProof, From: " + proverId + ", Epoch: " + proverEpoch + ", Result: " + proof.get_locationProof().get_type() + "\n> ");
+        return proof;
     }
 
 }

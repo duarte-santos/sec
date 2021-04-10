@@ -2,10 +2,7 @@ package pt.tecnico.sec;
 
 import org.apache.tomcat.util.http.fileupload.FileUtils;
 
-import javax.crypto.BadPaddingException;
-import javax.crypto.Cipher;
-import javax.crypto.IllegalBlockSizeException;
-import javax.crypto.NoSuchPaddingException;
+import javax.crypto.*;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -13,6 +10,7 @@ import java.io.IOException;
 import java.security.*;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
+import java.util.Base64;
 
 import static javax.xml.bind.DatatypeConverter.printHexBinary;
 
@@ -128,6 +126,41 @@ public class RSAKeyGenerator {
         Cipher cipher = Cipher.getInstance("RSA");
         cipher.init(Cipher.DECRYPT_MODE, key);
         return cipher.doFinal(data);
+    }
+
+    public static byte[] encryptSecretKey(SecretKey secretKey, PublicKey key) throws BadPaddingException, IllegalBlockSizeException, InvalidKeyException, NoSuchPaddingException, NoSuchAlgorithmException {
+        byte[] encodedKey = secretKey.getEncoded();
+        Cipher cipher = Cipher.getInstance("RSA");
+        cipher.init(Cipher.ENCRYPT_MODE, key);
+        return cipher.doFinal(encodedKey);
+    }
+
+    public static SecretKey decryptSecretKey(byte[] cipheredKey, PrivateKey key) throws NoSuchPaddingException, NoSuchAlgorithmException, InvalidKeyException, BadPaddingException, IllegalBlockSizeException {
+        Cipher cipher = Cipher.getInstance("RSA");
+        cipher.init(Cipher.DECRYPT_MODE, key);
+        byte[] encodedKey = cipher.doFinal(cipheredKey);
+        return AESKeyGenerator.fromEncoded(encodedKey);
+    }
+
+
+    /* ========================================================== */
+    /* ====[                  Sign/Verify                   ]==== */
+    /* ========================================================== */
+
+    public static String sign(byte[] data, PrivateKey key) throws Exception { //FIXME send byte array or string (base64)?
+        Signature privateSignature = Signature.getInstance("SHA256withRSA");
+        privateSignature.initSign(key);
+        privateSignature.update(data);
+        byte[] signature = privateSignature.sign();
+        return Base64.getEncoder().encodeToString(signature);
+    }
+
+    public static boolean verify(byte[] data, String signature, PublicKey key) throws Exception {
+        Signature publicSignature = Signature.getInstance("SHA256withRSA");
+        publicSignature.initVerify(key);
+        publicSignature.update(data);
+        byte[] signatureBytes = Base64.getDecoder().decode(signature);
+        return publicSignature.verify(signatureBytes);
     }
 
 }

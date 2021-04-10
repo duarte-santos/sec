@@ -111,7 +111,7 @@ public class ClientApplication {
                             }
                         }
 
-                        // submit [epoch] - user submits the location report of the given epoch to the server
+                        // submit [epoch] - user submits the DBLocation report of the given epoch to the server
                         else if (tokens[0].equals(SUBMIT_CMD) && tokens.length == 2) {
                             int ep = Integer.parseInt(tokens[1]);
                             if (ep >= _epoch) { // check proofs have been obtained
@@ -119,11 +119,11 @@ public class ClientApplication {
                                 continue;
                             }
 
-                            Location location = _environment.getGrid(ep).getUserLocation(_user.getId());
-                            _user.reportLocation(ep, location);
+                            Location DBLocation = _environment.getGrid(ep).getUserLocation(_user.getId());
+                            _user.reportLocation(ep, DBLocation);
                         }
 
-                        // obtain [epoch] - user asks server for its location report at the given epoch
+                        // obtain [epoch] - user asks server for its DBLocation report at the given epoch
                         else if (tokens[0].equals(OBTAIN_CMD) && tokens.length == 2) {
                             int ep = Integer.parseInt(tokens[1]);
                             LocationReport locationReport = _user.obtainReport(ep);
@@ -158,9 +158,9 @@ public class ClientApplication {
         return """
                   ====================== Available Commands ======================
                   step           - Increase current epoch
-                  submit [epoch] - Send the user's location report of the given
+                  submit [epoch] - Send the user's DBLocation report of the given
                                     epoch to the server
-                  obtain [epoch] - Ask the server for the user's location report
+                  obtain [epoch] - Ask the server for the user's DBLocation report
                                     at the given epoch
                   exit           - Quit Client App
                   ================================================================

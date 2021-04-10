@@ -1,6 +1,7 @@
 package pt.tecnico.sec.client;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import pt.tecnico.sec.server.DBValue;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class Value {
@@ -16,6 +17,13 @@ public class Value {
         _location = location;
         _proverId = proverId;
         _witnessId = witnessId;
+    }
+
+    // convert from client version
+    public Value(DBValue dbValue) {
+        _location = new Location( dbValue.get_location() );
+        _proverId = dbValue.get_proverId();
+        _witnessId = dbValue.get_witnessId();
     }
 
     public Location get_location() {
