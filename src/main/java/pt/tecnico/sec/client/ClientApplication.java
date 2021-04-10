@@ -52,7 +52,7 @@ public class ClientApplication {
             // get keys
             String keysPath = RSAKeyGenerator.KEYS_PATH;
             KeyPair keyPair = RSAKeyGenerator.readKeyPair(keysPath + id + ".pub", keysPath + id + ".priv");
-            PublicKey serverKey = (PublicKey) RSAKeyGenerator.readPublicKey(keysPath + "server.pub");
+            PublicKey serverKey = RSAKeyGenerator.readPublicKey(keysPath + "server.pub");
 
             // create user
             _user = new User(_environment.getGrid(_epoch), id, keyPair, serverKey);

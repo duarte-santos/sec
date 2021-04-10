@@ -25,7 +25,7 @@ public class HealthAuthorityApplication {
     }
 
     @Bean
-    public CommandLineRunner run(RestTemplate restTemplate) throws Exception {
+    public CommandLineRunner run(RestTemplate restTemplate) {
         return args -> {
                 String hello = restTemplate.getForObject("http://localhost:8080/hello", String.class);
                 System.out.println(hello);

@@ -220,8 +220,7 @@ public class User {
     public LocationReport obtainReport(int epoch) {
         if (!(0 <= epoch && epoch <= _epoch))
             throw new IllegalArgumentException("Epoch must be positive and not exceed the current epoch.");
-        LocationReport locationReport = obtainLocationReport(epoch);
-        return locationReport;
+        return obtainLocationReport(epoch);
     }
 
 
