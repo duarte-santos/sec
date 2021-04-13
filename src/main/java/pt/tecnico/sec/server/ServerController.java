@@ -51,6 +51,18 @@ public class ServerController {
     @GetMapping("/location-report/{epoch}/{userId}")
     public LocationReport getLocation(@PathVariable(value = "userId") int userId, @PathVariable(value = "epoch") int epoch){
         DBLocationReport dbLocationReport = _reportRepository.findReportByEpochAndUser(userId, epoch);
+        if (dbLocationReport == null)
+            return null;
         return new LocationReport(dbLocationReport);
     }
+
+    @GetMapping("/users/{epoch}/{x}/{y}")
+    public Integer getUsers(@PathVariable(value = "epoch") int epoch, @PathVariable(value = "x") int x, @PathVariable(value = "y") int y){
+        DBLocationReport dbLocationReport = _reportRepository.findUsersByLocationAndEpoch(epoch, x, y);
+        if (dbLocationReport == null)
+            return null;
+        // FIXME : allow return multiple users
+        return dbLocationReport.get_userId();
+    }
+
 }
