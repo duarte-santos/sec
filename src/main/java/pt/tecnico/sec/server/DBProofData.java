@@ -1,13 +1,13 @@
 package pt.tecnico.sec.server;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import pt.tecnico.sec.client.Value;
+import pt.tecnico.sec.client.ProofData;
 
 import javax.persistence.*;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 @Entity
-public class DBValue {
+public class DBProofData {
 
     @OneToOne(cascade=CascadeType.ALL)
     private DBLocation _DB_location;
@@ -15,34 +15,27 @@ public class DBValue {
     private int _proverId;
     private int _witnessId;
     //private int _epoch
+    private String _type;
 
     @Id
     @GeneratedValue(strategy= GenerationType.AUTO)
     private Integer id;
 
-    public DBValue() {}
+    public DBProofData() {}
 
-    public DBValue(DBLocation DBLocation, int proverId, int witnessId) {
+    public DBProofData(DBLocation DBLocation, int proverId, int witnessId, String type) {
         _DB_location = DBLocation;
         _proverId = proverId;
         _witnessId = witnessId;
+        _type = type;
     }
 
     // convert from client version
-    public DBValue(Value value) {
-        _DB_location = new DBLocation( value.get_location() );
-        _proverId = value.get_proverId();
-        _witnessId = value.get_witnessId();
-    }
-
-    @Override
-    public String toString() {
-        return "DBValue{" +
-                "_DB_location=" + _DB_location +
-                ", _proverId=" + _proverId +
-                ", _witnessId=" + _witnessId +
-                ", id=" + id +
-                '}';
+    public DBProofData(ProofData proofData) {
+        _DB_location = new DBLocation( proofData.get_location() );
+        _proverId = proofData.get_proverId();
+        _witnessId = proofData.get_witnessId();
+        _type = proofData.get_type();
     }
 
     public DBLocation get_location() {
@@ -69,11 +62,30 @@ public class DBValue {
         this._witnessId = _witnessId;
     }
 
+    public String get_type() {
+        return _type;
+    }
+
+    public void set_type(String _type) {
+        this._type = _type;
+    }
+
     public Integer getId() {
         return id;
     }
 
     public void setId(Integer id) {
         this.id = id;
+    }
+
+    @Override
+    public String toString() {
+        return "DBProofData{" +
+                "_DB_location=" + _DB_location +
+                ", _proverId=" + _proverId +
+                ", _witnessId=" + _witnessId +
+                ", _type='" + _type + '\'' +
+                ", id=" + id +
+                '}';
     }
 }

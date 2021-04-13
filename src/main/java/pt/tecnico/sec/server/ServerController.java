@@ -4,7 +4,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import pt.tecnico.sec.client.LocationReport;
 import pt.tecnico.sec.client.SecureLocationReport;
-import pt.tecnico.sec.client.SignedLocationReport;
 
 
 @RestController
@@ -29,18 +28,18 @@ public class ServerController {
     public void reportLocation(@RequestBody SecureLocationReport secureLocationReport) {
         try {
             // Decipher and check signatures
-            SignedLocationReport signedReport = _serverApp.decipherReport(secureLocationReport);
-            _serverApp.verifyReportSignatures(signedReport); // throws exception
+            LocationReport locationReport = _serverApp.decipherReport(secureLocationReport);
+            _serverApp.verifyReportSignatures(locationReport); // throws exception
 
             // Check if already exists a report with the same userId and epoch
-            int userId = signedReport.get_userId();
-            int epoch = signedReport.get_epoch();
+            int userId = locationReport.get_userId();
+            int epoch = locationReport.get_epoch();
             if (_reportRepository.findReportByEpochAndUser(userId, epoch) != null) // TODO warn client
                 throw new IllegalArgumentException("Report for userId " + userId + " and epoch " + epoch + " already exists.\n");
 
             // Save report in database
-            System.out.println(signedReport);
-            DBLocationReport report = new DBLocationReport(signedReport);
+            System.out.println(locationReport);
+            DBLocationReport report = new DBLocationReport(locationReport);
             _reportRepository.save(report);
 
         } catch (Exception e) {

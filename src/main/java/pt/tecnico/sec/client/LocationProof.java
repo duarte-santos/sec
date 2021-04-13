@@ -1,53 +1,55 @@
 package pt.tecnico.sec.client;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import pt.tecnico.sec.server.DBLocationProof;
+import pt.tecnico.sec.server.DBProofData;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class LocationProof {
-
-    private String _type;
-    private Value _value;
+    private ProofData _proofData;
+    private String _signature = null;
 
     public LocationProof() {}
 
-    public LocationProof(String type, Value value) {
-        _type = type;
-        _value = value;
+    public LocationProof(ProofData proofData, String signature) {
+        _proofData = proofData;
+        _signature = signature;
     }
 
-    // convert from server version
-    public LocationProof(DBLocationProof dbLocationProof) {
-        _type = dbLocationProof.get_type();
-        _value = new Value( dbLocationProof.get_value() );
+    public LocationProof(DBProofData dbProofData) {
+        _proofData = new ProofData(dbProofData);
     }
 
-    public String get_type() {
-        return _type;
+    public ProofData get_proofData() {
+        return _proofData;
     }
 
-    public void set_type(String _type) {
-        this._type = _type;
+    public void set_proofData(ProofData _proofData) {
+        this._proofData = _proofData;
     }
 
-    public Value get_value() {
-        return _value;
+    public String get_signature() {
+        return _signature;
     }
 
-    public void set_value(Value _value) {
-        this._value = _value;
+    public void set_signature(String _signature) {
+        this._signature = _signature;
     }
 
     public int get_witnessId() {
-        return _value.get_witnessId();
+        return _proofData.get_witnessId();
+    }
+
+    public String completeString() {
+        return "LocationProof{" +
+                "proofData='" + _proofData + '\'' +
+                ", signature=" + _signature +
+                '}';
     }
 
     @Override
     public String toString() {
         return "LocationProof{" +
-                "type='" + _type + '\'' +
-                ", value=" + _value +
+                "proofData='" + _proofData + '\'' +
                 '}';
     }
-
 }

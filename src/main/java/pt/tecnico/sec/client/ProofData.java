@@ -1,29 +1,32 @@
 package pt.tecnico.sec.client;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import pt.tecnico.sec.server.DBValue;
+import pt.tecnico.sec.server.DBProofData;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class Value {
+public class ProofData {
 
     private Location _location;
     private int _proverId;
     private int _witnessId;
     //private int _epoch
+    private String _type;
 
-    public Value() {}
+    public ProofData() {}
 
-    public Value(Location location, int proverId, int witnessId) {
+    public ProofData(Location location, int proverId, int witnessId, String type) {
         _location = location;
         _proverId = proverId;
         _witnessId = witnessId;
+        _type = type;
     }
 
     // convert from client version
-    public Value(DBValue dbValue) {
-        _location = new Location( dbValue.get_location() );
-        _proverId = dbValue.get_proverId();
-        _witnessId = dbValue.get_witnessId();
+    public ProofData(DBProofData dbProofData) {
+        _location = new Location( dbProofData.get_location() );
+        _proverId = dbProofData.get_proverId();
+        _witnessId = dbProofData.get_witnessId();
+        _type = dbProofData.get_type();
     }
 
     public Location get_location() {
@@ -50,12 +53,21 @@ public class Value {
         this._witnessId = _witnessId;
     }
 
+    public String get_type() {
+        return _type;
+    }
+
+    public void set_type(String _type) {
+        this._type = _type;
+    }
+
     @Override
     public String toString() {
         return "Value{" +
-                "location='" + _location + '\'' +
-                ", proverId='" + _proverId + '\'' +
-                ", witnessId=" + _witnessId +
+                "_location=" + _location +
+                ", _proverId=" + _proverId +
+                ", _witnessId=" + _witnessId +
+                ", _type='" + _type + '\'' +
                 '}';
     }
 }

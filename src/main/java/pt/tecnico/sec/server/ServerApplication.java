@@ -5,9 +5,9 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import pt.tecnico.sec.AESKeyGenerator;
 import pt.tecnico.sec.RSAKeyGenerator;
+import pt.tecnico.sec.client.LocationProof;
+import pt.tecnico.sec.client.LocationReport;
 import pt.tecnico.sec.client.SecureLocationReport;
-import pt.tecnico.sec.client.SignedLocationProof;
-import pt.tecnico.sec.client.SignedLocationReport;
 
 import javax.crypto.SecretKey;
 import java.io.IOException;
@@ -59,7 +59,7 @@ public class ServerApplication {
     /* ====[             Receive Location Report            ]==== */
     /* ========================================================== */
 
-    public SignedLocationReport decipherReport(SecureLocationReport secureReport) throws Exception {
+    public LocationReport decipherReport(SecureLocationReport secureReport) throws Exception {
         // Decipher secret key
         byte[] cipheredKey = secureReport.get_cipheredKey();
         SecretKey secretKey = RSAKeyGenerator.decryptSecretKey(cipheredKey, _keyPair.getPrivate());
@@ -67,17 +67,17 @@ public class ServerApplication {
         // Decipher report
         byte[] data = AESKeyGenerator.decrypt(secureReport.get_cipheredReport(), secretKey);
         ObjectMapper objectMapper = new ObjectMapper();
-        return objectMapper.readValue(data, SignedLocationReport.class);
+        return objectMapper.readValue(data, LocationReport.class);
     }
 
-    public void verifyReportSignatures(SignedLocationReport signedReport) throws Exception {
+    public void verifyReportSignatures(LocationReport locationReport) throws Exception {
         ObjectMapper objectMapper = new ObjectMapper();
-        List<SignedLocationProof> signedProofs = signedReport.get_proofs();
-        for (SignedLocationProof signedProof : signedProofs) {
-            byte[] data = objectMapper.writeValueAsBytes(signedProof.get_locationProof());
+        List<LocationProof> signedProofs = locationReport.get_proofs();
+        for (LocationProof signedProof : signedProofs) {
+            byte[] data = objectMapper.writeValueAsBytes(signedProof.get_proofData());
             String signature = signedProof.get_signature();
             PublicKey clientKey = getClientPublicKey(signedProof.get_witnessId());
-            if (!RSAKeyGenerator.verify(data, signature, clientKey)) {
+            if (signature == null || !RSAKeyGenerator.verify(data, signature, clientKey)) {
                 throw new IllegalArgumentException("Proof signature failed. Bad client!"); //FIXME type of exception
             }
         }

@@ -24,7 +24,7 @@ public class User {
     private int _epoch = 0;
 
     private final int _id;
-    private final Map<Integer, List<SignedLocationProof>> _proofs =  new HashMap<>();
+    private final Map<Integer, List<LocationProof>> _proofs =  new HashMap<>();
 
     private final KeyPair _keyPair;
     private final PublicKey _serverKey;
@@ -103,7 +103,7 @@ public class User {
 
     public void stepRequest(int userId) {
         System.out.println("[Request sent] Type: Step To: " + getUserURL(userId) + ", From: " + _id);
-        _restTemplate.getForObject(getUserURL(userId)+ "/step/", LocationProof.class);
+        _restTemplate.getForObject(getUserURL(userId)+ "/step/", String.class); //FIXME
     }
 
 
@@ -111,17 +111,17 @@ public class User {
     /* ====[             Request Location Proof             ]==== */
     /* ========================================================== */
 
-    private SignedLocationProof requestLocationProof(int userId) {
+    private LocationProof requestLocationProof(int userId) {
         Map<String, Integer> params = new HashMap<>();
         params.put("epoch", _epoch);
         params.put("proverId", _id);
         System.out.println("[Request sent] Type: LocationProof To: " + getUserURL(userId) + ", From: " + _id + ", Epoch: " + _epoch);
-        return _restTemplate.getForObject(getUserURL(userId)+ "/location-proof/{epoch}/{proverId}", SignedLocationProof.class, params);
+        return _restTemplate.getForObject(getUserURL(userId)+ "/location-proof/{epoch}/{proverId}", LocationProof.class, params);
     }
 
     public void proveLocation() {
         List<Integer> nearbyUsers = findNearbyUsers();
-        List<SignedLocationProof> epochProofs = new ArrayList<>();
+        List<LocationProof> epochProofs = new ArrayList<>();
 
         for (int userId : nearbyUsers) {
             System.out.println("Found nearby user " + userId + " (epoch " + _epoch + ")");
@@ -131,8 +131,8 @@ public class User {
         _proofs.put(_epoch, epochProofs);
     }
 
-    public List<SignedLocationProof> getEpochProofs(int epoch) {
-        List<SignedLocationProof> epochProofs = _proofs.get(epoch);
+    public List<LocationProof> getEpochProofs(int epoch) {
+        List<LocationProof> epochProofs = _proofs.get(epoch);
         return (epochProofs != null) ? epochProofs : new ArrayList<>();
     }
 
@@ -141,14 +141,14 @@ public class User {
     /* ====[               Send Location Proof              ]==== */
     /* ========================================================== */
 
-    private SignedLocationProof signLocationProof(LocationProof locationProof) throws Exception {
+    private LocationProof signLocationProof(ProofData proofData) throws Exception {
         ObjectMapper objectMapper = new ObjectMapper();
-        byte[] proofBytes = objectMapper.writeValueAsBytes(locationProof);
+        byte[] proofBytes = objectMapper.writeValueAsBytes(proofData);
         String signature = RSAKeyGenerator.sign(proofBytes, _keyPair.getPrivate());
-        return new SignedLocationProof(locationProof, signature);
+        return new LocationProof(proofData, signature);
     }
 
-    public SignedLocationProof makeLocationProof(int proverId, int proverEpoch) throws Exception {
+    public LocationProof makeLocationProof(int proverId, int proverEpoch) throws Exception {
         // check proximity
         Location witnessLoc;
         String type;
@@ -162,9 +162,8 @@ public class User {
             throw new IllegalArgumentException("Can only prove location requests regarding current or previous epoch");
 
         // build and sign proof
-        Value value = new Value(witnessLoc, proverId, _id);
-        LocationProof locationProof = new LocationProof(type, value);
-        return signLocationProof(locationProof);
+        ProofData proofData = new ProofData(witnessLoc, proverId, _id, type);
+        return signLocationProof(proofData);
     }
 
 
@@ -172,13 +171,13 @@ public class User {
     /* ====[             Submit Location Report             ]==== */
     /* ========================================================== */
 
-    private SecureLocationReport secureLocationReport(SignedLocationReport signedLocationReport) throws Exception {
+    private SecureLocationReport secureLocationReport(LocationReport locationReport) throws Exception {
         // make secret key
         SecretKey secretKey = AESKeyGenerator.makeAESKey();
 
         // encrypt report with secret key
         ObjectMapper objectMapper = new ObjectMapper();
-        byte[] reportBytes = objectMapper.writeValueAsBytes(signedLocationReport);
+        byte[] reportBytes = objectMapper.writeValueAsBytes(locationReport);
         byte[] cipheredReport = AESKeyGenerator.encrypt(reportBytes, secretKey);
 
         // encrypt secret key with server public key
@@ -197,11 +196,11 @@ public class User {
         if (!(0 <= epoch && epoch <= _epoch))
             throw new IllegalArgumentException("Epoch must be positive and not exceed the current epoch.");
 
-        List<SignedLocationProof> epochProofs = getEpochProofs(epoch);
-        SignedLocationReport signedLocationReport = new SignedLocationReport(_id, epoch, epochLocation, epochProofs);
-        System.out.println(signedLocationReport);
+        List<LocationProof> epochProofs = getEpochProofs(epoch);
+        LocationReport locationReport = new LocationReport(_id, epoch, epochLocation, epochProofs);
+        System.out.println(locationReport);
 
-        SecureLocationReport secureLocationReport = secureLocationReport(signedLocationReport);
+        SecureLocationReport secureLocationReport = secureLocationReport(locationReport);
         submitLocationReport(secureLocationReport);
     }
 
