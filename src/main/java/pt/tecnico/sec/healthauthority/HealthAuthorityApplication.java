@@ -1,22 +1,21 @@
 package pt.tecnico.sec.healthauthority;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.json.simple.parser.ParseException;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
+import org.springframework.http.HttpEntity;
 import org.springframework.web.client.RestTemplate;
-import pt.tecnico.sec.AESKeyGenerator;
 import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.client.LocationReport;
+import pt.tecnico.sec.client.ObtainLocationRequest;
 import pt.tecnico.sec.client.SecureLocationReport;
+import pt.tecnico.sec.client.SecureObtainLocationRequest;
 
-import javax.crypto.SecretKey;
 import java.io.IOException;
 import java.security.KeyPair;
-import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.util.*;
 
@@ -86,11 +85,10 @@ public class HealthAuthorityApplication {
                             int userId = Integer.parseInt(tokens[1]);
                             int ep = Integer.parseInt(tokens[2]);
 
-                            Map<String, Integer> params = new HashMap<>();
-                            params.put("userId", userId);
-                            params.put("epoch", ep);
-
-                            SecureLocationReport secureLocationReport = restTemplate.getForObject("http://localhost:" + SERVER_PORT + "/location-report/{epoch}/{userId}", SecureLocationReport.class, params);
+                            ObtainLocationRequest locationRequest = new ObtainLocationRequest(userId, ep);
+                            SecureObtainLocationRequest secureLocationRequest = new SecureObtainLocationRequest(locationRequest, keyPair.getPrivate());
+                            HttpEntity<SecureObtainLocationRequest> request = new HttpEntity<>(secureLocationRequest);
+                            SecureLocationReport secureLocationReport = restTemplate.postForObject(getServerURL() + "/obtain-location-report-ha", request, SecureLocationReport.class);
 
                             if (secureLocationReport == null) {
                                 System.out.println("Location Report not found");
@@ -98,7 +96,7 @@ public class HealthAuthorityApplication {
                             }
 
                             // Decipher and check signature
-                            LocationReport locationReport = decipherReport(secureLocationReport, keyPair.getPrivate(), serverKey);
+                            LocationReport locationReport = secureLocationReport.decipherAndVerify(keyPair.getPrivate(), serverKey);
                             System.out.println(locationReport.get_location());
                         }
 
@@ -114,7 +112,7 @@ public class HealthAuthorityApplication {
                             params.put("x", x);
                             params.put("y", y);
 
-                            Integer userId = restTemplate.getForObject("http://localhost:" + SERVER_PORT + "/users/{epoch}/{x}/{y}", Integer.class, params);
+                            Integer userId = restTemplate.getForObject(getServerURL() + "/users/{epoch}/{x}/{y}", Integer.class, params);
 
                             if (userId == null) {
                                 System.out.println("User not found");
@@ -141,24 +139,8 @@ public class HealthAuthorityApplication {
         };
     }
 
-
-    public LocationReport decipherReport(SecureLocationReport secureReport, PrivateKey haKey, PublicKey serverKey) throws Exception {
-        // Decipher secret key
-        byte[] cipheredKey = secureReport.get_cipheredKey();
-        SecretKey secretKey = RSAKeyGenerator.decryptSecretKey(cipheredKey, haKey);
-
-        // Decipher report
-        byte[] data = AESKeyGenerator.decrypt(secureReport.get_cipheredReport(), secretKey);
-        ObjectMapper objectMapper = new ObjectMapper();
-        LocationReport report = objectMapper.readValue(data, LocationReport.class);
-
-        // Verify signature
-        byte[] signature = secureReport.get_signature();
-        if (signature == null || !RSAKeyGenerator.verify(data, signature, serverKey)) {
-            throw new IllegalArgumentException("Report signature failed!"); //FIXME type of exception
-        }
-
-        return report;
+    public String getServerURL() {
+        return "http://localhost:" + SERVER_PORT;
     }
 
 }

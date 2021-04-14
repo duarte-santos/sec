@@ -1,9 +1,14 @@
 package pt.tecnico.sec.client;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.server.DBLocationReport;
 import pt.tecnico.sec.server.DBProofData;
 
+import java.io.IOException;
+import java.security.GeneralSecurityException;
+import java.security.PublicKey;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -63,6 +68,32 @@ public class LocationReport {
 
     public void set_epoch(int _epoch) {
         this._epoch = _epoch;
+    }
+
+    public void verify(byte[] signature, PublicKey verifyKey) throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        byte[] reportBytes = objectMapper.writeValueAsBytes(this);
+
+        // Verify signature
+        if (signature == null || !RSAKeyGenerator.verify(reportBytes, signature, verifyKey)) {
+            throw new IllegalArgumentException("Report signature failed!"); //FIXME type of exception
+        }
+    }
+
+    public static PublicKey getClientPublicKey(int clientId) throws GeneralSecurityException, IOException {
+        String keyPath = RSAKeyGenerator.KEYS_PATH + clientId + ".pub";
+        return RSAKeyGenerator.readPublicKey(keyPath);
+    }
+
+    public void verifyProofs() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        for (LocationProof signedProof : _proofs) {
+            byte[] data = objectMapper.writeValueAsBytes(signedProof.get_proofData());
+            byte[] signature = signedProof.get_signature();
+            PublicKey clientKey = getClientPublicKey(signedProof.get_witnessId());
+            if (signature == null || !RSAKeyGenerator.verify(data, signature, clientKey))
+                throw new IllegalArgumentException("Proof signature failed!"); //FIXME type of exception
+        }
     }
 
     @Override

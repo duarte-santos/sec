@@ -4,6 +4,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import pt.tecnico.sec.client.LocationReport;
 import pt.tecnico.sec.client.SecureLocationReport;
+import pt.tecnico.sec.client.SecureObtainLocationRequest;
+
+import java.security.PublicKey;
 
 
 @RestController
@@ -28,8 +31,7 @@ public class ServerController {
     public void reportLocation(@RequestBody SecureLocationReport secureLocationReport) {
         try {
             // Decipher and check signatures
-            LocationReport locationReport = _serverApp.decipherReport(secureLocationReport);
-            _serverApp.verifyReportSignatures(locationReport); // throws exception
+            LocationReport locationReport = _serverApp.decipherAndVerifyReport(secureLocationReport);
 
             // Check if already exists a report with the same userId and epoch
             int userId = locationReport.get_userId();
@@ -47,14 +49,42 @@ public class ServerController {
         }
     }
 
-    @GetMapping("/location-report/{epoch}/{userId}")
-    public SecureLocationReport getLocation(@PathVariable(value = "userId") int userId, @PathVariable(value = "epoch") int epoch){
+    // used by clients
+    @PostMapping("/obtain-location-report")
+    public SecureLocationReport getLocation(@RequestBody SecureObtainLocationRequest secureRequest){
         try {
+            int userId = secureRequest.get_request().get_userId();
+            int epoch = secureRequest.get_request().get_epoch();
+            secureRequest.verify( _serverApp.getClientPublicKey(userId) );
+
             DBLocationReport dbLocationReport = _reportRepository.findReportByEpochAndUser(userId, epoch);
             if (dbLocationReport == null)
                 return null; // FIXME exception
-            LocationReport locationReport = new LocationReport(dbLocationReport);
-            return _serverApp.secureLocationReport(locationReport);
+            LocationReport report = new LocationReport(dbLocationReport);
+
+            // encrypt using client public key, sign using server private key
+            PublicKey clientKey = _serverApp.getClientPublicKey(report.get_userId());
+            return new SecureLocationReport(report, clientKey, _serverApp.getPrivateKey());
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+        }
+        return null;
+    }
+
+    // used by health authority
+    @PostMapping("/obtain-location-report-ha")
+    public SecureLocationReport getLocationHA(@RequestBody SecureObtainLocationRequest secureRequest){
+        try {
+            int userId = secureRequest.get_request().get_userId();
+            int epoch = secureRequest.get_request().get_epoch();
+            secureRequest.verify( _serverApp.getHAPublicKey() );
+
+            DBLocationReport dbLocationReport = _reportRepository.findReportByEpochAndUser(userId, epoch);
+            if (dbLocationReport == null) return null; // FIXME exception
+            LocationReport report = new LocationReport(dbLocationReport);
+
+            // encrypt using HA public key, sign using server private key
+            return new SecureLocationReport(report, _serverApp.getHAPublicKey(), _serverApp.getPrivateKey());
         } catch (Exception e) {
             System.out.println(e.getMessage());
         }

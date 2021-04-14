@@ -3,10 +3,8 @@ package pt.tecnico.sec.client;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpEntity;
 import org.springframework.web.client.RestTemplate;
-import pt.tecnico.sec.AESKeyGenerator;
 import pt.tecnico.sec.RSAKeyGenerator;
 
-import javax.crypto.SecretKey;
 import java.security.KeyPair;
 import java.security.PublicKey;
 import java.util.ArrayList;
@@ -171,25 +169,6 @@ public class User {
     /* ====[             Submit Location Report             ]==== */
     /* ========================================================== */
 
-    private SecureLocationReport secureLocationReport(LocationReport locationReport) throws Exception {
-        // make secret key
-        SecretKey secretKey = AESKeyGenerator.makeAESKey();
-
-        // encrypt report with secret key
-        ObjectMapper objectMapper = new ObjectMapper();
-        byte[] reportBytes = objectMapper.writeValueAsBytes(locationReport);
-        byte[] cipheredReport = AESKeyGenerator.encrypt(reportBytes, secretKey);
-
-        // encrypt secret key with server public key
-        byte[] cipheredSecretKey = RSAKeyGenerator.encryptSecretKey(secretKey, _serverKey);
-
-        // sign report with client private key
-        byte[] signature = RSAKeyGenerator.sign(reportBytes, _keyPair.getPrivate());
-
-        // build secure report
-        return new SecureLocationReport(cipheredSecretKey, cipheredReport, signature);
-    }
-
     private void submitLocationReport(SecureLocationReport secureLocationReport) {
         HttpEntity<SecureLocationReport> request = new HttpEntity<>(secureLocationReport);
         _restTemplate.postForObject(getServerURL() + "/location-report", request, SecureLocationReport.class);
@@ -203,7 +182,8 @@ public class User {
         LocationReport locationReport = new LocationReport(_id, epoch, epochLocation, epochProofs);
         System.out.println(locationReport);
 
-        SecureLocationReport secureLocationReport = secureLocationReport(locationReport);
+        // encrypt using server public key, sign using client private key
+        SecureLocationReport secureLocationReport = new SecureLocationReport(locationReport, _serverKey, _keyPair.getPrivate());
         submitLocationReport(secureLocationReport);
     }
 
@@ -212,30 +192,12 @@ public class User {
     /* ====[             Obtain Location Report             ]==== */
     /* ========================================================== */
 
-    public LocationReport decipherReport(SecureLocationReport secureReport) throws Exception {
-        // Decipher secret key
-        byte[] cipheredKey = secureReport.get_cipheredKey();
-        SecretKey secretKey = RSAKeyGenerator.decryptSecretKey(cipheredKey, _keyPair.getPrivate());
+    private SecureLocationReport obtainLocationReport(int epoch) throws Exception {
+        ObtainLocationRequest locationRequest = new ObtainLocationRequest(_id, epoch);
+        SecureObtainLocationRequest secureLocationRequest = new SecureObtainLocationRequest(locationRequest, _keyPair.getPrivate());
 
-        // Decipher report
-        byte[] data = AESKeyGenerator.decrypt(secureReport.get_cipheredReport(), secretKey);
-        ObjectMapper objectMapper = new ObjectMapper();
-        LocationReport report = objectMapper.readValue(data, LocationReport.class);
-
-        // Verify signature
-        byte[] signature = secureReport.get_signature();
-        if (signature == null || !RSAKeyGenerator.verify(data, signature, _serverKey)) {
-            throw new IllegalArgumentException("Report signature failed!"); //FIXME type of exception
-        }
-
-        return report;
-    }
-
-    private SecureLocationReport obtainLocationReport(int epoch) {
-        Map<String, Integer> params = new HashMap<>();
-        params.put("epoch", epoch);
-        params.put("userId", _id);
-        return _restTemplate.getForObject(getServerURL() + "/location-report/{epoch}/{userId}", SecureLocationReport.class, params);
+        HttpEntity<SecureObtainLocationRequest> request = new HttpEntity<>(secureLocationRequest);
+        return _restTemplate.postForObject(getServerURL() + "/obtain-location-report", request, SecureLocationReport.class);
     }
 
     public LocationReport obtainReport(int epoch) throws Exception {
@@ -246,7 +208,7 @@ public class User {
         if (secureLocationReport == null) return null;
 
         // Decipher and check signature
-        return decipherReport(secureLocationReport);
+        return secureLocationReport.decipherAndVerify(_keyPair.getPrivate(), _serverKey);
     }
 
 
