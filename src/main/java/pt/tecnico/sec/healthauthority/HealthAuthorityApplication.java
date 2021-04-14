@@ -62,7 +62,7 @@ public class HealthAuthorityApplication {
             try (Scanner scanner = new Scanner(System.in)) {
                 while (true) {
                     try {
-                        System.out.print("\r  \n> Type your command ('help' to view available commands)\n> ");
+                        System.out.print("\n> Type your command ('help' to view available commands)\n> ");
 
                         // read command line and parse arguments
                         String line = scanner.nextLine();
@@ -112,13 +112,15 @@ public class HealthAuthorityApplication {
                             params.put("x", x);
                             params.put("y", y);
 
-                            Integer userId = restTemplate.getForObject(getServerURL() + "/users/{epoch}/{x}/{y}", Integer.class, params);
+                            Integer[] userIds = restTemplate.getForObject(getServerURL() + "/users/{epoch}/{x}/{y}", Integer[].class, params);
 
-                            if (userId == null) {
+                            if (userIds == null) {
                                 System.out.println("User not found");
+                                continue;
                             }
-                            else {
-                                System.out.println("UserId: " + userId);
+                            System.out.print("UserIds: ");
+                            for (Integer userId : userIds) {
+                                System.out.print(userId + " ");
                             }
                         }
 
@@ -139,7 +141,7 @@ public class HealthAuthorityApplication {
         };
     }
 
-    public String getServerURL() {
+    private String getServerURL() {
         return "http://localhost:" + SERVER_PORT;
     }
 

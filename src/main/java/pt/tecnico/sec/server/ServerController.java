@@ -7,6 +7,8 @@ import pt.tecnico.sec.client.SecureLocationReport;
 import pt.tecnico.sec.client.SecureObtainLocationRequest;
 
 import java.security.PublicKey;
+import java.util.ArrayList;
+import java.util.List;
 
 
 @RestController
@@ -92,12 +94,15 @@ public class ServerController {
     }
 
     @GetMapping("/users/{epoch}/{x}/{y}")
-    public Integer getUsers(@PathVariable(value = "epoch") int epoch, @PathVariable(value = "x") int x, @PathVariable(value = "y") int y){
-        DBLocationReport dbLocationReport = _reportRepository.findUsersByLocationAndEpoch(epoch, x, y);
-        if (dbLocationReport == null)
-            return null;
-        // FIXME : allow return multiple users
-        return dbLocationReport.get_userId();
+    public Integer[] getUsers(@PathVariable(value = "epoch") int epoch, @PathVariable(value = "x") int x, @PathVariable(value = "y") int y){
+        List<DBLocationReport> dbLocationReports = _reportRepository.findUsersByLocationAndEpoch(epoch, x, y);
+        int userCount = dbLocationReports.size();
+        if (userCount == 0) return null;
+        Integer[] users = new Integer[userCount];
+        for (int i = 0; i < userCount; i++) {
+            users[i] = dbLocationReports.get(i).get_userId();
+        }
+        return users;
     }
 
 }
