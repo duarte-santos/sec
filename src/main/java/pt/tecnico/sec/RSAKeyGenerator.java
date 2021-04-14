@@ -10,7 +10,6 @@ import java.io.IOException;
 import java.security.*;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
-import java.util.Base64;
 
 import static javax.xml.bind.DatatypeConverter.printHexBinary;
 
@@ -30,6 +29,7 @@ public class RSAKeyGenerator {
                 writeKeyPair(KEYS_PATH + id);
             }
             writeKeyPair(KEYS_PATH + "server");
+            writeKeyPair(KEYS_PATH + "ha");
         }
         catch (NumberFormatException e) {
             System.out.println("Argument 'number of users' be a positive integer.");
@@ -51,7 +51,7 @@ public class RSAKeyGenerator {
         // get an AES private key
         System.out.println("Generating RSA key ..." );
         KeyPairGenerator keyGen = KeyPairGenerator.getInstance("RSA");
-        keyGen.initialize(2048); //FIXME
+        keyGen.initialize(2048);
         KeyPair keys = keyGen.generateKeyPair();
         System.out.println("Finish generating RSA keys");
 
@@ -138,20 +138,18 @@ public class RSAKeyGenerator {
     /* ====[                  Sign/Verify                   ]==== */
     /* ========================================================== */
 
-    public static String sign(byte[] data, PrivateKey key) throws Exception { //FIXME send byte array or string (base64)?
+    public static byte[] sign(byte[] data, PrivateKey key) throws Exception { //FIXME send byte array or string (base64)?
         Signature privateSignature = Signature.getInstance("SHA256withRSA");
         privateSignature.initSign(key);
         privateSignature.update(data);
-        byte[] signature = privateSignature.sign();
-        return Base64.getEncoder().encodeToString(signature);
+        return privateSignature.sign();
     }
 
-    public static boolean verify(byte[] data, String signature, PublicKey key) throws Exception {
+    public static boolean verify(byte[] data, byte[] signature, PublicKey key) throws Exception {
         Signature publicSignature = Signature.getInstance("SHA256withRSA");
         publicSignature.initVerify(key);
         publicSignature.update(data);
-        byte[] signatureBytes = Base64.getDecoder().decode(signature);
-        return publicSignature.verify(signatureBytes);
+        return publicSignature.verify(signature);
     }
 
 }

@@ -127,9 +127,10 @@ public class ClientApplication {
                         else if (tokens[0].equals(OBTAIN_CMD) && tokens.length == 2) {
                             int ep = Integer.parseInt(tokens[1]);
                             LocationReport locationReport = _user.obtainReport(ep);
-                            if (locationReport == null) {
+                            if (locationReport == null)
                                 System.out.println("The requested report doesn't exist\n");
-                            } else System.out.println("Location Report: " + locationReport);
+                            else
+                                System.out.println(locationReport);
                         }
 
                         // help

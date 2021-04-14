@@ -8,9 +8,7 @@ import pt.tecnico.sec.RSAKeyGenerator;
 
 import javax.crypto.SecretKey;
 import java.security.KeyPair;
-import java.security.MessageDigest;
 import java.security.PublicKey;
-import java.security.Signature;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -146,7 +144,7 @@ public class User {
     private LocationProof signLocationProof(ProofData proofData) throws Exception {
         ObjectMapper objectMapper = new ObjectMapper();
         byte[] proofBytes = objectMapper.writeValueAsBytes(proofData);
-        String signature = RSAKeyGenerator.sign(proofBytes, _keyPair.getPrivate());
+        byte[] signature = RSAKeyGenerator.sign(proofBytes, _keyPair.getPrivate());
         return new LocationProof(proofData, signature);
     }
 
@@ -164,7 +162,7 @@ public class User {
             throw new IllegalArgumentException("Can only prove location requests regarding current or previous epoch");
 
         // build and sign proof
-        ProofData proofData = new ProofData(witnessLoc, proverId, _id, type);
+        ProofData proofData = new ProofData(witnessLoc, proverId, _id, proverEpoch, type);
         return signLocationProof(proofData);
     }
 
@@ -185,14 +183,11 @@ public class User {
         // encrypt secret key with server public key
         byte[] cipheredSecretKey = RSAKeyGenerator.encryptSecretKey(secretKey, _serverKey);
 
-        // create signature
-        Signature sig = Signature.getInstance("SHA256WithRSA");
-        sig.initSign(_keyPair.getPrivate());
-        sig.update(reportBytes);
-        byte[] signatureBytes = sig.sign();
+        // sign report with client private key
+        byte[] signature = RSAKeyGenerator.sign(reportBytes, _keyPair.getPrivate());
 
         // build secure report
-        return new SecureLocationReport(cipheredSecretKey, cipheredReport, signatureBytes);
+        return new SecureLocationReport(cipheredSecretKey, cipheredReport, signature);
     }
 
     private void submitLocationReport(SecureLocationReport secureLocationReport) {
@@ -217,17 +212,41 @@ public class User {
     /* ====[             Obtain Location Report             ]==== */
     /* ========================================================== */
 
-    private LocationReport obtainLocationReport(int epoch) {
+    public LocationReport decipherReport(SecureLocationReport secureReport) throws Exception {
+        // Decipher secret key
+        byte[] cipheredKey = secureReport.get_cipheredKey();
+        SecretKey secretKey = RSAKeyGenerator.decryptSecretKey(cipheredKey, _keyPair.getPrivate());
+
+        // Decipher report
+        byte[] data = AESKeyGenerator.decrypt(secureReport.get_cipheredReport(), secretKey);
+        ObjectMapper objectMapper = new ObjectMapper();
+        LocationReport report = objectMapper.readValue(data, LocationReport.class);
+
+        // Verify signature
+        byte[] signature = secureReport.get_signature();
+        if (signature == null || !RSAKeyGenerator.verify(data, signature, _serverKey)) {
+            throw new IllegalArgumentException("Report signature failed!"); //FIXME type of exception
+        }
+
+        return report;
+    }
+
+    private SecureLocationReport obtainLocationReport(int epoch) {
         Map<String, Integer> params = new HashMap<>();
         params.put("epoch", epoch);
         params.put("userId", _id);
-        return _restTemplate.getForObject(getServerURL() + "/location-report/{epoch}/{userId}", LocationReport.class, params);
+        return _restTemplate.getForObject(getServerURL() + "/location-report/{epoch}/{userId}", SecureLocationReport.class, params);
     }
 
-    public LocationReport obtainReport(int epoch) {
+    public LocationReport obtainReport(int epoch) throws Exception {
         if (!(0 <= epoch && epoch <= _epoch))
             throw new IllegalArgumentException("Epoch must be positive and not exceed the current epoch.");
-        return obtainLocationReport(epoch);
+
+        SecureLocationReport secureLocationReport = obtainLocationReport(epoch);
+        if (secureLocationReport == null) return null;
+
+        // Decipher and check signature
+        return decipherReport(secureLocationReport);
     }
 
 

@@ -48,11 +48,17 @@ public class ServerController {
     }
 
     @GetMapping("/location-report/{epoch}/{userId}")
-    public LocationReport getLocation(@PathVariable(value = "userId") int userId, @PathVariable(value = "epoch") int epoch){
-        DBLocationReport dbLocationReport = _reportRepository.findReportByEpochAndUser(userId, epoch);
-        if (dbLocationReport == null)
-            return null;
-        return new LocationReport(dbLocationReport);
+    public SecureLocationReport getLocation(@PathVariable(value = "userId") int userId, @PathVariable(value = "epoch") int epoch){
+        try {
+            DBLocationReport dbLocationReport = _reportRepository.findReportByEpochAndUser(userId, epoch);
+            if (dbLocationReport == null)
+                return null; // FIXME exception
+            LocationReport locationReport = new LocationReport(dbLocationReport);
+            return _serverApp.secureLocationReport(locationReport);
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+        }
+        return null;
     }
 
     @GetMapping("/users/{epoch}/{x}/{y}")

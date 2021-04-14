@@ -14,7 +14,6 @@ import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.PublicKey;
-import java.security.Signature;
 import java.util.Collections;
 import java.util.List;
 
@@ -71,12 +70,10 @@ public class ServerApplication {
         LocationReport report = objectMapper.readValue(data, LocationReport.class);
 
         // Verify signature
-        Signature sig = Signature.getInstance("SHA256WithRSA");
+        byte[] signature = secureReport.get_signature();
         PublicKey clientKey = getClientPublicKey(report.get_userId());
-        sig.initVerify(clientKey);
-        sig.update(data);
-        if (!sig.verify(secureReport.get_signature())){
-            throw new IllegalArgumentException("Report signature failed. Bad client!");
+        if (signature == null || !RSAKeyGenerator.verify(data, signature, clientKey)) {
+            throw new IllegalArgumentException("Report signature failed. Bad client!"); //FIXME type of exception
         }
 
         return report;
@@ -87,12 +84,37 @@ public class ServerApplication {
         List<LocationProof> signedProofs = locationReport.get_proofs();
         for (LocationProof signedProof : signedProofs) {
             byte[] data = objectMapper.writeValueAsBytes(signedProof.get_proofData());
-            String signature = signedProof.get_signature();
+            byte[] signature = signedProof.get_signature();
             PublicKey clientKey = getClientPublicKey(signedProof.get_witnessId());
             if (signature == null || !RSAKeyGenerator.verify(data, signature, clientKey)) {
                 throw new IllegalArgumentException("Proof signature failed. Bad client!"); //FIXME type of exception
             }
         }
+    }
+
+
+    /* ========================================================== */
+    /* ====[              Send Location Report              ]==== */
+    /* ========================================================== */
+
+    public SecureLocationReport secureLocationReport(LocationReport report) throws Exception {
+        // make secret key
+        SecretKey secretKey = AESKeyGenerator.makeAESKey();
+
+        // encrypt report with secret key
+        ObjectMapper objectMapper = new ObjectMapper();
+        byte[] reportBytes = objectMapper.writeValueAsBytes(report);
+        byte[] cipheredReport = AESKeyGenerator.encrypt(reportBytes, secretKey);
+
+        // encrypt secret key with client public key
+        PublicKey clientKey = getClientPublicKey(report.get_userId());
+        byte[] cipheredSecretKey = RSAKeyGenerator.encryptSecretKey(secretKey, clientKey);
+
+        // sign report with server private key
+        byte[] signature = RSAKeyGenerator.sign(reportBytes, _keyPair.getPrivate());
+
+        // build secure report
+        return new SecureLocationReport(cipheredSecretKey, cipheredReport, signature);
     }
 
 }

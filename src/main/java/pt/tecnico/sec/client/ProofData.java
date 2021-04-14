@@ -9,23 +9,25 @@ public class ProofData {
     private Location _location;
     private int _proverId;
     private int _witnessId;
-    //private int _epoch
+    private int _epoch;
     private String _type;
 
     public ProofData() {}
 
-    public ProofData(Location location, int proverId, int witnessId, String type) {
+    public ProofData(Location location, int proverId, int witnessId, int epoch, String type) {
         _location = location;
         _proverId = proverId;
         _witnessId = witnessId;
+        _epoch = epoch;
         _type = type;
     }
 
     // convert from client version
     public ProofData(DBProofData dbProofData) {
-        _location = new Location( dbProofData.get_location() );
+        _location = new Location( dbProofData.get_DB_location() );
         _proverId = dbProofData.get_proverId();
         _witnessId = dbProofData.get_witnessId();
+        _epoch = dbProofData.get_epoch();
         _type = dbProofData.get_type();
     }
 
@@ -53,6 +55,14 @@ public class ProofData {
         this._witnessId = _witnessId;
     }
 
+    public int get_epoch() {
+        return _epoch;
+    }
+
+    public void set_epoch(int _epoch) {
+        this._epoch = _epoch;
+    }
+
     public String get_type() {
         return _type;
     }
@@ -63,10 +73,11 @@ public class ProofData {
 
     @Override
     public String toString() {
-        return "Value{" +
+        return "ProofData{" +
                 "_location=" + _location +
                 ", _proverId=" + _proverId +
                 ", _witnessId=" + _witnessId +
+                ", _epoch=" + _epoch +
                 ", _type='" + _type + '\'' +
                 '}';
     }

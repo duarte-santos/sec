@@ -14,7 +14,7 @@ public class DBProofData {
 
     private int _proverId;
     private int _witnessId;
-    //private int _epoch
+    private int _epoch;
     private String _type;
 
     @Id
@@ -23,10 +23,11 @@ public class DBProofData {
 
     public DBProofData() {}
 
-    public DBProofData(DBLocation DBLocation, int proverId, int witnessId, String type) {
+    public DBProofData(DBLocation DBLocation, int proverId, int witnessId, int epoch, String type) {
         _DB_location = DBLocation;
         _proverId = proverId;
         _witnessId = witnessId;
+        _epoch = epoch;
         _type = type;
     }
 
@@ -35,14 +36,15 @@ public class DBProofData {
         _DB_location = new DBLocation( proofData.get_location() );
         _proverId = proofData.get_proverId();
         _witnessId = proofData.get_witnessId();
+        _epoch = proofData.get_epoch();
         _type = proofData.get_type();
     }
 
-    public DBLocation get_location() {
+    public DBLocation get_DB_location() {
         return _DB_location;
     }
 
-    public void set_location(DBLocation _DB_location) {
+    public void set_DB_location(DBLocation _DB_location) {
         this._DB_location = _DB_location;
     }
 
@@ -60,6 +62,14 @@ public class DBProofData {
 
     public void set_witnessId(int _witnessId) {
         this._witnessId = _witnessId;
+    }
+
+    public int get_epoch() {
+        return _epoch;
+    }
+
+    public void set_epoch(int _epoch) {
+        this._epoch = _epoch;
     }
 
     public String get_type() {
@@ -84,6 +94,7 @@ public class DBProofData {
                 "_DB_location=" + _DB_location +
                 ", _proverId=" + _proverId +
                 ", _witnessId=" + _witnessId +
+                ", _epoch=" + _epoch +
                 ", _type='" + _type + '\'' +
                 ", id=" + id +
                 '}';

@@ -1,5 +1,6 @@
 package pt.tecnico.sec.healthauthority;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.json.simple.parser.ParseException;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
@@ -7,9 +8,16 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.web.client.RestTemplate;
+import pt.tecnico.sec.AESKeyGenerator;
+import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.client.LocationReport;
+import pt.tecnico.sec.client.SecureLocationReport;
 
+import javax.crypto.SecretKey;
 import java.io.IOException;
+import java.security.KeyPair;
+import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.util.*;
 
 import static java.lang.System.exit;
@@ -47,6 +55,10 @@ public class HealthAuthorityApplication {
     @Bean
     public CommandLineRunner run(RestTemplate restTemplate) {
         return args -> {
+            // get keys
+            String keysPath = RSAKeyGenerator.KEYS_PATH;
+            KeyPair keyPair = RSAKeyGenerator.readKeyPair(keysPath + "ha.pub", keysPath + "ha.priv");
+            PublicKey serverKey = RSAKeyGenerator.readPublicKey(keysPath + "server.pub");
 
             try (Scanner scanner = new Scanner(System.in)) {
                 while (true) {
@@ -78,14 +90,16 @@ public class HealthAuthorityApplication {
                             params.put("userId", userId);
                             params.put("epoch", ep);
 
-                            LocationReport locationReport = restTemplate.getForObject("http://localhost:" + SERVER_PORT + "/location-report/{epoch}/{userId}", LocationReport.class, params);
+                            SecureLocationReport secureLocationReport = restTemplate.getForObject("http://localhost:" + SERVER_PORT + "/location-report/{epoch}/{userId}", SecureLocationReport.class, params);
 
-                            if (locationReport == null) {
+                            if (secureLocationReport == null) {
                                 System.out.println("Location Report not found");
+                                continue;
                             }
-                            else {
-                                System.out.println(locationReport.get_location());
-                            }
+
+                            // Decipher and check signature
+                            LocationReport locationReport = decipherReport(secureLocationReport, keyPair.getPrivate(), serverKey);
+                            System.out.println(locationReport.get_location());
                         }
 
                         // obtainUsersAtLocation, [x], [y], [ep]
@@ -125,6 +139,26 @@ public class HealthAuthorityApplication {
 
             exit(0);
         };
+    }
+
+
+    public LocationReport decipherReport(SecureLocationReport secureReport, PrivateKey haKey, PublicKey serverKey) throws Exception {
+        // Decipher secret key
+        byte[] cipheredKey = secureReport.get_cipheredKey();
+        SecretKey secretKey = RSAKeyGenerator.decryptSecretKey(cipheredKey, haKey);
+
+        // Decipher report
+        byte[] data = AESKeyGenerator.decrypt(secureReport.get_cipheredReport(), secretKey);
+        ObjectMapper objectMapper = new ObjectMapper();
+        LocationReport report = objectMapper.readValue(data, LocationReport.class);
+
+        // Verify signature
+        byte[] signature = secureReport.get_signature();
+        if (signature == null || !RSAKeyGenerator.verify(data, signature, serverKey)) {
+            throw new IllegalArgumentException("Report signature failed!"); //FIXME type of exception
+        }
+
+        return report;
     }
 
 }
