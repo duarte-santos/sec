@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.PublicKey;
+import java.security.Signature;
 import java.util.Collections;
 import java.util.List;
 
@@ -67,7 +68,18 @@ public class ServerApplication {
         // Decipher report
         byte[] data = AESKeyGenerator.decrypt(secureReport.get_cipheredReport(), secretKey);
         ObjectMapper objectMapper = new ObjectMapper();
-        return objectMapper.readValue(data, LocationReport.class);
+        LocationReport report = objectMapper.readValue(data, LocationReport.class);
+
+        // Verify signature
+        Signature sig = Signature.getInstance("SHA256WithRSA");
+        PublicKey clientKey = getClientPublicKey(report.get_userId());
+        sig.initVerify(clientKey);
+        sig.update(data);
+        if (!sig.verify(secureReport.get_signature())){
+            throw new IllegalArgumentException("Report signature failed. Bad client!");
+        }
+
+        return report;
     }
 
     public void verifyReportSignatures(LocationReport locationReport) throws Exception {

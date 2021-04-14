@@ -9,12 +9,14 @@ public class SecureLocationReport {
 
     private byte[] _cipheredKey;
     private byte[] _cipheredReport;
+    private byte[] _signature;
 
     public SecureLocationReport() {}
 
-    public SecureLocationReport(byte[] _cipheredKey, byte[] _cipheredReport) {
-        this._cipheredKey = _cipheredKey;
-        this._cipheredReport = _cipheredReport;
+    public SecureLocationReport(byte[] cipheredKey, byte[] cipheredReport, byte[] signature) {
+        _cipheredKey = cipheredKey;
+        _cipheredReport = cipheredReport;
+        _signature = signature;
     }
 
     public byte[] get_cipheredKey() {
@@ -33,6 +35,13 @@ public class SecureLocationReport {
         this._cipheredReport = _cipheredReport;
     }
 
+    public byte[] get_signature() {
+        return _signature;
+    }
+
+    public void set_signature(byte[] _signature) {
+        this._signature = _signature;
+    }
 
     @Override
     public String toString() {

@@ -8,7 +8,9 @@ import pt.tecnico.sec.RSAKeyGenerator;
 
 import javax.crypto.SecretKey;
 import java.security.KeyPair;
+import java.security.MessageDigest;
 import java.security.PublicKey;
+import java.security.Signature;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -183,8 +185,14 @@ public class User {
         // encrypt secret key with server public key
         byte[] cipheredSecretKey = RSAKeyGenerator.encryptSecretKey(secretKey, _serverKey);
 
+        // create signature
+        Signature sig = Signature.getInstance("SHA256WithRSA");
+        sig.initSign(_keyPair.getPrivate());
+        sig.update(reportBytes);
+        byte[] signatureBytes = sig.sign();
+
         // build secure report
-        return new SecureLocationReport(cipheredSecretKey, cipheredReport);
+        return new SecureLocationReport(cipheredSecretKey, cipheredReport, signatureBytes);
     }
 
     private void submitLocationReport(SecureLocationReport secureLocationReport) {
