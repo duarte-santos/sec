@@ -157,14 +157,14 @@ public class ClientApplication {
     // auxiliary function: returns a string with the help message
     private static String getHelpString() {
         return """
-                  ====================== Available Commands ======================
-                  step           - Increase current epoch
-                  submit [epoch] - Send the user's DBLocation report of the given
-                                    epoch to the server
-                  obtain [epoch] - Ask the server for the user's DBLocation report
-                                    at the given epoch
-                  exit           - Quit Client App
-                  ================================================================
+                  ======================= Available Commands =======================
+                  step            - Increase current epoch
+                  submit, [epoch] - Send the user's DBLocation report of the given
+                                     epoch to the server
+                  obtain, [epoch] - Ask the server for the user's DBLocation report
+                                     at the given epoch
+                  exit            - Quit Client App
+                  ==================================================================
                 """;
     }
 

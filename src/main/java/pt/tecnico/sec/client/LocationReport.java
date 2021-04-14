@@ -15,6 +15,11 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class LocationReport {
 
+    // constants // FIXME : constantes todas num ficheiro para todos acederem?
+    private static final String SUCCESS = "success";
+    private static final double DETECTION_RANGE = 2;
+
+    // attributes
     private int _userId;
     private int _epoch;
     private Location _location;
@@ -88,12 +93,23 @@ public class LocationReport {
     public void verifyProofs() throws Exception {
         ObjectMapper objectMapper = new ObjectMapper();
         for (LocationProof signedProof : _proofs) {
-            byte[] data = objectMapper.writeValueAsBytes(signedProof.get_proofData());
+            ProofData proofData = signedProof.get_proofData();
+            byte[] data = objectMapper.writeValueAsBytes(proofData);
             byte[] signature = signedProof.get_signature();
             PublicKey clientKey = getClientPublicKey(signedProof.get_witnessId());
-            if (signature == null || !RSAKeyGenerator.verify(data, signature, clientKey))
-                throw new IllegalArgumentException("Proof signature failed!"); //FIXME type of exception
+            if (signature == null || !RSAKeyGenerator.verify(data, signature, clientKey)
+                    || proofData.get_epoch() != _epoch
+                    || !isNearby(proofData.get_location())
+                    || !proofData.get_type().equals(SUCCESS)
+                    || proofData.get_proverId() != _userId) {
+                throw new IllegalArgumentException("Proof signature failed!"); //FIXME : discard proof, not report
+            }
         }
+    }
+
+    private boolean isNearby(Location location) {
+        double distance = _location.distance(location);
+        return distance <= DETECTION_RANGE;
     }
 
     @Override
