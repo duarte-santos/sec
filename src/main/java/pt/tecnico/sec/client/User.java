@@ -144,7 +144,7 @@ public class User {
     private LocationProof signLocationProof(ProofData proofData) throws Exception {
         ObjectMapper objectMapper = new ObjectMapper();
         byte[] proofBytes = objectMapper.writeValueAsBytes(proofData);
-        byte[] signature = RSAKeyGenerator.sign(proofBytes, _keyPair.getPrivate());
+        String signature = RSAKeyGenerator.sign(proofBytes, _keyPair.getPrivate());
         return new LocationProof(proofData, signature);
     }
 

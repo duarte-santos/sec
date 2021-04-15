@@ -7,18 +7,17 @@ import pt.tecnico.sec.RSAKeyGenerator;
 import javax.crypto.SecretKey;
 import java.security.PrivateKey;
 import java.security.PublicKey;
-import java.util.Arrays;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class SecureMessage {
 
-    private byte[] _cipheredKey;
-    private byte[] _cipheredMessage;
-    private byte[] _signature;
+    private String _cipheredKey;
+    private String _cipheredMessage;
+    private String _signature;
 
     public SecureMessage() {}
 
-    public SecureMessage(byte[] cipheredKey, byte[] cipheredMessage, byte[] signature) {
+    public SecureMessage(String cipheredKey, String cipheredMessage, String signature) {
         _cipheredKey = cipheredKey;
         _cipheredMessage = cipheredMessage;
         _signature = signature;
@@ -72,36 +71,36 @@ public class SecureMessage {
             throw new IllegalArgumentException("Signature verify failed!"); //FIXME type of exception
     }
 
-    public byte[] get_cipheredKey() {
+    public String get_cipheredKey() {
         return _cipheredKey;
     }
 
-    public void set_cipheredKey(byte[] _cipheredKey) {
+    public void set_cipheredKey(String _cipheredKey) {
         this._cipheredKey = _cipheredKey;
     }
 
-    public byte[] get_cipheredMessage() {
+    public String get_cipheredMessage() {
         return _cipheredMessage;
     }
 
-    public void set_cipheredMessage(byte[] _cipheredMessage) {
+    public void set_cipheredMessage(String _cipheredMessage) {
         this._cipheredMessage = _cipheredMessage;
     }
 
-    public byte[] get_signature() {
+    public String get_signature() {
         return _signature;
     }
 
-    public void set_signature(byte[] _signature) {
+    public void set_signature(String _signature) {
         this._signature = _signature;
     }
 
     @Override
     public String toString() {
         return "SecureMessage{" +
-                "_cipheredKey=" + Arrays.toString(_cipheredKey) +
-                ", _cipheredMessage=" + Arrays.toString(_cipheredMessage) +
-                ", _signature=" + Arrays.toString(_signature) +
+                "_cipheredKey='" + _cipheredKey + '\'' +
+                ", _cipheredMessage='" + _cipheredMessage + '\'' +
+                ", _signature='" + _signature + '\'' +
                 '}';
     }
 }

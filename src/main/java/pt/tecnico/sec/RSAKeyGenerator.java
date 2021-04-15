@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.security.*;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
+import java.util.Base64;
 
 import static javax.xml.bind.DatatypeConverter.printHexBinary;
 
@@ -107,29 +108,27 @@ public class RSAKeyGenerator {
     /* ====[                Encrypt/Decrypt                 ]==== */
     /* ========================================================== */
 
-    public static byte[] encrypt(byte[] data, PublicKey key) throws BadPaddingException, IllegalBlockSizeException, InvalidKeyException, NoSuchPaddingException, NoSuchAlgorithmException {
+    public static String encrypt(byte[] data, PublicKey key) throws BadPaddingException, IllegalBlockSizeException, InvalidKeyException, NoSuchPaddingException, NoSuchAlgorithmException {
         Cipher cipher = Cipher.getInstance("RSA");
         cipher.init(Cipher.ENCRYPT_MODE, key);
-        return cipher.doFinal(data);
+        byte[] cipherText = cipher.doFinal(data);
+        return Base64.getEncoder().encodeToString(cipherText);
     }
 
-    public static byte[] decrypt(byte[] data, PrivateKey key) throws NoSuchPaddingException, NoSuchAlgorithmException, InvalidKeyException, BadPaddingException, IllegalBlockSizeException {
+    public static byte[] decrypt(String cipherText, PrivateKey key) throws NoSuchPaddingException, NoSuchAlgorithmException, InvalidKeyException, BadPaddingException, IllegalBlockSizeException {
+        byte[] bytes = Base64.getDecoder().decode(cipherText);
         Cipher cipher = Cipher.getInstance("RSA");
         cipher.init(Cipher.DECRYPT_MODE, key);
-        return cipher.doFinal(data);
+        return cipher.doFinal(bytes);
     }
 
-    public static byte[] encryptSecretKey(SecretKey secretKey, PublicKey key) throws BadPaddingException, IllegalBlockSizeException, InvalidKeyException, NoSuchPaddingException, NoSuchAlgorithmException {
+    public static String encryptSecretKey(SecretKey secretKey, PublicKey key) throws BadPaddingException, IllegalBlockSizeException, InvalidKeyException, NoSuchPaddingException, NoSuchAlgorithmException {
         byte[] encodedKey = secretKey.getEncoded();
-        Cipher cipher = Cipher.getInstance("RSA");
-        cipher.init(Cipher.ENCRYPT_MODE, key);
-        return cipher.doFinal(encodedKey);
+        return encrypt(encodedKey, key);
     }
 
-    public static SecretKey decryptSecretKey(byte[] cipheredKey, PrivateKey key) throws NoSuchPaddingException, NoSuchAlgorithmException, InvalidKeyException, BadPaddingException, IllegalBlockSizeException {
-        Cipher cipher = Cipher.getInstance("RSA");
-        cipher.init(Cipher.DECRYPT_MODE, key);
-        byte[] encodedKey = cipher.doFinal(cipheredKey);
+    public static SecretKey decryptSecretKey(String cipheredKey, PrivateKey key) throws NoSuchPaddingException, NoSuchAlgorithmException, InvalidKeyException, BadPaddingException, IllegalBlockSizeException {
+        byte[] encodedKey = decrypt(cipheredKey, key);
         return AESKeyGenerator.fromEncoded(encodedKey);
     }
 
@@ -138,18 +137,20 @@ public class RSAKeyGenerator {
     /* ====[                  Sign/Verify                   ]==== */
     /* ========================================================== */
 
-    public static byte[] sign(byte[] data, PrivateKey key) throws Exception {
+    public static String sign(byte[] data, PrivateKey key) throws Exception {
         Signature privateSignature = Signature.getInstance("SHA256withRSA");
         privateSignature.initSign(key);
         privateSignature.update(data);
-        return privateSignature.sign();
+        byte[] signatureBytes = privateSignature.sign();
+        return Base64.getEncoder().encodeToString(signatureBytes);
     }
 
-    public static boolean verify(byte[] data, byte[] signature, PublicKey key) throws Exception {
+    public static boolean verify(byte[] data, String signature, PublicKey key) throws Exception {
         Signature publicSignature = Signature.getInstance("SHA256withRSA");
         publicSignature.initVerify(key);
         publicSignature.update(data);
-        return publicSignature.verify(signature);
+        byte[] signatureBytes = Base64.getDecoder().decode(signature);
+        return publicSignature.verify(signatureBytes);
     }
 
 }
