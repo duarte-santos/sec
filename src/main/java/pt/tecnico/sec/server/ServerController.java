@@ -13,6 +13,7 @@ import pt.tecnico.sec.healthauthority.ObtainUsersRequest;
 import pt.tecnico.sec.healthauthority.UsersAtLocation;
 import pt.tecnico.sec.server.exception.InvalidSignatureException;
 import pt.tecnico.sec.server.exception.RecordAlreadyExistsException;
+import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
 import javax.crypto.SecretKey;
 import java.security.PublicKey;
@@ -40,6 +41,9 @@ public class ServerController {
         try {
             // Decipher and check signatures
             locationReport = _serverApp.decipherAndVerifyReport(secureMessage);
+        }
+        catch (ReportNotAcceptableException e) {
+            throw e;
         }
         catch (Exception e) {
             throw new InvalidSignatureException("Invalid signature");
