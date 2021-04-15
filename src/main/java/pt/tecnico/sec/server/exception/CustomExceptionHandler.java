@@ -40,6 +40,14 @@ public class CustomExceptionHandler extends ResponseEntityExceptionHandler {
         return new ResponseEntity(error, HttpStatus.NOT_ACCEPTABLE);
     }
 
+    @ExceptionHandler(InvalidSignatureException.class)
+    public final ResponseEntity<Object> handleInvalidSignatureException(InvalidSignatureException ex, WebRequest request) {
+        List<String> details = new ArrayList<>();
+        details.add(ex.getLocalizedMessage());
+        ErrorResponse error = new ErrorResponse("UNAUTHORIZED", details);
+        return new ResponseEntity(error, HttpStatus.UNAUTHORIZED);
+    }
+
     @Override
     protected ResponseEntity<Object> handleMethodArgumentNotValid(MethodArgumentNotValidException ex, HttpHeaders headers, HttpStatus status, WebRequest request) {
         List<String> details = new ArrayList<>();

@@ -131,11 +131,16 @@ public class ClientApplication {
                         // obtain [epoch] - user asks server for its DBLocation report at the given epoch
                         else if (tokens[0].equals(OBTAIN_CMD) && tokens.length == 2) {
                             int ep = Integer.parseInt(tokens[1]);
-                            LocationReport locationReport = _user.obtainReport(ep);
-                            if (locationReport == null)
-                                System.out.println("The requested report doesn't exist\n");
-                            else
-                                System.out.println(locationReport);
+                            try {
+                                LocationReport locationReport = _user.obtainReport(ep);
+                                if (locationReport == null)
+                                    System.out.println("The requested report doesn't exist");
+                                else
+                                    System.out.println(locationReport);
+                            }
+                            catch (Exception e) {
+                                System.out.println(e.getMessage());
+                            }
                         }
 
                         // help

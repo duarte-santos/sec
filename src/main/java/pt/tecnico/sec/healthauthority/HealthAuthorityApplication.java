@@ -95,9 +95,16 @@ public class HealthAuthorityApplication {
                             SecretKey secretKey = AESKeyGenerator.makeAESKey();
                             SecureMessage secureRequest = new SecureMessage(bytes, secretKey, serverKey, keyPair.getPrivate());
 
-                            // send secure request
-                            HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
-                            SecureMessage secureMessage = restTemplate.postForObject(getServerURL() + "/obtain-location-report-ha", request, SecureMessage.class);
+                            SecureMessage secureMessage;
+                            try {
+                                // send secure request
+                                HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
+                                secureMessage = restTemplate.postForObject(getServerURL() + "/obtain-location-report-ha", request, SecureMessage.class);
+                            }
+                            catch (Exception e) {
+                                System.out.println(e.getMessage());
+                                continue;
+                            }
 
                             if (secureMessage == null) {
                                 System.out.println("Location Report not found");
@@ -134,10 +141,21 @@ public class HealthAuthorityApplication {
                             SecretKey secretKey = AESKeyGenerator.makeAESKey();
                             SecureMessage secureRequest = new SecureMessage(bytes, secretKey, serverKey, keyPair.getPrivate());
 
-                            // send secure request
-                            HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
-                            SecureMessage secureMessage = restTemplate.postForObject(getServerURL() + "/users", request, SecureMessage.class);
-                            if (secureMessage == null) continue; // FIXME should not happend?
+                            SecureMessage secureMessage;
+                            try {
+                                // send secure request
+                                HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
+                                secureMessage = restTemplate.postForObject(getServerURL() + "/users", request, SecureMessage.class);
+                            }
+                            catch (Exception e) {
+                                System.out.println(e.getMessage());
+                                continue;
+                            }
+
+                            if (secureMessage == null) {
+                                // FIXME : should not happen ?
+                                continue;
+                            }
 
                             // check secret key for freshness
                             if (!secureMessage.getSecretKey(keyPair.getPrivate()).equals( secretKey ))
