@@ -9,15 +9,19 @@ import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.http.HttpEntity;
 import org.springframework.web.client.RestTemplate;
+import pt.tecnico.sec.AESKeyGenerator;
 import pt.tecnico.sec.RSAKeyGenerator;
+import pt.tecnico.sec.client.Location;
 import pt.tecnico.sec.client.LocationReport;
 import pt.tecnico.sec.client.ObtainLocationRequest;
 import pt.tecnico.sec.client.SecureMessage;
 
+import javax.crypto.SecretKey;
 import java.io.IOException;
 import java.security.KeyPair;
 import java.security.PublicKey;
 import java.util.Collections;
+import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Scanner;
 
@@ -84,11 +88,14 @@ public class HealthAuthorityApplication {
                             int id = Integer.parseInt(tokens[1]);
                             int epoch = Integer.parseInt(tokens[2]);
 
+                            // create secure request
                             ObtainLocationRequest locationRequest = new ObtainLocationRequest(id, epoch);
                             ObjectMapper objectMapper = new ObjectMapper();
                             byte[] bytes = objectMapper.writeValueAsBytes(locationRequest);
-                            SecureMessage secureRequest = new SecureMessage(bytes, serverKey, keyPair.getPrivate());
+                            SecretKey secretKey = AESKeyGenerator.makeAESKey();
+                            SecureMessage secureRequest = new SecureMessage(bytes, secretKey, serverKey, keyPair.getPrivate());
 
+                            // send secure request
                             HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
                             SecureMessage secureMessage = restTemplate.postForObject(getServerURL() + "/obtain-location-report-ha", request, SecureMessage.class);
 
@@ -97,9 +104,18 @@ public class HealthAuthorityApplication {
                                 continue;
                             }
 
-                            // Decipher and check signature
+                            // check secret key for freshness
+                            if (!secureMessage.getSecretKey(keyPair.getPrivate()).equals( secretKey ))
+                                throw new IllegalArgumentException("Server response not fresh!"); //FIXME type of exception
+
+                            // decipher and check signature
                             byte[] messageBytes = secureMessage.decipherAndVerify(keyPair.getPrivate(), serverKey);
                             LocationReport locationReport = LocationReport.getFromBytes(messageBytes);
+
+                            // check content
+                            if (locationReport.get_userId() != id || locationReport.get_epoch() != epoch)
+                                throw new IllegalArgumentException("Bad server response!"); //FIXME type of exception
+
                             System.out.println(locationReport.get_location());
                         }
 
@@ -108,21 +124,39 @@ public class HealthAuthorityApplication {
                         else if (tokens[0].equals("obtainUsersAtLocation") && tokens.length == 4) {
                             int x = Integer.parseInt(tokens[1]);
                             int y = Integer.parseInt(tokens[2]);
-                            int ep = Integer.parseInt(tokens[3]);
+                            int epoch = Integer.parseInt(tokens[3]);
 
-                            ObtainUsersRequest usersRequest = new ObtainUsersRequest(x, y, ep);
-                            SecureObtainUsersRequest secureLocationRequest = new SecureObtainUsersRequest(usersRequest, keyPair.getPrivate());
-                            HttpEntity<SecureObtainUsersRequest> request = new HttpEntity<>(secureLocationRequest);
-                            SecureUsersList secureUserIds = restTemplate.postForObject(getServerURL() + "/users", request, SecureUsersList.class);
+                            // create secure request
+                            Location location = new Location(x, y);
+                            ObtainUsersRequest usersRequest = new ObtainUsersRequest(location, epoch);
+                            ObjectMapper objectMapper = new ObjectMapper();
+                            byte[] bytes = objectMapper.writeValueAsBytes(usersRequest);
+                            SecretKey secretKey = AESKeyGenerator.makeAESKey();
+                            SecureMessage secureRequest = new SecureMessage(bytes, secretKey, serverKey, keyPair.getPrivate());
 
-                            if (secureUserIds == null) {
+                            // send secure request
+                            HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
+                            SecureMessage secureMessage = restTemplate.postForObject(getServerURL() + "/users", request, SecureMessage.class);
+                            if (secureMessage == null) continue; // FIXME should not happend?
+
+                            // check secret key for freshness
+                            if (!secureMessage.getSecretKey(keyPair.getPrivate()).equals( secretKey ))
+                                throw new IllegalArgumentException("Server response not fresh!"); //FIXME type of exception
+
+                            // decipher and check signature
+                            byte[] messageBytes = secureMessage.decipherAndVerify(keyPair.getPrivate(), serverKey);
+                            UsersAtLocation usersAtLocation = UsersAtLocation.getFromBytes(messageBytes);
+                            List<Integer> userIds = usersAtLocation.get_userIds();
+
+                            // check content
+                            if (!usersAtLocation.get_location().equals(location) || usersAtLocation.get_epoch() != epoch)
+                                throw new IllegalArgumentException("Bad server response!"); //FIXME type of exception
+
+                            // print response
+                            if (userIds.size() == 0) {
                                 System.out.println("No users at that location in that epoch.");
                                 continue;
                             }
-
-                            // Decipher and check signature
-                            Integer[] userIds = secureUserIds.decipherAndVerify(keyPair.getPrivate(), serverKey);
-
                             System.out.print("UserIds: ");
                             for (Integer userId : userIds) {
                                 System.out.print(userId + " ");

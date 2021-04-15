@@ -6,6 +6,7 @@ import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.client.LocationReport;
 import pt.tecnico.sec.client.ObtainLocationRequest;
 import pt.tecnico.sec.client.SecureMessage;
+import pt.tecnico.sec.healthauthority.ObtainUsersRequest;
 
 import java.io.IOException;
 import java.security.GeneralSecurityException;
@@ -62,7 +63,7 @@ public class ServerApplication {
 
 
     /* ========================================================== */
-    /* ====[             Receive Location Report            ]==== */
+    /* ====[              Secure communication              ]==== */
     /* ========================================================== */
 
     public LocationReport decipherAndVerifyReport(SecureMessage secureMessage) throws Exception {
@@ -80,22 +81,22 @@ public class ServerApplication {
         return locationReport;
     }
 
-    public ObtainLocationRequest decipherAndVerifyRequest(SecureMessage secureMessage) throws Exception {
+    public ObtainLocationRequest decipherAndVerifyRequest(SecureMessage secureMessage, boolean fromHA) throws Exception {
         // decipher request
         byte[] messageBytes = secureMessage.decipher( _keyPair.getPrivate() );
         ObtainLocationRequest request = ObtainLocationRequest.getFromBytes(messageBytes);
 
         // check report signature
-        PublicKey verifyKey = getClientPublicKey(request.get_userId());
+        PublicKey verifyKey = fromHA ? getHAPublicKey() : getClientPublicKey(request.get_userId());
         secureMessage.verify(messageBytes, verifyKey);
 
         return request;
     }
 
-    public ObtainLocationRequest decipherAndVerifyHARequest(SecureMessage secureMessage) throws Exception {
+    public ObtainUsersRequest decipherAndVerifyHAUsersRequest(SecureMessage secureMessage) throws Exception {
         // decipher request
         byte[] messageBytes = secureMessage.decipher( _keyPair.getPrivate() );
-        ObtainLocationRequest request = ObtainLocationRequest.getFromBytes(messageBytes);
+        ObtainUsersRequest request = ObtainUsersRequest.getFromBytes(messageBytes);
 
         // check report signature
         PublicKey verifyKey = getHAPublicKey();

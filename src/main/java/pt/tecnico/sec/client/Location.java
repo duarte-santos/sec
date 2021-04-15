@@ -3,6 +3,8 @@ package pt.tecnico.sec.client;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import pt.tecnico.sec.server.DBLocation;
 
+import java.util.Objects;
+
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class Location {
     private int _x;
@@ -47,5 +49,18 @@ public class Location {
     @Override
     public String toString() {
         return "[" + _x + ", " + _y + "]";
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Location location = (Location) o;
+        return _x == location._x && _y == location._y;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(_x, _y);
     }
 }

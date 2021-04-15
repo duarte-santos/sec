@@ -5,14 +5,17 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import pt.tecnico.sec.client.Location;
 import pt.tecnico.sec.client.LocationReport;
 import pt.tecnico.sec.client.ObtainLocationRequest;
 import pt.tecnico.sec.client.SecureMessage;
-import pt.tecnico.sec.healthauthority.SecureObtainUsersRequest;
-import pt.tecnico.sec.healthauthority.SecureUsersList;
+import pt.tecnico.sec.healthauthority.ObtainUsersRequest;
+import pt.tecnico.sec.healthauthority.UsersAtLocation;
 import pt.tecnico.sec.server.exception.RecordAlreadyExistsException;
 
+import javax.crypto.SecretKey;
 import java.security.PublicKey;
+import java.util.ArrayList;
 import java.util.List;
 
 
@@ -49,40 +52,34 @@ public class ServerController {
 
     // used by clients
     @PostMapping("/obtain-location-report")
-    public SecureMessage getLocation(@RequestBody SecureMessage secureMessage){
-        try {
-            ObtainLocationRequest request = _serverApp.decipherAndVerifyRequest(secureMessage);
+    public SecureMessage getLocationClient(@RequestBody SecureMessage secureRequest){
+        return getLocation(secureRequest, false);
+    }
 
+    // used by health authority
+    @PostMapping("/obtain-location-report-ha")
+    public SecureMessage getLocationHA(@RequestBody SecureMessage secureRequest){
+        return getLocation(secureRequest, true);
+    }
+
+    public SecureMessage getLocation(SecureMessage secureRequest, boolean fromHA) {
+        try {
+            // decipher and verify request
+            ObtainLocationRequest request = _serverApp.decipherAndVerifyRequest(secureRequest, fromHA);
+            SecretKey secretKey = secureRequest.getSecretKey( _serverApp.getPrivateKey() );
+
+            // find requested report
             DBLocationReport dbLocationReport = _reportRepository.findReportByEpochAndUser(request.get_userId(), request.get_epoch());
             if (dbLocationReport == null)
                 return null; // FIXME exception
             LocationReport report = new LocationReport(dbLocationReport);
 
-            // encrypt using client public key, sign using server private key
-            PublicKey clientKey = _serverApp.getClientPublicKey(report.get_userId());
+            // encrypt using same secret key and client public key, sign using server private key
             ObjectMapper objectMapper = new ObjectMapper();
             byte[] bytes = objectMapper.writeValueAsBytes(report);
-            return new SecureMessage(bytes, clientKey, _serverApp.getPrivateKey());
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-        }
-        return null;
-    }
+            PublicKey cipherKey = fromHA ? _serverApp.getHAPublicKey() : _serverApp.getClientPublicKey(report.get_userId());
+            return new SecureMessage(bytes, secretKey, cipherKey, _serverApp.getPrivateKey());
 
-    // used by health authority
-    @PostMapping("/obtain-location-report-ha")
-    public SecureMessage getLocationHA(@RequestBody SecureMessage secureMessage){
-        try {
-            ObtainLocationRequest request = _serverApp.decipherAndVerifyHARequest(secureMessage);
-
-            DBLocationReport dbLocationReport = _reportRepository.findReportByEpochAndUser(request.get_userId(), request.get_epoch());
-            if (dbLocationReport == null) return null; // FIXME exception
-            LocationReport report = new LocationReport(dbLocationReport);
-
-            // encrypt using HA public key, sign using server private key
-            ObjectMapper objectMapper = new ObjectMapper();
-            byte[] bytes = objectMapper.writeValueAsBytes(report);
-            return new SecureMessage(bytes, _serverApp.getHAPublicKey(), _serverApp.getPrivateKey());
         } catch (Exception e) {
             System.out.println(e.getMessage());
         }
@@ -90,22 +87,24 @@ public class ServerController {
     }
 
     @PostMapping("/users")
-    public SecureUsersList getUsers(@RequestBody SecureObtainUsersRequest secureRequest){
+    public SecureMessage getUsers(@RequestBody SecureMessage secureRequest){
         try {
-            int x = secureRequest.get_request().get_x();
-            int y = secureRequest.get_request().get_y();
-            int epoch = secureRequest.get_request().get_epoch();
-            //secureRequest.verify( _serverApp.getHAPublicKey() );
+            ObtainUsersRequest request = _serverApp.decipherAndVerifyHAUsersRequest(secureRequest);
+            SecretKey secretKey = secureRequest.getSecretKey( _serverApp.getPrivateKey() );
 
-            List<DBLocationReport> dbLocationReports = _reportRepository.findUsersByLocationAndEpoch(epoch, x, y);
-            int userCount = dbLocationReports.size();
-            if (userCount == 0) return null;
-            Integer[] users = new Integer[userCount];
-            for (int i = 0; i < userCount; i++) {
-                users[i] = dbLocationReports.get(i).get_userId();
-            }
+            Location location = request.get_location();
+            int epoch = request.get_epoch();
+            List<DBLocationReport> dbLocationReports = _reportRepository.findUsersByLocationAndEpoch(epoch, location.get_x(), location.get_y());
 
-            return new SecureUsersList(users, _serverApp.getHAPublicKey(), _serverApp.getPrivateKey());
+            List<Integer> users = new ArrayList<>();
+            for (DBLocationReport dbLocationReport : dbLocationReports)
+                users.add(dbLocationReport.get_userId());
+            UsersAtLocation userIds = new UsersAtLocation(location, epoch, users);
+
+            // encrypt using HA public key, sign using server private key
+            ObjectMapper objectMapper = new ObjectMapper();
+            byte[] bytes = objectMapper.writeValueAsBytes(userIds);
+            return new SecureMessage(bytes, secretKey, _serverApp.getHAPublicKey(), _serverApp.getPrivateKey());
 
         } catch (Exception e) {
             System.out.println(e.getMessage());

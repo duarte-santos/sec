@@ -38,6 +38,17 @@ public class SecureMessage {
         _signature = RSAKeyGenerator.sign(messageBytes, signKey);
     }
 
+    public SecureMessage(byte[] messageBytes, SecretKey secretKey, PublicKey cipherKey, PrivateKey signKey) throws Exception {
+        // encrypt message with secret key
+        _cipheredMessage = AESKeyGenerator.encrypt(messageBytes, secretKey);
+
+        // encrypt secret key with given public cipher key
+        _cipheredKey = RSAKeyGenerator.encryptSecretKey(secretKey, cipherKey);
+
+        // sign message with given private sign key
+        _signature = RSAKeyGenerator.sign(messageBytes, signKey);
+    }
+
     public byte[] decipherAndVerify(PrivateKey decipherKey, PublicKey verifyKey) throws Exception {
         byte[] messageBytes = decipher(decipherKey);
         verify(messageBytes, verifyKey);
@@ -46,10 +57,14 @@ public class SecureMessage {
 
     public byte[] decipher(PrivateKey decipherKey) throws Exception {
         // Decipher secret key
-        SecretKey secretKey = RSAKeyGenerator.decryptSecretKey(_cipheredKey, decipherKey);
+        SecretKey secretKey = getSecretKey(decipherKey);
 
         // Decipher message
         return AESKeyGenerator.decrypt(_cipheredMessage, secretKey);
+    }
+
+    public SecretKey getSecretKey(PrivateKey decipherKey) throws Exception {
+        return RSAKeyGenerator.decryptSecretKey(_cipheredKey, decipherKey);
     }
 
     public void verify(byte[] messageBytes, PublicKey verifyKey) throws Exception {

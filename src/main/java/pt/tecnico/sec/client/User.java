@@ -3,8 +3,10 @@ package pt.tecnico.sec.client;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpEntity;
 import org.springframework.web.client.RestTemplate;
+import pt.tecnico.sec.AESKeyGenerator;
 import pt.tecnico.sec.RSAKeyGenerator;
 
+import javax.crypto.SecretKey;
 import java.security.KeyPair;
 import java.security.PublicKey;
 import java.util.ArrayList;
@@ -205,19 +207,30 @@ public class User {
         if (!(0 <= epoch && epoch <= _epoch))
             throw new IllegalArgumentException("Epoch must be positive and not exceed the current epoch.");
 
+        // Create request
         ObtainLocationRequest locationRequest = new ObtainLocationRequest(_id, epoch);
         ObjectMapper objectMapper = new ObjectMapper();
         byte[] bytes = objectMapper.writeValueAsBytes(locationRequest);
-        SecureMessage secureRequest = new SecureMessage(bytes, _serverKey, _keyPair.getPrivate());
+        SecretKey secretKey = AESKeyGenerator.makeAESKey();
+        SecureMessage secureRequest = new SecureMessage(bytes, secretKey, _serverKey, _keyPair.getPrivate());
 
+        // Perform request
         SecureMessage secureResponse = obtainLocationReport(secureRequest);
         if (secureResponse == null) return null;
 
+        // Check secret key for freshness
+        if (!secureResponse.getSecretKey(_keyPair.getPrivate()).equals( secretKey ))
+            throw new IllegalArgumentException("Server response not fresh!"); //FIXME type of exception
+
         // Decipher and check signature
         byte[] messageBytes = secureResponse.decipherAndVerify(_keyPair.getPrivate(), _serverKey);
-        return LocationReport.getFromBytes(messageBytes);
+        LocationReport locationReport = LocationReport.getFromBytes(messageBytes);
+
+        // Check content
+        if (locationReport.get_userId() != _id || locationReport.get_epoch() != epoch)
+            throw new IllegalArgumentException("Bad server response!"); //FIXME type of exception
+
+        return locationReport;
     }
-
-
 
 }

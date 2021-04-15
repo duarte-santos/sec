@@ -29,14 +29,6 @@ public class ObtainUsersRequest {
         this._location = _location;
     }
 
-    public int get_x() {
-        return _location.get_x();
-    }
-
-    public int get_y() {
-        return _location.get_y();
-    }
-
     public int get_epoch() {
         return _epoch;
     }
