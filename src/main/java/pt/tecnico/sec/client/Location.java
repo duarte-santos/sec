@@ -5,6 +5,7 @@ import pt.tecnico.sec.server.DBLocation;
 
 import java.util.Objects;
 
+@SuppressWarnings("unused")
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class Location {
     private int _x;

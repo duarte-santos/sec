@@ -14,10 +14,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+@SuppressWarnings("unused")
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class LocationReport {
 
-    // constants // FIXME : constantes todas num ficheiro para todos acederem?
+    // constants - later put all constants in a file for everyone to read
     private static final String SUCCESS = "success";
     private static final double DETECTION_RANGE = 2;
 
@@ -92,7 +93,7 @@ public class LocationReport {
 
         Set<Integer> witnessIds = new HashSet<>();
         ObjectMapper objectMapper = new ObjectMapper();
-        List<LocationProof> allProofs = new ArrayList<LocationProof>(_proofs);
+        List<LocationProof> allProofs = new ArrayList<>(_proofs);
 
         for (LocationProof signedProof : allProofs) {
 

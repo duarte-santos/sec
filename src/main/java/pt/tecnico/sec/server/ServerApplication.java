@@ -68,7 +68,7 @@ public class ServerApplication {
     /* ====[              Secure communication              ]==== */
     /* ========================================================== */
 
-    public LocationReport decipherAndVerifyReport(SecureMessage secureMessage) throws ReportNotAcceptableException, Exception {
+    public LocationReport decipherAndVerifyReport(SecureMessage secureMessage) throws Exception {
         // decipher report
         byte[] messageBytes = secureMessage.decipher( _keyPair.getPrivate() );
         LocationReport locationReport = LocationReport.getFromBytes(messageBytes);

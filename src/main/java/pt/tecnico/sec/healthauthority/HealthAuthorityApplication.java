@@ -1,7 +1,6 @@
 package pt.tecnico.sec.healthauthority;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.json.simple.parser.ParseException;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -17,7 +16,6 @@ import pt.tecnico.sec.client.ObtainLocationRequest;
 import pt.tecnico.sec.client.SecureMessage;
 
 import javax.crypto.SecretKey;
-import java.io.IOException;
 import java.security.KeyPair;
 import java.security.PublicKey;
 import java.util.Collections;
@@ -46,7 +44,7 @@ public class HealthAuthorityApplication {
             ====================================================================
             """;
 
-    public static void main(String[] args) throws IOException, ParseException {
+    public static void main(String[] args) {
         SpringApplication app = new SpringApplication(HealthAuthorityApplication.class);
         app.setDefaultProperties(Collections.singletonMap("server.port", HA_PORT));
         app.run(args);
@@ -113,7 +111,7 @@ public class HealthAuthorityApplication {
 
                             // check secret key for freshness
                             if (!secureMessage.getSecretKey(keyPair.getPrivate()).equals( secretKey ))
-                                throw new IllegalArgumentException("Server response not fresh!"); //FIXME type of exception
+                                throw new IllegalArgumentException("Server response not fresh!");
 
                             // decipher and check signature
                             byte[] messageBytes = secureMessage.decipherAndVerify(keyPair.getPrivate(), serverKey);
@@ -121,7 +119,7 @@ public class HealthAuthorityApplication {
 
                             // check content
                             if (locationReport.get_userId() != id || locationReport.get_epoch() != epoch)
-                                throw new IllegalArgumentException("Bad server response!"); //FIXME type of exception
+                                throw new IllegalArgumentException("Bad server response!");
 
                             System.out.println(locationReport.get_location());
                         }
@@ -146,20 +144,17 @@ public class HealthAuthorityApplication {
                                 // send secure request
                                 HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
                                 secureMessage = restTemplate.postForObject(getServerURL() + "/users", request, SecureMessage.class);
+                                if (secureMessage == null)
+                                    throw new IllegalArgumentException("Error in response");
                             }
                             catch (Exception e) {
                                 System.out.println(e.getMessage());
                                 continue;
                             }
 
-                            if (secureMessage == null) {
-                                // FIXME : should not happen ?
-                                continue;
-                            }
-
                             // check secret key for freshness
                             if (!secureMessage.getSecretKey(keyPair.getPrivate()).equals( secretKey ))
-                                throw new IllegalArgumentException("Server response not fresh!"); //FIXME type of exception
+                                throw new IllegalArgumentException("Server response not fresh!");
 
                             // decipher and check signature
                             byte[] messageBytes = secureMessage.decipherAndVerify(keyPair.getPrivate(), serverKey);
@@ -168,7 +163,7 @@ public class HealthAuthorityApplication {
 
                             // check content
                             if (!usersAtLocation.get_location().equals(location) || usersAtLocation.get_epoch() != epoch)
-                                throw new IllegalArgumentException("Bad server response!"); //FIXME type of exception
+                                throw new IllegalArgumentException("Bad server response!");
 
                             // print response
                             if (userIds.size() == 0) {

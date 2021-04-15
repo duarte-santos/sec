@@ -5,6 +5,7 @@ import pt.tecnico.sec.client.Location;
 
 import java.io.IOException;
 
+@SuppressWarnings("unused")
 public class ObtainUsersRequest {
     private Location _location;
     private int _epoch;

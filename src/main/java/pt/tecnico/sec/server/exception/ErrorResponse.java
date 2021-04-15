@@ -3,6 +3,7 @@ package pt.tecnico.sec.server.exception;
 import javax.xml.bind.annotation.XmlRootElement;
 import java.util.List;
 
+@SuppressWarnings("unused")
 @XmlRootElement(name = "error")
 public class ErrorResponse {
 

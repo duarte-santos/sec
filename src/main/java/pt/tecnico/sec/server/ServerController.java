@@ -20,7 +20,7 @@ import java.security.PublicKey;
 import java.util.ArrayList;
 import java.util.List;
 
-
+@SuppressWarnings("AccessStaticViaInstance")
 @RestController
 public class ServerController {
 
@@ -36,7 +36,7 @@ public class ServerController {
 
 
     @PostMapping("/location-report")
-    public void reportLocation(@RequestBody SecureMessage secureMessage) throws InvalidSignatureException, RecordAlreadyExistsException, Exception {
+    public void reportLocation(@RequestBody SecureMessage secureMessage) {
         LocationReport locationReport;
         try {
             // Decipher and check signatures
@@ -63,17 +63,17 @@ public class ServerController {
 
     // used by clients
     @PostMapping("/obtain-location-report")
-    public SecureMessage getLocationClient(@RequestBody SecureMessage secureRequest) throws InvalidSignatureException, Exception {
+    public SecureMessage getLocationClient(@RequestBody SecureMessage secureRequest) throws Exception {
         return getLocation(secureRequest, false);
     }
 
     // used by health authority
     @PostMapping("/obtain-location-report-ha")
-    public SecureMessage getLocationHA(@RequestBody SecureMessage secureRequest) throws InvalidSignatureException, Exception {
+    public SecureMessage getLocationHA(@RequestBody SecureMessage secureRequest) throws Exception {
         return getLocation(secureRequest, true);
     }
 
-    public SecureMessage getLocation(SecureMessage secureRequest, boolean fromHA) throws InvalidSignatureException, Exception {
+    public SecureMessage getLocation(SecureMessage secureRequest, boolean fromHA) throws Exception {
         ObtainLocationRequest request;
         SecretKey secretKey;
         try {
@@ -88,7 +88,7 @@ public class ServerController {
         // find requested report
         DBLocationReport dbLocationReport = _reportRepository.findReportByEpochAndUser(request.get_userId(), request.get_epoch());
         if (dbLocationReport == null)
-            return null; // FIXME exception
+            return null;
         LocationReport report = new LocationReport(dbLocationReport);
 
         // encrypt using same secret key and client public key, sign using server private key
@@ -99,7 +99,7 @@ public class ServerController {
     }
 
     @PostMapping("/users")
-    public SecureMessage getUsers(@RequestBody SecureMessage secureRequest) throws InvalidSignatureException, Exception {
+    public SecureMessage getUsers(@RequestBody SecureMessage secureRequest) throws Exception {
         ObtainUsersRequest request;
         SecretKey secretKey;
         try {

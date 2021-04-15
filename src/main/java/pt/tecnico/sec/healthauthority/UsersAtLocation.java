@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+@SuppressWarnings("unused")
 public class UsersAtLocation {
     private Location _location;
     private int _epoch;

@@ -18,6 +18,7 @@ public class RSAKeyGenerator {
 
     public static final String KEYS_PATH = "src/main/resources/keys/";
 
+    @SuppressWarnings("ResultOfMethodCallIgnored")
     public static void main(String[] args) throws Exception {
 
         try {
@@ -88,6 +89,7 @@ public class RSAKeyGenerator {
         return new KeyPair(pub, priv);
     }
 
+    @SuppressWarnings("ResultOfMethodCallIgnored")
     public static PublicKey readPublicKey(String publicKeyPath) throws GeneralSecurityException, IOException {
         System.out.println("Reading public key from file " + publicKeyPath + " ...");
         FileInputStream pubFis = new FileInputStream(publicKeyPath);
@@ -100,6 +102,7 @@ public class RSAKeyGenerator {
         return keyFacPub.generatePublic(pubSpec);
     }
 
+    @SuppressWarnings("ResultOfMethodCallIgnored")
     public static PrivateKey readPrivateKey(String privateKeyPath) throws GeneralSecurityException, IOException {
         System.out.println("Reading private key from file " + privateKeyPath + " ...");
         FileInputStream privFis = new FileInputStream(privateKeyPath);
@@ -154,6 +157,7 @@ public class RSAKeyGenerator {
         return Base64.getEncoder().encodeToString(signatureBytes);
     }
 
+    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
     public static boolean verify(byte[] data, String signature, PublicKey key) throws Exception {
         Signature publicSignature = Signature.getInstance("SHA256withRSA");
         publicSignature.initVerify(key);
