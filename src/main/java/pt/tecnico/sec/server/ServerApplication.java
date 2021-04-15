@@ -6,8 +6,8 @@ import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.client.LocationReport;
 import pt.tecnico.sec.client.ObtainLocationRequest;
 import pt.tecnico.sec.client.SecureMessage;
-import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 import pt.tecnico.sec.healthauthority.ObtainUsersRequest;
+import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
 import java.io.IOException;
 import java.security.GeneralSecurityException;

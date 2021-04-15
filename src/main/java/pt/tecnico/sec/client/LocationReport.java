@@ -108,6 +108,7 @@ public class LocationReport {
                     || !proofData.get_type().equals(SUCCESS)
                     || proofData.get_proverId() != _userId
                     || witnessIds.contains(proofData.get_witnessId())
+                    || proofData.get_witnessId() == _userId
             ) {
                 System.out.println("Invalid LocationProof: " + signedProof);
                 _proofs.remove(signedProof); // remove invalid proof from report
