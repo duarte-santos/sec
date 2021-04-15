@@ -4,6 +4,7 @@ import javax.crypto.*;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.security.*;
+import java.util.Base64;
 
 import static javax.xml.bind.DatatypeConverter.printHexBinary;
 
@@ -33,20 +34,22 @@ public class AESKeyGenerator {
     /* ====[                Encrypt/Decrypt                 ]==== */
     /* ========================================================== */
 
-    public static byte[] encrypt(byte[] data, SecretKey key) throws BadPaddingException, IllegalBlockSizeException, InvalidKeyException, NoSuchPaddingException, NoSuchAlgorithmException, InvalidAlgorithmParameterException {
+    public static String encrypt(byte[] data, SecretKey key) throws BadPaddingException, IllegalBlockSizeException, InvalidKeyException, NoSuchPaddingException, NoSuchAlgorithmException, InvalidAlgorithmParameterException {
         byte[] iv = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         IvParameterSpec ivspec = new IvParameterSpec(iv);
         Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
         cipher.init(Cipher.ENCRYPT_MODE, key, ivspec);
-        return cipher.doFinal(data);
+        byte[] cipherText = cipher.doFinal(data);
+        return Base64.getEncoder().encodeToString(cipherText);
     }
 
-    public static byte[] decrypt(byte[] data, SecretKey key) throws NoSuchPaddingException, NoSuchAlgorithmException, InvalidKeyException, BadPaddingException, IllegalBlockSizeException, InvalidAlgorithmParameterException {
+    public static byte[] decrypt(String cipherText, SecretKey key) throws NoSuchPaddingException, NoSuchAlgorithmException, InvalidKeyException, BadPaddingException, IllegalBlockSizeException, InvalidAlgorithmParameterException {
         byte[] iv = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         IvParameterSpec ivspec = new IvParameterSpec(iv);
+        byte[] bytes = Base64.getDecoder().decode(cipherText);
         Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5PADDING");
         cipher.init(Cipher.DECRYPT_MODE, key, ivspec);
-        return cipher.doFinal(data);
+        return cipher.doFinal(bytes);
     }
 
 

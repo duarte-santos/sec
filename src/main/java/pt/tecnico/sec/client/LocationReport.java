@@ -99,7 +99,7 @@ public class LocationReport {
             ProofData proofData = signedProof.get_proofData();
 
             byte[] data = objectMapper.writeValueAsBytes(proofData);
-            byte[] signature = signedProof.get_signature();
+            String signature = signedProof.get_signature();
             PublicKey clientKey = getClientPublicKey(signedProof.get_witnessId());
 
             if ( signature == null || !RSAKeyGenerator.verify(data, signature, clientKey)
