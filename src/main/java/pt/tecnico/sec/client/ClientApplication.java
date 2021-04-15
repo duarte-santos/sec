@@ -93,21 +93,26 @@ public class ClientApplication {
                         if (line.equals(EXIT_CMD))
                             break;
 
-                            // step - increase epoch
+                        // step - increase epoch
                         else if (line.equals(STEP_CMD)) {
-                            // check if epoch is covered by environment
-                            if (_epoch > _environment.getMaxEpoch()) {
-                                System.out.println("No more steps available in environment.");
-                                continue;
+                            try {
+                                // check if epoch is covered by environment
+                                if (_epoch > _environment.getMaxEpoch()) {
+                                    System.out.println("No more steps available in environment.");
+                                    continue;
+                                }
+
+                                // perform the step on _user
+                                step();
+
+                                // signal other users to step
+                                for (int userId : _environment.getUserList()) {
+                                    if (userId == _user.getId()) continue; // do not send request to myself
+                                    _user.stepRequest(userId);
+                                }
                             }
-
-                            // perform the step on _user
-                            step();
-
-                            // signal other users to step
-                            for (int userId : _environment.getUserList()) {
-                                if (userId == _user.getId()) continue; // do not send request to myself
-                                _user.stepRequest(userId);
+                            catch (Exception e) {
+                                System.out.println(e.getLocalizedMessage());
                             }
                         }
 

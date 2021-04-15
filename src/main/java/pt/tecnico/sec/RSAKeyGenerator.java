@@ -25,7 +25,14 @@ public class RSAKeyGenerator {
             if (userCount <= 0)
                 throw new NumberFormatException();
 
-            FileUtils.cleanDirectory(new File(KEYS_PATH)); // clean key directory before generating new keys
+            // create key directory if it doesnt exist already
+            File directory = new File(KEYS_PATH);
+            if (!directory.exists()) {
+                directory.mkdir();
+            }
+
+            // clean key directory before generating new keys
+            FileUtils.cleanDirectory(new File(KEYS_PATH));
             for (int id = 0; id < userCount; id++) {
                 writeKeyPair(KEYS_PATH + id);
             }
