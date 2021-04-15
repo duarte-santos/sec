@@ -4,7 +4,8 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.client.LocationReport;
-import pt.tecnico.sec.client.SecureLocationReport;
+import pt.tecnico.sec.client.ObtainLocationRequest;
+import pt.tecnico.sec.client.SecureMessage;
 
 import java.io.IOException;
 import java.security.GeneralSecurityException;
@@ -64,19 +65,44 @@ public class ServerApplication {
     /* ====[             Receive Location Report            ]==== */
     /* ========================================================== */
 
-    public LocationReport decipherAndVerifyReport(SecureLocationReport secureLocationReport) throws Exception {
+    public LocationReport decipherAndVerifyReport(SecureMessage secureMessage) throws Exception {
         // decipher report
-        PrivateKey decipherKey = _keyPair.getPrivate();
-        LocationReport locationReport = secureLocationReport.decipher(decipherKey);
+        byte[] messageBytes = secureMessage.decipher( _keyPair.getPrivate() );
+        LocationReport locationReport = LocationReport.getFromBytes(messageBytes);
 
         // check report signature
         PublicKey verifyKey = getClientPublicKey(locationReport.get_userId());
-        locationReport.verify(secureLocationReport.get_signature(), verifyKey);
+        secureMessage.verify(messageBytes, verifyKey);
 
         // check proofs signatures
         locationReport.verifyProofs();
 
         return locationReport;
     }
+
+    public ObtainLocationRequest decipherAndVerifyRequest(SecureMessage secureMessage) throws Exception {
+        // decipher request
+        byte[] messageBytes = secureMessage.decipher( _keyPair.getPrivate() );
+        ObtainLocationRequest request = ObtainLocationRequest.getFromBytes(messageBytes);
+
+        // check report signature
+        PublicKey verifyKey = getClientPublicKey(request.get_userId());
+        secureMessage.verify(messageBytes, verifyKey);
+
+        return request;
+    }
+
+    public ObtainLocationRequest decipherAndVerifyHARequest(SecureMessage secureMessage) throws Exception {
+        // decipher request
+        byte[] messageBytes = secureMessage.decipher( _keyPair.getPrivate() );
+        ObtainLocationRequest request = ObtainLocationRequest.getFromBytes(messageBytes);
+
+        // check report signature
+        PublicKey verifyKey = getHAPublicKey();
+        secureMessage.verify(messageBytes, verifyKey);
+
+        return request;
+    }
+
 
 }

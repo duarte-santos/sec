@@ -75,14 +75,10 @@ public class LocationReport {
         this._epoch = _epoch;
     }
 
-    public void verify(byte[] signature, PublicKey verifyKey) throws Exception {
+    // convert from bytes
+    public static LocationReport getFromBytes(byte[] reportBytes) throws IOException {
         ObjectMapper objectMapper = new ObjectMapper();
-        byte[] reportBytes = objectMapper.writeValueAsBytes(this);
-
-        // Verify signature
-        if (signature == null || !RSAKeyGenerator.verify(reportBytes, signature, verifyKey)) {
-            throw new IllegalArgumentException("Report signature failed!"); //FIXME type of exception
-        }
+        return objectMapper.readValue(reportBytes, LocationReport.class);
     }
 
     public static PublicKey getClientPublicKey(int clientId) throws GeneralSecurityException, IOException {

@@ -1,10 +1,9 @@
 package pt.tecnico.sec.healthauthority;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.client.Location;
 
-import java.security.PublicKey;
+import java.io.IOException;
 
 public class ObtainUsersRequest {
     private Location _location;
@@ -46,13 +45,11 @@ public class ObtainUsersRequest {
         this._epoch = _epoch;
     }
 
-    public void verify(byte[] signature, PublicKey verifyKey) throws Exception {
+
+    // convert from bytes
+    public static ObtainUsersRequest getFromBytes(byte[] requestBytes) throws IOException {
         ObjectMapper objectMapper = new ObjectMapper();
-        byte[] requestBytes = objectMapper.writeValueAsBytes(this);
-        // Verify signature
-        if (signature == null || !RSAKeyGenerator.verify(requestBytes, signature, verifyKey)) {
-            throw new IllegalArgumentException("Request signature failed!"); //FIXME type of exception
-        }
+        return objectMapper.readValue(requestBytes, ObtainUsersRequest.class);
     }
 
     @Override

@@ -1,5 +1,6 @@
 package pt.tecnico.sec.healthauthority;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.json.simple.parser.ParseException;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
@@ -11,8 +12,7 @@ import org.springframework.web.client.RestTemplate;
 import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.client.LocationReport;
 import pt.tecnico.sec.client.ObtainLocationRequest;
-import pt.tecnico.sec.client.SecureLocationReport;
-import pt.tecnico.sec.client.SecureObtainLocationRequest;
+import pt.tecnico.sec.client.SecureMessage;
 
 import java.io.IOException;
 import java.security.KeyPair;
@@ -81,21 +81,25 @@ public class HealthAuthorityApplication {
                         // obtainLocationReport, [userId], [ep]
                         // Specification: returns the position of "userId" at the epoch "ep"
                         else if (tokens[0].equals("obtainLocationReport") && tokens.length == 3) {
-                            int userId = Integer.parseInt(tokens[1]);
-                            int ep = Integer.parseInt(tokens[2]);
+                            int id = Integer.parseInt(tokens[1]);
+                            int epoch = Integer.parseInt(tokens[2]);
 
-                            ObtainLocationRequest locationRequest = new ObtainLocationRequest(userId, ep);
-                            SecureObtainLocationRequest secureLocationRequest = new SecureObtainLocationRequest(locationRequest, keyPair.getPrivate());
-                            HttpEntity<SecureObtainLocationRequest> request = new HttpEntity<>(secureLocationRequest);
-                            SecureLocationReport secureLocationReport = restTemplate.postForObject(getServerURL() + "/obtain-location-report-ha", request, SecureLocationReport.class);
+                            ObtainLocationRequest locationRequest = new ObtainLocationRequest(id, epoch);
+                            ObjectMapper objectMapper = new ObjectMapper();
+                            byte[] bytes = objectMapper.writeValueAsBytes(locationRequest);
+                            SecureMessage secureRequest = new SecureMessage(bytes, serverKey, keyPair.getPrivate());
 
-                            if (secureLocationReport == null) {
+                            HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
+                            SecureMessage secureMessage = restTemplate.postForObject(getServerURL() + "/obtain-location-report-ha", request, SecureMessage.class);
+
+                            if (secureMessage == null) {
                                 System.out.println("Location Report not found");
                                 continue;
                             }
 
                             // Decipher and check signature
-                            LocationReport locationReport = secureLocationReport.decipherAndVerify(keyPair.getPrivate(), serverKey);
+                            byte[] messageBytes = secureMessage.decipherAndVerify(keyPair.getPrivate(), serverKey);
+                            LocationReport locationReport = LocationReport.getFromBytes(messageBytes);
                             System.out.println(locationReport.get_location());
                         }
 

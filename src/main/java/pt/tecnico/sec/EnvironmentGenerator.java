@@ -48,8 +48,8 @@ public class EnvironmentGenerator {
             for (int userId = 0; userId < userCount; userId++) {
                 // generate random location inside the grid limits
                 Random random = new Random();
-                int x = random.nextInt(nX); // FIXME : nX + 1 ?
-                int y = random.nextInt(nY); // FIXME : nY + 1 ?
+                int x = random.nextInt(nX);
+                int y = random.nextInt(nY);
                 // add location to user
                 JSONObject userJSON = new JSONObject();
                 userJSON.put("x", x);

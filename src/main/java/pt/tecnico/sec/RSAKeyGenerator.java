@@ -138,7 +138,7 @@ public class RSAKeyGenerator {
     /* ====[                  Sign/Verify                   ]==== */
     /* ========================================================== */
 
-    public static byte[] sign(byte[] data, PrivateKey key) throws Exception { //FIXME send byte array or string (base64)?
+    public static byte[] sign(byte[] data, PrivateKey key) throws Exception {
         Signature privateSignature = Signature.getInstance("SHA256withRSA");
         privateSignature.initSign(key);
         privateSignature.update(data);

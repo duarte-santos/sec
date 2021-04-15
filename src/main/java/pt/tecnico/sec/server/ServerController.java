@@ -1,10 +1,13 @@
 package pt.tecnico.sec.server;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
 import pt.tecnico.sec.client.LocationReport;
-import pt.tecnico.sec.client.SecureLocationReport;
-import pt.tecnico.sec.client.SecureObtainLocationRequest;
+import pt.tecnico.sec.client.ObtainLocationRequest;
+import pt.tecnico.sec.client.SecureMessage;
 import pt.tecnico.sec.healthauthority.SecureObtainUsersRequest;
 import pt.tecnico.sec.healthauthority.SecureUsersList;
 import pt.tecnico.sec.server.exception.RecordAlreadyExistsException;
@@ -26,15 +29,11 @@ public class ServerController {
 
     private final ReportRepository _reportRepository;
 
-    @GetMapping("/hello")
-    public String sayHello(@RequestParam(value = "myName", defaultValue = "World") String name) {
-        return String.format("Hello %s!", name);
-    }
 
     @PostMapping("/location-report")
-    public void reportLocation(@RequestBody SecureLocationReport secureLocationReport) throws RecordAlreadyExistsException, Exception {
+    public void reportLocation(@RequestBody SecureMessage secureMessage) throws RecordAlreadyExistsException, Exception {
         // Decipher and check signatures
-        LocationReport locationReport = _serverApp.decipherAndVerifyReport(secureLocationReport);
+        LocationReport locationReport = _serverApp.decipherAndVerifyReport(secureMessage);
 
         // Check if already exists a report with the same userId and epoch
         int userId = locationReport.get_userId();
@@ -50,20 +49,20 @@ public class ServerController {
 
     // used by clients
     @PostMapping("/obtain-location-report")
-    public SecureLocationReport getLocation(@RequestBody SecureObtainLocationRequest secureRequest){
+    public SecureMessage getLocation(@RequestBody SecureMessage secureMessage){
         try {
-            int userId = secureRequest.get_request().get_userId();
-            int epoch = secureRequest.get_request().get_epoch();
-            secureRequest.verify( _serverApp.getClientPublicKey(userId) );
+            ObtainLocationRequest request = _serverApp.decipherAndVerifyRequest(secureMessage);
 
-            DBLocationReport dbLocationReport = _reportRepository.findReportByEpochAndUser(userId, epoch);
+            DBLocationReport dbLocationReport = _reportRepository.findReportByEpochAndUser(request.get_userId(), request.get_epoch());
             if (dbLocationReport == null)
                 return null; // FIXME exception
             LocationReport report = new LocationReport(dbLocationReport);
 
             // encrypt using client public key, sign using server private key
             PublicKey clientKey = _serverApp.getClientPublicKey(report.get_userId());
-            return new SecureLocationReport(report, clientKey, _serverApp.getPrivateKey());
+            ObjectMapper objectMapper = new ObjectMapper();
+            byte[] bytes = objectMapper.writeValueAsBytes(report);
+            return new SecureMessage(bytes, clientKey, _serverApp.getPrivateKey());
         } catch (Exception e) {
             System.out.println(e.getMessage());
         }
@@ -72,18 +71,18 @@ public class ServerController {
 
     // used by health authority
     @PostMapping("/obtain-location-report-ha")
-    public SecureLocationReport getLocationHA(@RequestBody SecureObtainLocationRequest secureRequest){
+    public SecureMessage getLocationHA(@RequestBody SecureMessage secureMessage){
         try {
-            int userId = secureRequest.get_request().get_userId();
-            int epoch = secureRequest.get_request().get_epoch();
-            secureRequest.verify( _serverApp.getHAPublicKey() );
+            ObtainLocationRequest request = _serverApp.decipherAndVerifyHARequest(secureMessage);
 
-            DBLocationReport dbLocationReport = _reportRepository.findReportByEpochAndUser(userId, epoch);
+            DBLocationReport dbLocationReport = _reportRepository.findReportByEpochAndUser(request.get_userId(), request.get_epoch());
             if (dbLocationReport == null) return null; // FIXME exception
             LocationReport report = new LocationReport(dbLocationReport);
 
             // encrypt using HA public key, sign using server private key
-            return new SecureLocationReport(report, _serverApp.getHAPublicKey(), _serverApp.getPrivateKey());
+            ObjectMapper objectMapper = new ObjectMapper();
+            byte[] bytes = objectMapper.writeValueAsBytes(report);
+            return new SecureMessage(bytes, _serverApp.getHAPublicKey(), _serverApp.getPrivateKey());
         } catch (Exception e) {
             System.out.println(e.getMessage());
         }
@@ -96,7 +95,7 @@ public class ServerController {
             int x = secureRequest.get_request().get_x();
             int y = secureRequest.get_request().get_y();
             int epoch = secureRequest.get_request().get_epoch();
-            secureRequest.verify( _serverApp.getHAPublicKey() );
+            //secureRequest.verify( _serverApp.getHAPublicKey() );
 
             List<DBLocationReport> dbLocationReports = _reportRepository.findUsersByLocationAndEpoch(epoch, x, y);
             int userCount = dbLocationReports.size();

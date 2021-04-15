@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import pt.tecnico.sec.RSAKeyGenerator;
 
 import java.security.PrivateKey;
-import java.security.PublicKey;
 import java.util.Arrays;
 
 public class SecureObtainUsersRequest {
@@ -41,9 +40,6 @@ public class SecureObtainUsersRequest {
         this._signature = _signature;
     }
 
-    public void verify(PublicKey verifyKey) throws Exception {
-        _request.verify(_signature, verifyKey);
-    }
 
     @Override
     public String toString() {

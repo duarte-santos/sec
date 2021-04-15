@@ -169,9 +169,9 @@ public class User {
     /* ====[             Submit Location Report             ]==== */
     /* ========================================================== */
 
-    private void submitLocationReport(SecureLocationReport secureLocationReport) {
-        HttpEntity<SecureLocationReport> request = new HttpEntity<>(secureLocationReport);
-        _restTemplate.postForObject(getServerURL() + "/location-report", request, SecureLocationReport.class);
+    private void submitLocationReport(SecureMessage secureLocationReport) {
+        HttpEntity<SecureMessage> request = new HttpEntity<>(secureLocationReport);
+        _restTemplate.postForObject(getServerURL() + "/location-report", request, SecureMessage.class);
     }
 
     public void reportLocation(int epoch, Location epochLocation) throws Exception {
@@ -183,7 +183,11 @@ public class User {
         System.out.println(locationReport);
 
         // encrypt using server public key, sign using client private key
-        SecureLocationReport secureLocationReport = new SecureLocationReport(locationReport, _serverKey, _keyPair.getPrivate());
+        ObjectMapper objectMapper = new ObjectMapper();
+        byte[] bytes = objectMapper.writeValueAsBytes(locationReport);
+        SecureMessage secureLocationReport = new SecureMessage(bytes, _serverKey, _keyPair.getPrivate());
+
+        secureLocationReport.verify(bytes, _keyPair.getPublic());
         submitLocationReport(secureLocationReport);
     }
 
@@ -192,23 +196,26 @@ public class User {
     /* ====[             Obtain Location Report             ]==== */
     /* ========================================================== */
 
-    private SecureLocationReport obtainLocationReport(int epoch) throws Exception {
-        ObtainLocationRequest locationRequest = new ObtainLocationRequest(_id, epoch);
-        SecureObtainLocationRequest secureLocationRequest = new SecureObtainLocationRequest(locationRequest, _keyPair.getPrivate());
-
-        HttpEntity<SecureObtainLocationRequest> request = new HttpEntity<>(secureLocationRequest);
-        return _restTemplate.postForObject(getServerURL() + "/obtain-location-report", request, SecureLocationReport.class);
+    private SecureMessage obtainLocationReport(SecureMessage secureMessage) throws Exception {
+        HttpEntity<SecureMessage> request = new HttpEntity<>(secureMessage);
+        return _restTemplate.postForObject(getServerURL() + "/obtain-location-report", request, SecureMessage.class);
     }
 
     public LocationReport obtainReport(int epoch) throws Exception {
         if (!(0 <= epoch && epoch <= _epoch))
             throw new IllegalArgumentException("Epoch must be positive and not exceed the current epoch.");
 
-        SecureLocationReport secureLocationReport = obtainLocationReport(epoch);
-        if (secureLocationReport == null) return null;
+        ObtainLocationRequest locationRequest = new ObtainLocationRequest(_id, epoch);
+        ObjectMapper objectMapper = new ObjectMapper();
+        byte[] bytes = objectMapper.writeValueAsBytes(locationRequest);
+        SecureMessage secureRequest = new SecureMessage(bytes, _serverKey, _keyPair.getPrivate());
+
+        SecureMessage secureResponse = obtainLocationReport(secureRequest);
+        if (secureResponse == null) return null;
 
         // Decipher and check signature
-        return secureLocationReport.decipherAndVerify(_keyPair.getPrivate(), _serverKey);
+        byte[] messageBytes = secureResponse.decipherAndVerify(_keyPair.getPrivate(), _serverKey);
+        return LocationReport.getFromBytes(messageBytes);
     }
 
 
