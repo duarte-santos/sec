@@ -32,8 +32,8 @@ public class CustomExceptionHandler extends ResponseEntityExceptionHandler {
         return new ResponseEntity(error, HttpStatus.CONFLICT);
     }
 
-    @ExceptionHandler(RecordAlreadyExistsException.class)
-    public final ResponseEntity<Object> handleReportNotAcceptableException(RecordAlreadyExistsException ex, WebRequest request) {
+    @ExceptionHandler(ReportNotAcceptableException.class)
+    public final ResponseEntity<Object> handleReportNotAcceptableException(ReportNotAcceptableException ex, WebRequest request) {
         List<String> details = new ArrayList<>();
         details.add(ex.getLocalizedMessage());
         ErrorResponse error = new ErrorResponse("NOT_ACCEPTABLE", details);
