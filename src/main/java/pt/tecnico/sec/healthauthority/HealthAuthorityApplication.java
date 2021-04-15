@@ -17,7 +17,9 @@ import pt.tecnico.sec.client.SecureObtainLocationRequest;
 import java.io.IOException;
 import java.security.KeyPair;
 import java.security.PublicKey;
-import java.util.*;
+import java.util.Collections;
+import java.util.NoSuchElementException;
+import java.util.Scanner;
 
 import static java.lang.System.exit;
 
@@ -76,9 +78,6 @@ public class HealthAuthorityApplication {
                             System.out.println(HELP);
                         }
 
-                        // TODO : sign requests
-                        // TODO : server verify HA signature
-
                         // obtainLocationReport, [userId], [ep]
                         // Specification: returns the position of "userId" at the epoch "ep"
                         else if (tokens[0].equals("obtainLocationReport") && tokens.length == 3) {
@@ -107,21 +106,24 @@ public class HealthAuthorityApplication {
                             int y = Integer.parseInt(tokens[2]);
                             int ep = Integer.parseInt(tokens[3]);
 
-                            Map<String, Integer> params = new HashMap<>();
-                            params.put("epoch", ep);
-                            params.put("x", x);
-                            params.put("y", y);
+                            ObtainUsersRequest usersRequest = new ObtainUsersRequest(x, y, ep);
+                            SecureObtainUsersRequest secureLocationRequest = new SecureObtainUsersRequest(usersRequest, keyPair.getPrivate());
+                            HttpEntity<SecureObtainUsersRequest> request = new HttpEntity<>(secureLocationRequest);
+                            SecureUsersList secureUserIds = restTemplate.postForObject(getServerURL() + "/users", request, SecureUsersList.class);
 
-                            Integer[] userIds = restTemplate.getForObject(getServerURL() + "/users/{epoch}/{x}/{y}", Integer[].class, params);
-
-                            if (userIds == null) {
-                                System.out.println("User not found");
+                            if (secureUserIds == null) {
+                                System.out.println("No users at that location in that epoch.");
                                 continue;
                             }
+
+                            // Decipher and check signature
+                            Integer[] userIds = secureUserIds.decipherAndVerify(keyPair.getPrivate(), serverKey);
+
                             System.out.print("UserIds: ");
                             for (Integer userId : userIds) {
                                 System.out.print(userId + " ");
                             }
+                            System.out.println();
                         }
 
                         else {

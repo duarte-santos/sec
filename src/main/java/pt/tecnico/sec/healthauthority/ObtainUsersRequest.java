@@ -1,27 +1,41 @@
-package pt.tecnico.sec.client;
+package pt.tecnico.sec.healthauthority;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import pt.tecnico.sec.RSAKeyGenerator;
+import pt.tecnico.sec.client.Location;
 
 import java.security.PublicKey;
 
-public class ObtainLocationRequest {
-    private int _userId;
+public class ObtainUsersRequest {
+    private Location _location;
     private int _epoch;
 
-    public ObtainLocationRequest() {}
+    public ObtainUsersRequest() {}
 
-    public ObtainLocationRequest(int _userId, int _epoch) {
-        this._userId = _userId;
+    public ObtainUsersRequest(Location _location, int _epoch) {
+        this._location = _location;
         this._epoch = _epoch;
     }
 
-    public int get_userId() {
-        return _userId;
+    public ObtainUsersRequest(int x, int y, int _epoch) {
+        this._location = new Location(x, y);
+        this._epoch = _epoch;
     }
 
-    public void set_userId(int _userId) {
-        this._userId = _userId;
+    public Location get_location() {
+        return _location;
+    }
+
+    public void set_location(Location _location) {
+        this._location = _location;
+    }
+
+    public int get_x() {
+        return _location.get_x();
+    }
+
+    public int get_y() {
+        return _location.get_y();
     }
 
     public int get_epoch() {
@@ -43,8 +57,8 @@ public class ObtainLocationRequest {
 
     @Override
     public String toString() {
-        return "ObtainLocationRequest{" +
-                "_userId=" + _userId +
+        return "ObtainUsersRequest{" +
+                "_location=" + _location +
                 ", _epoch=" + _epoch +
                 '}';
     }

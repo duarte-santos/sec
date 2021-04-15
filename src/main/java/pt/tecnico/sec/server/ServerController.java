@@ -5,9 +5,10 @@ import org.springframework.web.bind.annotation.*;
 import pt.tecnico.sec.client.LocationReport;
 import pt.tecnico.sec.client.SecureLocationReport;
 import pt.tecnico.sec.client.SecureObtainLocationRequest;
+import pt.tecnico.sec.healthauthority.SecureObtainUsersRequest;
+import pt.tecnico.sec.healthauthority.SecureUsersList;
 
 import java.security.PublicKey;
-import java.util.ArrayList;
 import java.util.List;
 
 
@@ -93,16 +94,28 @@ public class ServerController {
         return null;
     }
 
-    @GetMapping("/users/{epoch}/{x}/{y}")
-    public Integer[] getUsers(@PathVariable(value = "epoch") int epoch, @PathVariable(value = "x") int x, @PathVariable(value = "y") int y){
-        List<DBLocationReport> dbLocationReports = _reportRepository.findUsersByLocationAndEpoch(epoch, x, y);
-        int userCount = dbLocationReports.size();
-        if (userCount == 0) return null;
-        Integer[] users = new Integer[userCount];
-        for (int i = 0; i < userCount; i++) {
-            users[i] = dbLocationReports.get(i).get_userId();
+    @PostMapping("/users")
+    public SecureUsersList getUsers(@RequestBody SecureObtainUsersRequest secureRequest){
+        try {
+            int x = secureRequest.get_request().get_x();
+            int y = secureRequest.get_request().get_y();
+            int epoch = secureRequest.get_request().get_epoch();
+            secureRequest.verify( _serverApp.getHAPublicKey() );
+
+            List<DBLocationReport> dbLocationReports = _reportRepository.findUsersByLocationAndEpoch(epoch, x, y);
+            int userCount = dbLocationReports.size();
+            if (userCount == 0) return null;
+            Integer[] users = new Integer[userCount];
+            for (int i = 0; i < userCount; i++) {
+                users[i] = dbLocationReports.get(i).get_userId();
+            }
+
+            return new SecureUsersList(users, _serverApp.getHAPublicKey(), _serverApp.getPrivateKey());
+
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
         }
-        return users;
+        return null;
     }
 
 }
