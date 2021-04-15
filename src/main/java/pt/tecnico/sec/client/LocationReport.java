@@ -10,7 +10,9 @@ import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.security.PublicKey;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class LocationReport {
@@ -86,21 +88,36 @@ public class LocationReport {
         return RSAKeyGenerator.readPublicKey(keyPath);
     }
 
-    public void verifyProofs() throws Exception {
+    public int verifyProofs() throws Exception {
+
+        Set<Integer> witnessIds = new HashSet<>();
         ObjectMapper objectMapper = new ObjectMapper();
-        for (LocationProof signedProof : _proofs) {
+        List<LocationProof> allProofs = new ArrayList<LocationProof>(_proofs);
+
+        for (LocationProof signedProof : allProofs) {
+
             ProofData proofData = signedProof.get_proofData();
+
             byte[] data = objectMapper.writeValueAsBytes(proofData);
             byte[] signature = signedProof.get_signature();
             PublicKey clientKey = getClientPublicKey(signedProof.get_witnessId());
-            if (signature == null || !RSAKeyGenerator.verify(data, signature, clientKey)
+
+            if ( signature == null || !RSAKeyGenerator.verify(data, signature, clientKey)
                     || proofData.get_epoch() != _epoch
                     || !isNearby(proofData.get_location())
                     || !proofData.get_type().equals(SUCCESS)
-                    || proofData.get_proverId() != _userId) {
-                throw new IllegalArgumentException("Proof signature failed!"); //FIXME : discard proof, not report
+                    || proofData.get_proverId() != _userId
+                    || witnessIds.contains(proofData.get_witnessId())
+            ) {
+                System.out.println("Invalid LocationProof: " + signedProof);
+                _proofs.remove(signedProof); // remove invalid proof from report
             }
+
+            witnessIds.add(proofData.get_witnessId());
+
         }
+
+        return _proofs.size(); // valid proof count
     }
 
     private boolean isNearby(Location location) {
