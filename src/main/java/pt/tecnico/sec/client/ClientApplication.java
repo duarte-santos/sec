@@ -1,5 +1,6 @@
 package pt.tecnico.sec.client;
 
+import org.json.simple.parser.ParseException;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -9,6 +10,8 @@ import org.springframework.web.client.RestTemplate;
 import pt.tecnico.sec.EnvironmentGenerator;
 import pt.tecnico.sec.RSAKeyGenerator;
 
+import java.io.IOException;
+import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.PublicKey;
 import java.util.Collections;
@@ -36,8 +39,8 @@ public class ClientApplication {
     private static User _user;
 
     public static void main(String[] args) {
-
         try {
+
             // create environment
             _environment = EnvironmentGenerator.parseEnvironmentJSON(); // import from randomly generated JSON
             List<Integer> userIds = _environment.getUserList();
@@ -64,6 +67,8 @@ public class ClientApplication {
             springApplication.setDefaultProperties(Collections.singletonMap("server.port", String.valueOf(port)));
             springApplication.run(args);
 
+        } catch (IOException|ParseException|GeneralSecurityException e) {
+            System.out.println("Error setting up client. Please make sure to properly run EnvironmentGenerator and RSAKeyGenerator before running the client.");
         } catch (Exception e) {
             System.out.println(EXCEPTION_STR + e.getMessage());
             System.out.println(USAGE);

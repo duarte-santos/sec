@@ -67,7 +67,7 @@ public class EnvironmentGenerator {
         }
     }
 
-    public static Environment parseEnvironmentJSON() throws IOException, ParseException, NumberFormatException {
+    public static Environment parseEnvironmentJSON() throws IOException, ParseException {
         Environment environment = new Environment();
         JSONParser jsonParser = new JSONParser();
         try (FileReader reader = new FileReader(ENVIRONMENT_PATH)) {
