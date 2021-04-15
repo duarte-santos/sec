@@ -7,6 +7,7 @@ import pt.tecnico.sec.client.SecureLocationReport;
 import pt.tecnico.sec.client.SecureObtainLocationRequest;
 import pt.tecnico.sec.healthauthority.SecureObtainUsersRequest;
 import pt.tecnico.sec.healthauthority.SecureUsersList;
+import pt.tecnico.sec.server.exception.RecordAlreadyExistsException;
 
 import java.security.PublicKey;
 import java.util.List;
@@ -31,25 +32,20 @@ public class ServerController {
     }
 
     @PostMapping("/location-report")
-    public void reportLocation(@RequestBody SecureLocationReport secureLocationReport) {
-        try {
-            // Decipher and check signatures
-            LocationReport locationReport = _serverApp.decipherAndVerifyReport(secureLocationReport);
+    public void reportLocation(@RequestBody SecureLocationReport secureLocationReport) throws RecordAlreadyExistsException, Exception {
+        // Decipher and check signatures
+        LocationReport locationReport = _serverApp.decipherAndVerifyReport(secureLocationReport);
 
-            // Check if already exists a report with the same userId and epoch
-            int userId = locationReport.get_userId();
-            int epoch = locationReport.get_epoch();
-            if (_reportRepository.findReportByEpochAndUser(userId, epoch) != null) // TODO warn client
-                throw new IllegalArgumentException("Report for userId " + userId + " and epoch " + epoch + " already exists.\n");
+        // Check if already exists a report with the same userId and epoch
+        int userId = locationReport.get_userId();
+        int epoch = locationReport.get_epoch();
+        if (_reportRepository.findReportByEpochAndUser(userId, epoch) != null)
+            throw new RecordAlreadyExistsException("Report for userId " + userId + " and epoch " + epoch + " already exists.");
 
-            // Save report in database
-            System.out.println(locationReport);
-            DBLocationReport report = new DBLocationReport(locationReport);
-            _reportRepository.save(report);
-
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-        }
+        // Save report in database
+        System.out.println(locationReport);
+        DBLocationReport report = new DBLocationReport(locationReport);
+        _reportRepository.save(report);
     }
 
     // used by clients

@@ -120,7 +120,12 @@ public class ClientApplication {
                             }
 
                             Location DBLocation = _environment.getGrid(ep).getUserLocation(_user.getId());
-                            _user.reportLocation(ep, DBLocation);
+                            try {
+                                _user.reportLocation(ep, DBLocation);
+                            }
+                            catch (Exception e) {
+                                System.out.println(e.getMessage());
+                            }
                         }
 
                         // obtain [epoch] - user asks server for its DBLocation report at the given epoch
