@@ -6,6 +6,7 @@ import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.client.LocationReport;
 import pt.tecnico.sec.client.ObtainLocationRequest;
 import pt.tecnico.sec.client.SecureMessage;
+import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 import pt.tecnico.sec.healthauthority.ObtainUsersRequest;
 
 import java.io.IOException;
@@ -21,6 +22,7 @@ public class ServerApplication {
     /* constants definition */
     private static final String USAGE = "Usage: ./mvnw spring-boot:run -\"Dstart-class=pt.tecnico.sec.server.ServerApplication";
     private static final int SERVER_PORT = 9000;
+    private static final int BYZANTINE_USERS = 1;
 
     private static KeyPair _keyPair;
 
@@ -66,7 +68,7 @@ public class ServerApplication {
     /* ====[              Secure communication              ]==== */
     /* ========================================================== */
 
-    public LocationReport decipherAndVerifyReport(SecureMessage secureMessage) throws Exception {
+    public LocationReport decipherAndVerifyReport(SecureMessage secureMessage) throws ReportNotAcceptableException, Exception {
         // decipher report
         byte[] messageBytes = secureMessage.decipher( _keyPair.getPrivate() );
         LocationReport locationReport = LocationReport.getFromBytes(messageBytes);
@@ -76,7 +78,9 @@ public class ServerApplication {
         secureMessage.verify(messageBytes, verifyKey);
 
         // check proofs signatures
-        locationReport.verifyProofs();
+        int validProofCount = locationReport.verifyProofs();
+        if (validProofCount <= BYZANTINE_USERS)
+            throw new ReportNotAcceptableException("Not enough proofs to constitute an acceptable Location Report");
 
         return locationReport;
     }

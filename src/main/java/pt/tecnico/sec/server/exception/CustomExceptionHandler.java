@@ -25,11 +25,19 @@ public class CustomExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     @ExceptionHandler(RecordAlreadyExistsException.class)
-    public final ResponseEntity<Object> handleUserNotFoundException(RecordAlreadyExistsException ex, WebRequest request) {
+    public final ResponseEntity<Object> handleRecordAlreadyExistsException(RecordAlreadyExistsException ex, WebRequest request) {
         List<String> details = new ArrayList<>();
         details.add(ex.getLocalizedMessage());
         ErrorResponse error = new ErrorResponse("CONFLICT", details);
         return new ResponseEntity(error, HttpStatus.CONFLICT);
+    }
+
+    @ExceptionHandler(RecordAlreadyExistsException.class)
+    public final ResponseEntity<Object> handleReportNotAcceptableException(RecordAlreadyExistsException ex, WebRequest request) {
+        List<String> details = new ArrayList<>();
+        details.add(ex.getLocalizedMessage());
+        ErrorResponse error = new ErrorResponse("NOT_ACCEPTABLE", details);
+        return new ResponseEntity(error, HttpStatus.NOT_ACCEPTABLE);
     }
 
     @Override
