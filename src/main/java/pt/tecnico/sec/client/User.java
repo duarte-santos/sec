@@ -137,7 +137,7 @@ public class User {
     /* ====[               Send Location Proof              ]==== */
     /* ========================================================== */
 
-    private LocationProof signLocationProof(ProofData proofData) throws Exception {
+    public LocationProof signLocationProof(ProofData proofData) throws Exception {
         ObjectMapper objectMapper = new ObjectMapper();
         byte[] proofBytes = objectMapper.writeValueAsBytes(proofData);
         String signature = RSAKeyGenerator.sign(proofBytes, _keyPair.getPrivate());

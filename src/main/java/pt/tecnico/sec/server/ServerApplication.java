@@ -14,6 +14,7 @@ import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.PrivateKey;
 import java.security.PublicKey;
+import java.util.Arrays;
 import java.util.Collections;
 
 @SpringBootApplication
@@ -28,7 +29,6 @@ public class ServerApplication {
 
     public static void main(String[] args) {
         try {
-            fetchRSAKeyPair();
             SpringApplication springApplication = new SpringApplication(ServerApplication.class);
             springApplication.setDefaultProperties(Collections.singletonMap("server.port", String.valueOf(SERVER_PORT)));
             springApplication.run(args);
@@ -49,8 +49,17 @@ public class ServerApplication {
         _keyPair = RSAKeyGenerator.readKeyPair(keysPath + ".pub", keysPath + ".priv");
     }
 
-    public static PrivateKey getPrivateKey() {
-        return _keyPair.getPrivate();
+    public static PrivateKey getPrivateKey() throws IOException, GeneralSecurityException {
+        return getKeyPair().getPrivate();
+    }
+
+    public static PublicKey getPublicKey() throws IOException, GeneralSecurityException {
+        return getKeyPair().getPublic();
+    }
+
+    public static KeyPair getKeyPair() throws IOException, GeneralSecurityException {
+        if (_keyPair == null) fetchRSAKeyPair();
+        return _keyPair;
     }
 
     public static PublicKey getHAPublicKey() throws GeneralSecurityException, IOException {
@@ -70,7 +79,7 @@ public class ServerApplication {
 
     public LocationReport decipherAndVerifyReport(SecureMessage secureMessage) throws Exception {
         // decipher report
-        byte[] messageBytes = secureMessage.decipher( _keyPair.getPrivate() );
+        byte[] messageBytes = secureMessage.decipher( getPrivateKey() );
         LocationReport locationReport = LocationReport.getFromBytes(messageBytes);
 
         // check report signature
@@ -87,7 +96,7 @@ public class ServerApplication {
 
     public ObtainLocationRequest decipherAndVerifyRequest(SecureMessage secureMessage, boolean fromHA) throws Exception {
         // decipher request
-        byte[] messageBytes = secureMessage.decipher( _keyPair.getPrivate() );
+        byte[] messageBytes = secureMessage.decipher( getPrivateKey() );
         ObtainLocationRequest request = ObtainLocationRequest.getFromBytes(messageBytes);
 
         // check report signature
@@ -99,7 +108,7 @@ public class ServerApplication {
 
     public ObtainUsersRequest decipherAndVerifyHAUsersRequest(SecureMessage secureMessage) throws Exception {
         // decipher request
-        byte[] messageBytes = secureMessage.decipher( _keyPair.getPrivate() );
+        byte[] messageBytes = secureMessage.decipher( getPrivateKey() );
         ObtainUsersRequest request = ObtainUsersRequest.getFromBytes(messageBytes);
 
         // check report signature

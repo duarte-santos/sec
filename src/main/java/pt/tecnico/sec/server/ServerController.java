@@ -24,15 +24,14 @@ import java.util.List;
 @RestController
 public class ServerController {
 
-    private final ServerApplication _serverApp;
+    private static ServerApplication _serverApp;
+    private static ReportRepository _reportRepository;
 
     @Autowired
     private ServerController(ServerApplication serverApp, ReportRepository reportRepository) {
         _serverApp = serverApp;
         _reportRepository = reportRepository;
     }
-
-    private final ReportRepository _reportRepository;
 
 
     @PostMapping("/location-report")
