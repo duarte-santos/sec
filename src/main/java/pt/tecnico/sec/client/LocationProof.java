@@ -3,6 +3,7 @@ package pt.tecnico.sec.client;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import pt.tecnico.sec.server.DBProofData;
 
+@SuppressWarnings("unused")
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class LocationProof {
     private ProofData _proofData;

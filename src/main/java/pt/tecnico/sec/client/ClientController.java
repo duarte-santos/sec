@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import javax.servlet.http.HttpServletRequest;
 
+@SuppressWarnings("AccessStaticViaInstance")
 @RestController
 public class ClientController {
 

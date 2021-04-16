@@ -175,6 +175,7 @@ public class ClientApplication {
     }
 
     // auxiliary function: returns a string with the help message
+    @SuppressWarnings("SameReturnValue")
     private static String getHelpString() {
         return """
                   ======================= Available Commands =======================

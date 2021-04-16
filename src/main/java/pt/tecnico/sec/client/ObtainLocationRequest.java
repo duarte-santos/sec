@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 
+@SuppressWarnings("unused")
 public class ObtainLocationRequest {
     private int _userId;
     private int _epoch;

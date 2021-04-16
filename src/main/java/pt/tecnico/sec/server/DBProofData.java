@@ -5,6 +5,7 @@ import pt.tecnico.sec.client.ProofData;
 
 import javax.persistence.*;
 
+@SuppressWarnings("unused")
 @JsonIgnoreProperties(ignoreUnknown = true)
 @Entity
 public class DBProofData {

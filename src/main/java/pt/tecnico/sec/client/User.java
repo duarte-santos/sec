@@ -49,10 +49,6 @@ public class User {
         return _id;
     }
 
-    public int getEpoch() {
-        return _epoch;
-    }
-
     public Location getLocation() {
         return _grid.getUserLocation(_id);
     }
@@ -103,7 +99,7 @@ public class User {
 
     public void stepRequest(int userId) {
         System.out.println("[Request sent] Type: Step To: " + getUserURL(userId) + ", From: " + _id);
-        _restTemplate.getForObject(getUserURL(userId)+ "/step/", String.class); //FIXME
+        _restTemplate.getForObject(getUserURL(userId)+ "/step/", Void.class);
     }
 
 
@@ -198,7 +194,7 @@ public class User {
     /* ====[             Obtain Location Report             ]==== */
     /* ========================================================== */
 
-    private SecureMessage obtainLocationReport(SecureMessage secureMessage) throws Exception {
+    private SecureMessage obtainLocationReport(SecureMessage secureMessage) {
         HttpEntity<SecureMessage> request = new HttpEntity<>(secureMessage);
         return _restTemplate.postForObject(getServerURL() + "/obtain-location-report", request, SecureMessage.class);
     }
@@ -220,7 +216,7 @@ public class User {
 
         // Check secret key for freshness
         if (!secureResponse.getSecretKey(_keyPair.getPrivate()).equals( secretKey ))
-            throw new IllegalArgumentException("Server response not fresh!"); //FIXME type of exception
+            throw new IllegalArgumentException("Server response not fresh!");
 
         // Decipher and check signature
         byte[] messageBytes = secureResponse.decipherAndVerify(_keyPair.getPrivate(), _serverKey);
@@ -228,7 +224,7 @@ public class User {
 
         // Check content
         if (locationReport.get_userId() != _id || locationReport.get_epoch() != epoch)
-            throw new IllegalArgumentException("Bad server response!"); //FIXME type of exception
+            throw new IllegalArgumentException("Bad server response!");
 
         return locationReport;
     }

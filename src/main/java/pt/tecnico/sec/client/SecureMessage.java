@@ -8,6 +8,7 @@ import javax.crypto.SecretKey;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 
+@SuppressWarnings("unused")
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class SecureMessage {
 
@@ -68,7 +69,7 @@ public class SecureMessage {
 
     public void verify(byte[] messageBytes, PublicKey verifyKey) throws Exception {
         if (_signature == null || !RSAKeyGenerator.verify(messageBytes, _signature, verifyKey))
-            throw new IllegalArgumentException("Signature verify failed!"); //FIXME type of exception
+            throw new IllegalArgumentException("Signature verify failed!");
     }
 
     public String get_cipheredKey() {
