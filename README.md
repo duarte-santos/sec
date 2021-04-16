@@ -29,9 +29,9 @@ The bellow commands must be run in a terminal inside the root directory of the p
 
 <br/>
 
-**Note:** 
-- 'userCount' must match the intended amount of running users;
-- in order to run the tests a server must also be running;
+## Setup
+
+- 'userCount' must match the intended amount of running users.
 
 <br/>
 
@@ -54,6 +54,21 @@ To run the **RSAKeyGenerator**:
 <br/>
 
 
+## Run the project
+
+- Each Application must be simultaneously running on different terminals.
+- After starting the clients the available commands can be displayed using 'help'.
+- Suggested sequence of commands:
+    1. Perform 'step' on a client until there are no more epochs available;
+    2. Perform 'submit' of multiple client reports, so that they are stored on the server (on the client interface);
+    3. Perform 'obtain' of those reports (on the client interface);
+    4. Perform 'obtainLocationReport' of some of those reports on the HA interface;
+    5. Perform 'obtainUsersAtLocation' of some known locations on the HA interface;
+    6. Perform 'exit' on each client and HA to safely exit the programs.
+
+<br/>
+
+
 To run the **ServerApplication**:
 ```bash
 ./mvnw spring-boot:run -Dstart-class=pt.tecnico.sec.server.ServerApplication
@@ -68,6 +83,8 @@ To run the **ClientApplication**:
 ```
 ***Suggestion:** 3 users using userIds 0, 1 and 2*
 
+***Note:** Make sure to run 'userCount' users before interacting with the clients*
+
 <br/>
 
 
@@ -79,10 +96,16 @@ To run the **HealthAuthorityApplication**:
 <br/>
 
 
+## Test
+
+- In order to run the tests a server must also be running.
+
+<br/>
+
+
 To run the tests:
 ```bash
 
 ```
 
 <br/>
-
