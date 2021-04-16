@@ -55,9 +55,7 @@ import static org.springframework.test.web.servlet.setup.MockMvcBuilders.standal
 @ExtendWith(MockitoExtension.class)
 class ServerApplicationTests {
 
-    private MockMvc mockMvc;
     private Environment environment;
-    private int epoch;
     private User user0;
     private User user1;
     private User user2;
@@ -74,9 +72,6 @@ class ServerApplicationTests {
 
         // create environment
         environment = EnvironmentGenerator.parseEnvironmentJSON(); // import from randomly generated JSON
-        List<Integer> userIds = environment.getUserList();
-        System.out.println("Valid IDs: " + userIds);
-        epoch = 0;
 
         // get keys
         String keysPath = RSAKeyGenerator.KEYS_PATH;
@@ -87,10 +82,10 @@ class ServerApplicationTests {
         keyPair3 = RSAKeyGenerator.readKeyPair(keysPath + 3 + ".pub", keysPath + 2 + ".priv");
 
         // create users
-        user0 = new User(environment.getGrid(epoch), 0, keyPair0, serverKey);
-        user1 = new User(environment.getGrid(epoch), 1, keyPair1, serverKey);
-        user2 = new User(environment.getGrid(epoch), 2, keyPair2, serverKey);
-        user3 = new User(environment.getGrid(epoch), 3, keyPair3, serverKey);
+        user0 = new User(environment.getGrid(0), 0, keyPair0, serverKey);
+        user1 = new User(environment.getGrid(0), 1, keyPair1, serverKey);
+        user2 = new User(environment.getGrid(0), 2, keyPair2, serverKey);
+        user3 = new User(environment.getGrid(0), 3, keyPair3, serverKey);
     }
 
     @Test
