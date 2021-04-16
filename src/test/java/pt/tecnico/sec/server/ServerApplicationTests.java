@@ -68,22 +68,9 @@ class ServerApplicationTests {
     private KeyPair keyPair3;
     private PublicKey serverKey;
 
-    @Mock
-    static ServerApplication serverApp;
-
-    @Mock
-    static ReportRepository reportRepository;
-
-    @InjectMocks
-    static ServerController serverController;
-
 
     @BeforeEach
     public void setup() throws IOException, ParseException, GeneralSecurityException {
-
-        serverApp.fetchRSAKeyPair();
-        // create server mock
-        this.mockMvc = standaloneSetup(serverController).build();
 
         // create environment
         environment = EnvironmentGenerator.parseEnvironmentJSON(); // import from randomly generated JSON
