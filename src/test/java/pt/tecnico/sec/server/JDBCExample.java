@@ -1,10 +1,13 @@
 package pt.tecnico.sec.server;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.sql.Statement;
 
 public class JDBCExample {
     // JDBC driver name and database URL
-    private static final String JDBC_DRIVER = "com.mysql.jdbc.Driver";
+    private static final String JDBC_DRIVER = "com.mysql.cj.jdbc.Driver";
     private static final String DB_URL = "jdbc:mysql://localhost/";
 
     //  Database credentials
@@ -13,7 +16,7 @@ public class JDBCExample {
     private static final String DATABASE_NAME = "sec";
 
 
-    public void dropDatabase() {
+    public static void dropDatabase() {
 
         Connection conn = null;
         Statement stmt = null;
@@ -31,7 +34,7 @@ public class JDBCExample {
             System.out.println("Deleting database...");
             stmt = conn.createStatement();
 
-            String sql = "DROP DATABASE " + DATABASE_NAME;
+            String sql = "DROP DATABASE IF EXISTS " + DATABASE_NAME;
             stmt.executeUpdate(sql);
             System.out.println("Database deleted successfully...");
         }
@@ -66,7 +69,7 @@ public class JDBCExample {
     }
 
 
-    public void createDatabase() {
+    public static void createDatabase() {
 
         Connection conn = null;
         Statement stmt = null;
@@ -84,7 +87,7 @@ public class JDBCExample {
             System.out.println("Creating database...");
             stmt = conn.createStatement();
 
-            String sql = "CREATE DATABASE " + DATABASE_NAME;
+            String sql = "CREATE DATABASE IF NOT EXISTS " + DATABASE_NAME;
             stmt.executeUpdate(sql);
             System.out.println("Database created successfully...");
         }

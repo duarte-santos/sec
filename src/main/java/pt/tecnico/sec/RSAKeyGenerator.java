@@ -26,6 +26,16 @@ public class RSAKeyGenerator {
             if (userCount <= 0)
                 throw new NumberFormatException();
 
+            writeKeyPairs(userCount);
+        }
+        catch (NumberFormatException e) {
+            System.out.println("Argument 'number of users' be a positive integer.");
+            System.out.println("USAGE: ./mvnw spring-boot:run -Dspring-boot.run.arguments=\"[userCount]\" -Dstart-class=pt.tecnico.sec.RSAKeyGenerator");
+        }
+    }
+
+    public static void writeKeyPairs(int userCount) throws Exception {
+        try {
             // create key directory if it doesnt exist already
             File directory = new File(KEYS_PATH);
             if (!directory.exists()) {
@@ -39,10 +49,6 @@ public class RSAKeyGenerator {
             }
             writeKeyPair(KEYS_PATH + "server");
             writeKeyPair(KEYS_PATH + "ha");
-        }
-        catch (NumberFormatException e) {
-            System.out.println("Argument 'number of users' be a positive integer.");
-            System.out.println("USAGE: ./mvnw spring-boot:run -Dspring-boot.run.arguments=\"[userCount]\" -Dstart-class=pt.tecnico.sec.RSAKeyGenerator");
         }
         catch (IOException e) {
             System.out.println(e.getMessage());

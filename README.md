@@ -98,14 +98,28 @@ To run the **HealthAuthorityApplication**:
 
 ## Test
 
-- In order to run the tests a server must also be running.
+
+Before running the tests for the first time, the database should be reset:
+```mysql
+DROP DATABASE sec;
+CREATE DATABASE sec;
+```
 
 <br/>
 
-
-To run the tests:
+In order to run the tests a server must also be running:
 ```bash
-
+./mvnw spring-boot:run -Dstart-class=pt.tecnico.sec.server.ServerApplication
 ```
+
+
+Then, to run the tests:
+```bash
+./mvnw -Dtest=pt.tecnico.sec.server.ServerApplicationTests test
+```
+
+<br/>
+
+***Note:** Make sure to rerun the server before retesting the project*
 
 <br/>

@@ -1,56 +1,31 @@
 package pt.tecnico.sec.server;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.ObjectWriter;
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpResponse;
-import org.apache.http.client.HttpClient;
-import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;
-import org.apache.http.impl.client.BasicResponseHandler;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.json.JSONObject;
 import org.json.simple.parser.ParseException;
-import org.junit.Before;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockHttpServletResponse;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
-import org.springframework.web.client.RestTemplate;
 import pt.tecnico.sec.AESKeyGenerator;
 import pt.tecnico.sec.EnvironmentGenerator;
 import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.client.*;
 
-
 import javax.crypto.SecretKey;
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.net.ServerSocket;
-import java.net.URI;
-import java.net.http.HttpRequest;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.PublicKey;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
-
-import static org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup;
 
 @ExtendWith(MockitoExtension.class)
 class ServerApplicationTests {
@@ -66,6 +41,12 @@ class ServerApplicationTests {
     private KeyPair keyPair3;
     private PublicKey serverKey;
 
+
+    @BeforeAll
+    static void generate() throws Exception {
+        EnvironmentGenerator.writeEnvironmentJSON(4, 4, 4, 4);
+        RSAKeyGenerator.writeKeyPairs(4);
+    }
 
     @BeforeEach
     public void setup() throws IOException, ParseException, GeneralSecurityException {
@@ -86,6 +67,13 @@ class ServerApplicationTests {
         user1 = new User(environment.getGrid(0), 1, keyPair1, serverKey);
         user2 = new User(environment.getGrid(0), 2, keyPair2, serverKey);
         user3 = new User(environment.getGrid(0), 3, keyPair3, serverKey);
+    }
+
+    @AfterAll
+    static void cleanup() {
+        // reset database
+        JDBCExample.dropDatabase();
+        JDBCExample.createDatabase();
     }
 
     @Test
