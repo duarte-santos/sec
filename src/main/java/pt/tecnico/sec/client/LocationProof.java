@@ -1,7 +1,7 @@
 package pt.tecnico.sec.client;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import pt.tecnico.sec.server.DBProofData;
+import pt.tecnico.sec.server.DBLocationProof;
 
 @SuppressWarnings("unused")
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -16,8 +16,10 @@ public class LocationProof {
         _signature = signature;
     }
 
-    public LocationProof(DBProofData dbProofData) {
-        _proofData = new ProofData(dbProofData);
+    // convert from server version
+    public LocationProof(DBLocationProof dbLocationProof) {
+        _signature = dbLocationProof.get_signature();
+        _proofData = new ProofData( dbLocationProof.get_proofData() );
     }
 
     public ProofData get_proofData() {

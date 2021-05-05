@@ -3,8 +3,8 @@ package pt.tecnico.sec.client;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import pt.tecnico.sec.RSAKeyGenerator;
+import pt.tecnico.sec.server.DBLocationProof;
 import pt.tecnico.sec.server.DBLocationReport;
-import pt.tecnico.sec.server.DBProofData;
 
 import java.io.IOException;
 import java.security.GeneralSecurityException;
@@ -42,7 +42,7 @@ public class LocationReport {
         _userId = dbLocationReport.get_userId();
         _epoch = dbLocationReport.get_epoch();
         _location = new Location( dbLocationReport.get_location() );
-        for (DBProofData dbProof : dbLocationReport.get_DB_proofs())
+        for (DBLocationProof dbProof : dbLocationReport.get_DB_proofs())
             _proofs.add(new LocationProof( dbProof ));
     }
 
@@ -129,11 +129,11 @@ public class LocationReport {
 
     @Override
     public String toString() {
-        return "SignedLocationReport{" +
-                "userId='" + _userId + '\'' +
-                ", location='" + _location + '\'' +
-                ", proofs=" + _proofs +
+        return "LocationReport{" +
+                "_userId=" + _userId +
+                ", _epoch=" + _epoch +
+                ", _location=" + _location +
+                ", _proofs=" + _proofs +
                 '}';
     }
-
 }

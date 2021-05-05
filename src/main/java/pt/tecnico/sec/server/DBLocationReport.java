@@ -25,24 +25,29 @@ public class DBLocationReport {
     private DBLocation _DB_location;
 
     @OneToMany(cascade=CascadeType.ALL)
-    private List<DBProofData> _DB_proofs = new ArrayList<>();
+    private List<DBLocationProof> _DB_proofs = new ArrayList<>();
+
+    @Column(length = 3000)
+    private String _signature;
 
     public DBLocationReport() {}
 
-    public DBLocationReport(int userId, int epoch, DBLocation DBLocation, List<DBProofData> proofs) {
+    public DBLocationReport(int userId, int epoch, DBLocation DBLocation, List<DBLocationProof> proofs, String signature) {
         _userId = userId;
         _epoch = epoch;
         _DB_location = DBLocation;
         _DB_proofs = proofs;
+        _signature = signature;
     }
 
     // convert from client version
-    public DBLocationReport(LocationReport locationReport) {
+    public DBLocationReport(LocationReport locationReport, String signature) {
         _userId = locationReport.get_userId();
         _epoch = locationReport.get_epoch();
         _DB_location = new DBLocation( locationReport.get_location() );
         for (LocationProof signedProof : locationReport.get_proofs())
-            _DB_proofs.add(new DBProofData( signedProof.get_proofData() )); // no need to save signatures
+            _DB_proofs.add(new DBLocationProof( signedProof ));
+        _signature = signature;
     }
 
     @Override
@@ -53,6 +58,7 @@ public class DBLocationReport {
                 ", _epoch=" + _epoch +
                 ", _DB_location=" + _DB_location +
                 ", _DB_proofs=" + _DB_proofs +
+                ", _signature='" + _signature + '\'' +
                 '}';
     }
 
@@ -72,11 +78,11 @@ public class DBLocationReport {
         this._DB_location = _DB_location;
     }
 
-    public List<DBProofData> get_DB_proofs() {
+    public List<DBLocationProof> get_DB_proofs() {
         return _DB_proofs;
     }
 
-    public void set_DB_proofs(List<DBProofData> _proofs) {
+    public void set_DB_proofs(List<DBLocationProof> _proofs) {
         this._DB_proofs = _proofs;
     }
 
@@ -94,5 +100,13 @@ public class DBLocationReport {
 
     public void set_epoch(int _epoch) {
         this._epoch = _epoch;
+    }
+
+    public String get_signature() {
+        return _signature;
+    }
+
+    public void set_signature(String _signature) {
+        this._signature = _signature;
     }
 }

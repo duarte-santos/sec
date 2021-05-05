@@ -1,10 +1,12 @@
 package pt.tecnico.sec.client;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpEntity;
 import org.springframework.web.client.RestTemplate;
 import pt.tecnico.sec.AESKeyGenerator;
 import pt.tecnico.sec.RSAKeyGenerator;
+import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
 import javax.crypto.SecretKey;
 import java.security.KeyPair;
@@ -17,6 +19,7 @@ import java.util.Map;
 public class User {
     private static final int BASE_PORT = 8000;
     private static final int SERVER_PORT = 9000;
+    private static final int BYZANTINE_USERS = 1;
 
     private RestTemplate _restTemplate;
     private Grid _prevGrid = null; // useful for synchronization
@@ -83,6 +86,21 @@ public class User {
         return _prevGrid.isNearby(_id, userId);
     }
 
+    public byte[] writeValueAsBytes(ProofData proofData) throws JsonProcessingException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        return objectMapper.writeValueAsBytes(proofData);
+    }
+
+    public byte[] writeValueAsBytes(LocationReport report) throws JsonProcessingException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        return objectMapper.writeValueAsBytes(report);
+    }
+
+    public byte[] writeValueAsBytes(ObtainLocationRequest request) throws JsonProcessingException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        return objectMapper.writeValueAsBytes(request);
+    }
+
 
     /* ========================================================== */
     /* ====[                      Step                      ]==== */
@@ -138,8 +156,7 @@ public class User {
     /* ========================================================== */
 
     public LocationProof signLocationProof(ProofData proofData) throws Exception {
-        ObjectMapper objectMapper = new ObjectMapper();
-        byte[] proofBytes = objectMapper.writeValueAsBytes(proofData);
+        byte[] proofBytes = writeValueAsBytes(proofData);
         String signature = RSAKeyGenerator.sign(proofBytes, _keyPair.getPrivate());
         return new LocationProof(proofData, signature);
     }
@@ -181,8 +198,7 @@ public class User {
         System.out.println(locationReport);
 
         // encrypt using server public key, sign using client private key
-        ObjectMapper objectMapper = new ObjectMapper();
-        byte[] bytes = objectMapper.writeValueAsBytes(locationReport);
+        byte[] bytes = writeValueAsBytes(locationReport);
         SecureMessage secureLocationReport = new SecureMessage(bytes, _serverKey, _keyPair.getPrivate());
 
         secureLocationReport.verify(bytes, _keyPair.getPublic());
@@ -199,34 +215,57 @@ public class User {
         return _restTemplate.postForObject(getServerURL() + "/obtain-location-report", request, SecureMessage.class);
     }
 
+    public SecureMessage makeObtainRequest(int id, int epoch, SecretKey secretKey) throws Exception {
+        ObtainLocationRequest locationRequest = new ObtainLocationRequest(id, epoch);
+        byte[] bytes = writeValueAsBytes(locationRequest);
+        return new SecureMessage(bytes, secretKey, _serverKey, _keyPair.getPrivate());
+    }
+
+    public SignedLocationReport checkObtainResponse(SecureMessage secureResponse, SecretKey secretKey, int id, int epoch) throws Exception {
+        // Check response's secret key for freshness
+        if (!secureResponse.getSecretKey(_keyPair.getPrivate()).equals( secretKey ))
+            throw new IllegalArgumentException("Server response not fresh!");
+
+        // Decipher and check response signature
+        byte[] messageBytes = secureResponse.decipherAndVerify(_keyPair.getPrivate(), _serverKey);
+        SignedLocationReport report = SignedLocationReport.getFromBytes(messageBytes);
+
+        // Check content
+        if (report.get_userId() != id || report.get_epoch() != epoch)
+            throw new IllegalArgumentException("Bad server response!");
+
+        return report;
+    }
+
+    public LocationReport checkLocationReport(SignedLocationReport signedReport, PublicKey verifyKey) throws Exception {
+        // Check report
+        signedReport.verify(verifyKey);
+
+        int validProofCount = signedReport.verifyProofs();
+        if (validProofCount <= BYZANTINE_USERS)
+            throw new ReportNotAcceptableException("Not enough proofs to constitute an acceptable Location Report");
+
+        // Return safe report
+        return signedReport.get_report();
+    }
+
     public LocationReport obtainReport(int epoch) throws Exception {
         if (!(0 <= epoch && epoch <= _epoch))
             throw new IllegalArgumentException("Epoch must be positive and not exceed the current epoch.");
 
         // Create request
-        ObtainLocationRequest locationRequest = new ObtainLocationRequest(_id, epoch);
-        ObjectMapper objectMapper = new ObjectMapper();
-        byte[] bytes = objectMapper.writeValueAsBytes(locationRequest);
         SecretKey secretKey = AESKeyGenerator.makeAESKey();
-        SecureMessage secureRequest = new SecureMessage(bytes, secretKey, _serverKey, _keyPair.getPrivate());
+        SecureMessage secureRequest = makeObtainRequest(_id, epoch, secretKey);
 
         // Perform request
         SecureMessage secureResponse = obtainLocationReport(secureRequest);
+
+        // Check response
         if (secureResponse == null) return null;
+        SignedLocationReport signedReport = checkObtainResponse(secureResponse, secretKey, _id, epoch);
+        LocationReport report = checkLocationReport(signedReport, _keyPair.getPublic());
 
-        // Check secret key for freshness
-        if (!secureResponse.getSecretKey(_keyPair.getPrivate()).equals( secretKey ))
-            throw new IllegalArgumentException("Server response not fresh!");
-
-        // Decipher and check signature
-        byte[] messageBytes = secureResponse.decipherAndVerify(_keyPair.getPrivate(), _serverKey);
-        LocationReport locationReport = LocationReport.getFromBytes(messageBytes);
-
-        // Check content
-        if (locationReport.get_userId() != _id || locationReport.get_epoch() != epoch)
-            throw new IllegalArgumentException("Bad server response!");
-
-        return locationReport;
+        return report;
     }
 
 }

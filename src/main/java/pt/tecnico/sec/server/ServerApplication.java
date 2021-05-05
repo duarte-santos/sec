@@ -14,7 +14,6 @@ import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.PrivateKey;
 import java.security.PublicKey;
-import java.util.Arrays;
 import java.util.Collections;
 
 @SpringBootApplication
@@ -77,7 +76,7 @@ public class ServerApplication {
     /* ====[              Secure communication              ]==== */
     /* ========================================================== */
 
-    public LocationReport decipherAndVerifyReport(SecureMessage secureMessage) throws Exception {
+    public DBLocationReport decipherAndVerifyReport(SecureMessage secureMessage) throws Exception {
         // decipher report
         byte[] messageBytes = secureMessage.decipher( getPrivateKey() );
         LocationReport locationReport = LocationReport.getFromBytes(messageBytes);
@@ -91,7 +90,7 @@ public class ServerApplication {
         if (validProofCount <= BYZANTINE_USERS)
             throw new ReportNotAcceptableException("Not enough proofs to constitute an acceptable Location Report");
 
-        return locationReport;
+        return new DBLocationReport(locationReport, secureMessage.get_signature());
     }
 
     public ObtainLocationRequest decipherAndVerifyRequest(SecureMessage secureMessage, boolean fromHA) throws Exception {

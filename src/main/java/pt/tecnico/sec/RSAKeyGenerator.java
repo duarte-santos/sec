@@ -172,4 +172,22 @@ public class RSAKeyGenerator {
         return publicSignature.verify(signatureBytes);
     }
 
+    public static String sign(String dataString, PrivateKey key) throws Exception {
+        byte[] data = Base64.getDecoder().decode(dataString);
+        Signature privateSignature = Signature.getInstance("SHA256withRSA");
+        privateSignature.initSign(key);
+        privateSignature.update(data);
+        byte[] signatureBytes = privateSignature.sign();
+        return Base64.getEncoder().encodeToString(signatureBytes);
+    }
+
+    public static boolean verify(String dataString, String signature, PublicKey key) throws Exception {
+        byte[] data = Base64.getDecoder().decode(dataString);
+        Signature publicSignature = Signature.getInstance("SHA256withRSA");
+        publicSignature.initVerify(key);
+        publicSignature.update(data);
+        byte[] signatureBytes = Base64.getDecoder().decode(signature);
+        return publicSignature.verify(signatureBytes);
+    }
+
 }

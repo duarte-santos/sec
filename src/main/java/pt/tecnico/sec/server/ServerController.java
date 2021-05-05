@@ -6,9 +6,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import pt.tecnico.sec.client.Location;
-import pt.tecnico.sec.client.LocationReport;
 import pt.tecnico.sec.client.ObtainLocationRequest;
 import pt.tecnico.sec.client.SecureMessage;
+import pt.tecnico.sec.client.SignedLocationReport;
 import pt.tecnico.sec.healthauthority.ObtainUsersRequest;
 import pt.tecnico.sec.healthauthority.UsersAtLocation;
 import pt.tecnico.sec.server.exception.InvalidSignatureException;
@@ -36,7 +36,7 @@ public class ServerController {
 
     @PostMapping("/location-report")
     public void reportLocation(@RequestBody SecureMessage secureMessage) {
-        LocationReport locationReport;
+        DBLocationReport locationReport;
         try {
             // Decipher and check signatures
             locationReport = _serverApp.decipherAndVerifyReport(secureMessage);
@@ -56,8 +56,7 @@ public class ServerController {
 
         // Save report in database
         System.out.println(locationReport);
-        DBLocationReport report = new DBLocationReport(locationReport);
-        _reportRepository.save(report);
+        _reportRepository.save(locationReport);
     }
 
     // used by clients
@@ -88,7 +87,7 @@ public class ServerController {
         DBLocationReport dbLocationReport = _reportRepository.findReportByEpochAndUser(request.get_userId(), request.get_epoch());
         if (dbLocationReport == null)
             return null;
-        LocationReport report = new LocationReport(dbLocationReport);
+        SignedLocationReport report = new SignedLocationReport(dbLocationReport);
 
         // encrypt using same secret key and client public key, sign using server private key
         ObjectMapper objectMapper = new ObjectMapper();
