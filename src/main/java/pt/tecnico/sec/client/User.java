@@ -116,7 +116,7 @@ public class User {
     }
 
     public void stepRequest(int userId) {
-        System.out.println("[Request sent] Type: Step To: " + getUserURL(userId) + ", From: " + _id);
+        //System.out.println("[Request sent] Type: Step To: " + getUserURL(userId) + ", From: " + _id);
         _restTemplate.getForObject(getUserURL(userId)+ "/step/", Void.class);
     }
 
@@ -249,6 +249,7 @@ public class User {
         return signedReport.get_report();
     }
 
+    @SuppressWarnings("UnnecessaryLocalVariable")
     public LocationReport obtainReport(int epoch) throws Exception {
         if (!(0 <= epoch && epoch <= _epoch))
             throw new IllegalArgumentException("Epoch must be positive and not exceed the current epoch.");

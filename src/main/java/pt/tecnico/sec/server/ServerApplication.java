@@ -52,10 +52,6 @@ public class ServerApplication {
         return getKeyPair().getPrivate();
     }
 
-    public static PublicKey getPublicKey() throws IOException, GeneralSecurityException {
-        return getKeyPair().getPublic();
-    }
-
     public static KeyPair getKeyPair() throws IOException, GeneralSecurityException {
         if (_keyPair == null) fetchRSAKeyPair();
         return _keyPair;

@@ -18,7 +18,6 @@ public class RSAKeyGenerator {
 
     public static final String KEYS_PATH = "src/main/resources/keys/";
 
-    @SuppressWarnings("ResultOfMethodCallIgnored")
     public static void main(String[] args) throws Exception {
 
         try {
@@ -34,6 +33,7 @@ public class RSAKeyGenerator {
         }
     }
 
+    @SuppressWarnings("ResultOfMethodCallIgnored")
     public static void writeKeyPairs(int userCount) throws Exception {
         try {
             // create key directory if it doesnt exist already
@@ -97,7 +97,7 @@ public class RSAKeyGenerator {
 
     @SuppressWarnings("ResultOfMethodCallIgnored")
     public static PublicKey readPublicKey(String publicKeyPath) throws GeneralSecurityException, IOException {
-        System.out.println("Reading public key from file " + publicKeyPath + " ...");
+        //System.out.println("Reading public key from file " + publicKeyPath + " ...");
         FileInputStream pubFis = new FileInputStream(publicKeyPath);
         byte[] pubEncoded = new byte[pubFis.available()];
         pubFis.read(pubEncoded);
@@ -110,7 +110,7 @@ public class RSAKeyGenerator {
 
     @SuppressWarnings("ResultOfMethodCallIgnored")
     public static PrivateKey readPrivateKey(String privateKeyPath) throws GeneralSecurityException, IOException {
-        System.out.println("Reading private key from file " + privateKeyPath + " ...");
+        //System.out.println("Reading private key from file " + privateKeyPath + " ...");
         FileInputStream privFis = new FileInputStream(privateKeyPath);
         byte[] privEncoded = new byte[privFis.available()];
         privFis.read(privEncoded);
@@ -165,24 +165,6 @@ public class RSAKeyGenerator {
 
     @SuppressWarnings("BooleanMethodIsAlwaysInverted")
     public static boolean verify(byte[] data, String signature, PublicKey key) throws Exception {
-        Signature publicSignature = Signature.getInstance("SHA256withRSA");
-        publicSignature.initVerify(key);
-        publicSignature.update(data);
-        byte[] signatureBytes = Base64.getDecoder().decode(signature);
-        return publicSignature.verify(signatureBytes);
-    }
-
-    public static String sign(String dataString, PrivateKey key) throws Exception {
-        byte[] data = Base64.getDecoder().decode(dataString);
-        Signature privateSignature = Signature.getInstance("SHA256withRSA");
-        privateSignature.initSign(key);
-        privateSignature.update(data);
-        byte[] signatureBytes = privateSignature.sign();
-        return Base64.getEncoder().encodeToString(signatureBytes);
-    }
-
-    public static boolean verify(String dataString, String signature, PublicKey key) throws Exception {
-        byte[] data = Base64.getDecoder().decode(dataString);
         Signature publicSignature = Signature.getInstance("SHA256withRSA");
         publicSignature.initVerify(key);
         publicSignature.update(data);

@@ -89,37 +89,50 @@ public class LocationReport {
         return RSAKeyGenerator.readPublicKey(keyPath);
     }
 
-    public int verifyProofs() throws Exception {
+    public boolean isProofValid(LocationProof signedProof, Set<Integer> prevWitnessIds) throws Exception {
+        ProofData proofData = signedProof.get_proofData();
 
-        Set<Integer> witnessIds = new HashSet<>();
         ObjectMapper objectMapper = new ObjectMapper();
-        List<LocationProof> allProofs = new ArrayList<>(_proofs);
+        byte[] data = objectMapper.writeValueAsBytes(proofData);
+        String signature = signedProof.get_signature();
+        PublicKey clientKey = getClientPublicKey(signedProof.get_witnessId());
 
-        for (LocationProof signedProof : allProofs) {
+        return !( signature == null || !RSAKeyGenerator.verify(data, signature, clientKey)
+                || proofData.get_epoch() != _epoch
+                || !isNearby(proofData.get_location())
+                || !proofData.get_type().equals(SUCCESS)
+                || proofData.get_proverId() != _userId
+                || prevWitnessIds.contains(proofData.get_witnessId())
+                || proofData.get_witnessId() == _userId);
+    }
 
-            ProofData proofData = signedProof.get_proofData();
+    public int verifyProofs() throws Exception {
+        Set<Integer> prevWitnessIds = new HashSet<>();
 
-            byte[] data = objectMapper.writeValueAsBytes(proofData);
-            String signature = signedProof.get_signature();
-            PublicKey clientKey = getClientPublicKey(signedProof.get_witnessId());
-
-            if ( signature == null || !RSAKeyGenerator.verify(data, signature, clientKey)
-                    || proofData.get_epoch() != _epoch
-                    || !isNearby(proofData.get_location())
-                    || !proofData.get_type().equals(SUCCESS)
-                    || proofData.get_proverId() != _userId
-                    || witnessIds.contains(proofData.get_witnessId())
-                    || proofData.get_witnessId() == _userId
-            ) {
+        for (LocationProof signedProof : _proofs) {
+            if ( isProofValid(signedProof, prevWitnessIds) )
+                prevWitnessIds.add( signedProof.get_witnessId() ); // keep track of witnesses, can't be repeated
+            else
                 System.out.println("Invalid LocationProof: " + signedProof);
-                _proofs.remove(signedProof); // remove invalid proof from report
-            }
-
-            witnessIds.add(proofData.get_witnessId());
-
         }
+        return prevWitnessIds.size(); // valid proof count
+    }
 
-        return _proofs.size(); // valid proof count
+    public List<LocationProof> getValidProofs() {
+        Set<Integer> prevWitnessIds = new HashSet<>();
+        List<LocationProof> validProofs = new ArrayList<>();
+
+        for (LocationProof signedProof : _proofs) {
+            try {
+                if (isProofValid(signedProof, prevWitnessIds)) {
+                    prevWitnessIds.add(signedProof.get_witnessId());
+                    validProofs.add(signedProof);
+                }
+            } catch (Exception ignored) {
+                // function is used to print, ignore exception
+            }
+        }
+        return validProofs;
     }
 
     private boolean isNearby(Location location) {
@@ -133,7 +146,7 @@ public class LocationReport {
                 "_userId=" + _userId +
                 ", _epoch=" + _epoch +
                 ", _location=" + _location +
-                ", _proofs=" + _proofs +
+                ", _proofs=" + getValidProofs() +
                 '}';
     }
 }

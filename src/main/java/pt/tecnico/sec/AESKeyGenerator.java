@@ -6,8 +6,6 @@ import javax.crypto.spec.SecretKeySpec;
 import java.security.*;
 import java.util.Base64;
 
-import static javax.xml.bind.DatatypeConverter.printHexBinary;
-
 public class AESKeyGenerator {
 
     /* ========================================================== */
@@ -20,7 +18,7 @@ public class AESKeyGenerator {
         keyGen.init(128);
         Key key = keyGen.generateKey();
         byte[] encoded = key.getEncoded();
-        System.out.println( "New AES secret key: " + printHexBinary(encoded) );
+        //System.out.println( "New AES secret key: " + printHexBinary(encoded) );
         return new SecretKeySpec(encoded, 0, 16, "AES");
     }
 
