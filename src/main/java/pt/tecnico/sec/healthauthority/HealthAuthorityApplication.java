@@ -14,13 +14,10 @@ import pt.tecnico.sec.client.*;
 import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
 import javax.crypto.SecretKey;
-import java.io.IOException;
-import java.security.GeneralSecurityException;
 import java.security.KeyPair;
+import java.security.PrivateKey;
 import java.security.PublicKey;
-import java.util.Collections;
-import java.util.NoSuchElementException;
-import java.util.Scanner;
+import java.util.*;
 
 import static java.lang.System.exit;
 
@@ -46,7 +43,7 @@ public class HealthAuthorityApplication {
             ====================================================================
             """;
     
-    private static final int _serverCount;
+    private static int _serverCount;
 
     public static void main(String[] args) {
         try {
@@ -57,7 +54,7 @@ public class HealthAuthorityApplication {
             app.run(args);
         }
         catch (Exception e) {
-            System.out.println(EXCEPTION_STR + e.getMessage());
+            System.out.println(e.getMessage());
             System.out.println(USAGE);
         }
     }
@@ -105,18 +102,19 @@ public class HealthAuthorityApplication {
 
                             // Create request
                             SecretKey secretKey = AESKeyGenerator.makeAESKey();
-                            SecureMessage secureRequest = makeObtainLocationRequest(keyPair, serverKey, id, epoch, secretKey);
+                            ObtainLocationRequest locationRequest = new ObtainLocationRequest(id, epoch);
+                            ObjectMapper objectMapper = new ObjectMapper();
+                            byte[] requestBytes = objectMapper.writeValueAsBytes(locationRequest);
 
                             // Perform request
-                            HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
-                            SecureMessage[] secureResponse = postToServer(restTemplate, request, "/obtain-location-report-ha");
+                            byte[] responseBytes = postToServer(restTemplate, keyPair.getPrivate(), serverKeys, requestBytes, secretKey, "/obtain-location-report-ha");
 
                             // Check response
-                            if (secureResponse.length == 0 || secureResponse[0] == null) {
+                            if (responseBytes == null) {
                                 System.out.println("Location Report not found");
                                 continue;
                             }
-                            SignedLocationReport signedReport = checkObtainLocationResponse(keyPair, serverKey, secureResponse[0], secretKey, id, epoch);
+                            SignedLocationReport signedReport = checkObtainLocationResponse(responseBytes, id, epoch);
                             LocationReport report = checkLocationReport(signedReport, RSAKeyGenerator.readClientPublicKey(signedReport.get_userId()));
 
                             // Print report
@@ -133,16 +131,17 @@ public class HealthAuthorityApplication {
 
                             // Create request
                             SecretKey secretKey = AESKeyGenerator.makeAESKey();
-                            SecureMessage secureRequest = makeObtainUsersRequest(keyPair, serverKey, location, epoch, secretKey);
+                            ObtainUsersRequest usersRequest = new ObtainUsersRequest(location, epoch);
+                            ObjectMapper objectMapper = new ObjectMapper();
+                            byte[] requestBytes = objectMapper.writeValueAsBytes(usersRequest);
 
                             // Perform request
-                            HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
-                            SecureMessage[] secureResponse = postToServer(restTemplate, request, "/users");
-                            if (secureResponse.length == 0 || secureResponse[0] == null)
+                            byte[] responseBytes = postToServer(restTemplate, keyPair.getPrivate(), serverKeys, requestBytes, secretKey, "/users");
+                            if (responseBytes == null)
                                 throw new IllegalArgumentException("Error in response");
 
                             // Check response
-                            UsersAtLocation usersAtLocation = checkObtainUsersResponse(keyPair, serverKey, secureResponse[0], secretKey, location, epoch);
+                            UsersAtLocation usersAtLocation = checkObtainUsersResponse(responseBytes, location, epoch);
                             for (SignedLocationReport signedReport : usersAtLocation.get_reports())
                                 checkLocationReport(signedReport, RSAKeyGenerator.readClientPublicKey(signedReport.get_userId()));
 
@@ -171,7 +170,12 @@ public class HealthAuthorityApplication {
     /* ====[              Auxiliary functions               ]==== */
     /* ========================================================== */
 
-    private String[] getServerAdresses() {
+    public String getServerURL(int serverId) {
+        int serverPort = SERVER_BASE_PORT + serverId;
+        return "http://localhost:" + serverPort;
+    }
+
+    private String[] getServerURLs() {
         String[] servers = new String[_serverCount];
         int serverPort;
         for (int serverId = 0; serverId < _serverCount; serverId++) {
@@ -181,14 +185,26 @@ public class HealthAuthorityApplication {
         return servers;
     }
 
-    private SecureMessage[] postToServer(RestTemplate restTemplate, SecureMessage secureMessage, String endpoint) {
-        SecureMessage[] messages = new SecureMessage[_serverCount];
-        HttpEntity<SecureMessage> request = new HttpEntity<>(secureMessage);
-        int serverId = 0;
-        for (String serverAdress : getServerAdresses()) {
-            messages[serverId++] = restTemplate.postForObject(serverAdress + endpoint, request, SecureMessage.class);
+    private byte[] postToServer(RestTemplate restTemplate, PrivateKey privateKey, PublicKey[] serverKeys, byte[] messageBytes, SecretKey secretKey, String endpoint) throws Exception {
+        List<byte[]> responsesBytes = new ArrayList<>();
+        for (int serverId = 0; serverId < serverKeys.length; serverId++) {
+            PublicKey serverKey = serverKeys[serverId];
+            SecureMessage secureRequest = new SecureMessage(messageBytes, secretKey, serverKey, privateKey);
+            HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
+            SecureMessage secureResponse = restTemplate.postForObject(getServerURL(serverId) + endpoint, request, SecureMessage.class);
+
+            if (secureResponse == null) {
+                responsesBytes.add(null);
+                continue;
+            }
+
+            // Check response's freshness, signature and decipher
+            if (!secureResponse.getSecretKey(privateKey).equals( secretKey ))
+                throw new IllegalArgumentException("Server response not fresh!");
+            responsesBytes.add( secureResponse.decipherAndVerify(privateKey, serverKey) );
         }
-        return messages;
+
+        return responsesBytes.get(0); //FIXME
     }
 
     public LocationReport checkLocationReport(SignedLocationReport signedReport, PublicKey verifyKey) throws Exception {
@@ -206,20 +222,7 @@ public class HealthAuthorityApplication {
     /* ====[             Obtain Location Report             ]==== */
     /* ========================================================== */
 
-    public SecureMessage makeObtainLocationRequest(KeyPair keyPair, PublicKey serverKey, int id, int epoch, SecretKey secretKey) throws Exception {
-        ObtainLocationRequest locationRequest = new ObtainLocationRequest(id, epoch);
-        ObjectMapper objectMapper = new ObjectMapper();
-        byte[] bytes = objectMapper.writeValueAsBytes(locationRequest);
-        return new SecureMessage(bytes, secretKey, serverKey, keyPair.getPrivate());
-    }
-
-    public SignedLocationReport checkObtainLocationResponse(KeyPair keyPair, PublicKey serverKey, SecureMessage secureResponse, SecretKey secretKey, int id, int epoch) throws Exception {
-        // Check response's secret key for freshness
-        if (!secureResponse.getSecretKey(keyPair.getPrivate()).equals( secretKey ))
-            throw new IllegalArgumentException("Server response not fresh!");
-
-        // Decipher and check response signature
-        byte[] messageBytes = secureResponse.decipherAndVerify(keyPair.getPrivate(), serverKey);
+    public SignedLocationReport checkObtainLocationResponse(byte[] messageBytes, int id, int epoch) throws Exception {
         SignedLocationReport report = SignedLocationReport.getFromBytes(messageBytes);
 
         // Check content
@@ -234,20 +237,7 @@ public class HealthAuthorityApplication {
     /* ====[            Obtain Users at Location            ]==== */
     /* ========================================================== */
 
-    public SecureMessage makeObtainUsersRequest(KeyPair keyPair, PublicKey serverKey, Location location, int epoch, SecretKey secretKey) throws Exception {
-        ObtainUsersRequest usersRequest = new ObtainUsersRequest(location, epoch);
-        ObjectMapper objectMapper = new ObjectMapper();
-        byte[] bytes = objectMapper.writeValueAsBytes(usersRequest);
-        return new SecureMessage(bytes, secretKey, serverKey, keyPair.getPrivate());
-    }
-
-    public UsersAtLocation checkObtainUsersResponse(KeyPair keyPair, PublicKey serverKey, SecureMessage secureResponse, SecretKey secretKey, Location location, int epoch) throws Exception {
-        // Check response's secret key for freshness
-        if (!secureResponse.getSecretKey(keyPair.getPrivate()).equals( secretKey ))
-            throw new IllegalArgumentException("Server response not fresh!");
-
-        // Decipher and check response signature
-        byte[] messageBytes = secureResponse.decipherAndVerify(keyPair.getPrivate(), serverKey);
+    public UsersAtLocation checkObtainUsersResponse(byte[] messageBytes, Location location, int epoch) throws Exception {
         UsersAtLocation response = UsersAtLocation.getFromBytes(messageBytes);
 
         // Check content

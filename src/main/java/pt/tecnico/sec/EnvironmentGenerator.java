@@ -25,7 +25,7 @@ public class EnvironmentGenerator {
             int epochCount = Integer.parseInt(args[2]);
             int userCount  = Integer.parseInt(args[3]);
             _serverCount  = Integer.parseInt(args[4]);
-            if (nX <= 0 || nY <= 0 || epochCount <= 0 || userCount <= 0 || serverCount <= 0)
+            if (nX <= 0 || nY <= 0 || epochCount <= 0 || userCount <= 0 || _serverCount <= 0)
                 throw new NumberFormatException();
 
             writeEnvironmentJSON(nX, nY, epochCount, userCount);

@@ -111,11 +111,11 @@ public class RSAKeyGenerator {
         return keyFacPub.generatePublic(pubSpec);
     }
 
-    public static PublicKey readClientPublicKey(int clientId) {
+    public static PublicKey readClientPublicKey(int clientId) throws GeneralSecurityException, IOException {
         return readPublicKey(KEYS_PATH + "c" + clientId + ".pub");
     }
 
-    public static PublicKey readServerPublicKey(int serverId) {
+    public static PublicKey readServerPublicKey(int serverId) throws GeneralSecurityException, IOException {
         return readPublicKey(KEYS_PATH + "s" + serverId + ".pub");
     }
 

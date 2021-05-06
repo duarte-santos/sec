@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.client.*;
 import pt.tecnico.sec.healthauthority.ObtainUsersRequest;
 import pt.tecnico.sec.healthauthority.UsersAtLocation;
@@ -55,7 +56,7 @@ public class ServerController {
         // encrypt using same secret key and client/HA public key, sign using server private key
         ObjectMapper objectMapper = new ObjectMapper();
         byte[] bytes = objectMapper.writeValueAsBytes(report);
-        PublicKey cipherKey = fromHA ? _serverApp.getHAPublicKey() : _serverApp.getClientPublicKey(report.get_userId());
+        PublicKey cipherKey = fromHA ? _serverApp.getHAPublicKey() : RSAKeyGenerator.readClientPublicKey(report.get_userId());
         return new SecureMessage(bytes, secretKey, cipherKey, _serverApp.getPrivateKey());
     }
 
@@ -127,7 +128,7 @@ public class ServerController {
         // encrypt using same secret key and client public key, sign using server private key
         ObjectMapper objectMapper = new ObjectMapper();
         byte[] bytes = objectMapper.writeValueAsBytes(locationProofs);
-        PublicKey cipherKey = _serverApp.getClientPublicKey(witnessId);
+        PublicKey cipherKey = RSAKeyGenerator.readClientPublicKey(witnessId);
         return new SecureMessage(bytes, secretKey, cipherKey, _serverApp.getPrivateKey());
     }
 

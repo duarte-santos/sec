@@ -39,13 +39,13 @@ class ServerApplicationTests {
     private KeyPair keyPair1;
     private KeyPair keyPair2;
     private KeyPair keyPair3;
-    private PublicKey serverKey;
+    private PublicKey[] serverKeys;
 
 
     @BeforeAll
     static void generate() throws Exception {
         EnvironmentGenerator.writeEnvironmentJSON(4, 4, 4, 4);
-        RSAKeyGenerator.writeKeyPairs(4);
+        RSAKeyGenerator.writeKeyPairs(4, 1);
     }
 
     @BeforeEach
@@ -56,17 +56,17 @@ class ServerApplicationTests {
 
         // get keys
         String keysPath = RSAKeyGenerator.KEYS_PATH;
-        serverKey = RSAKeyGenerator.readPublicKey(keysPath + "server.pub");
+        serverKeys[0] = RSAKeyGenerator.readPublicKey(keysPath + "server.pub");
         keyPair0 = RSAKeyGenerator.readKeyPair(keysPath + 0 + ".pub", keysPath + 0 + ".priv");
         keyPair1 = RSAKeyGenerator.readKeyPair(keysPath + 1 + ".pub", keysPath + 1 + ".priv");
         keyPair2 = RSAKeyGenerator.readKeyPair(keysPath + 2 + ".pub", keysPath + 2 + ".priv");
         keyPair3 = RSAKeyGenerator.readKeyPair(keysPath + 3 + ".pub", keysPath + 2 + ".priv");
 
         // create users
-        user0 = new User(environment.getGrid(0), 0, keyPair0, serverKey);
-        user1 = new User(environment.getGrid(0), 1, keyPair1, serverKey);
-        user2 = new User(environment.getGrid(0), 2, keyPair2, serverKey);
-        user3 = new User(environment.getGrid(0), 3, keyPair3, serverKey);
+        user0 = new User(environment.getGrid(0), 0, keyPair0, serverKeys);
+        user1 = new User(environment.getGrid(0), 1, keyPair1, serverKeys);
+        user2 = new User(environment.getGrid(0), 2, keyPair2, serverKeys);
+        user3 = new User(environment.getGrid(0), 3, keyPair3, serverKeys);
     }
 
     @AfterAll
@@ -247,7 +247,7 @@ class ServerApplicationTests {
         // encrypt using server public key, sign using client private key
         ObjectMapper objectMapper = new ObjectMapper();
         byte[] bytes = objectMapper.writeValueAsBytes(report);
-        SecureMessage secureLocationReport = new SecureMessage(bytes, serverKey, keyPair.getPrivate());
+        SecureMessage secureLocationReport = new SecureMessage(bytes, serverKeys[0], keyPair.getPrivate());
 
         return secureLocationReport;
     }
@@ -273,7 +273,7 @@ class ServerApplicationTests {
         ObjectMapper objectMapper = new ObjectMapper();
         byte[] bytes = objectMapper.writeValueAsBytes(locationRequest);
         SecretKey secretKey = AESKeyGenerator.makeAESKey();
-        SecureMessage secureRequest = new SecureMessage(bytes, secretKey, serverKey, keyPair0.getPrivate());
+        SecureMessage secureRequest = new SecureMessage(bytes, secretKey, serverKeys[0], keyPair0.getPrivate());
 
         CloseableHttpClient client = HttpClients.createDefault();
         HttpPost httpPost2 = new HttpPost("http://localhost:9000/obtain-location-report");
@@ -292,7 +292,7 @@ class ServerApplicationTests {
         SecureMessage secure = m.readValue(object.toString(), SecureMessage.class);
 
         // Decipher and check signature
-        byte[] messageBytes = secure.decipherAndVerify(keyPair0.getPrivate(), serverKey);
+        byte[] messageBytes = secure.decipherAndVerify(keyPair0.getPrivate(), serverKeys[0]);
         return LocationReport.getFromBytes(messageBytes);
     }
 

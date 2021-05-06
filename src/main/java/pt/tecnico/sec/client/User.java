@@ -63,15 +63,26 @@ public class User {
     /* ====[                   Auxiliary                    ]==== */
     /* ========================================================== */
 
-    private SecureMessage postToServer(byte[] messageBytes, SecretKey secretKey, String endpoint) {
-        SecureMessage[] secureMessages = new SecureMessage[_serverKeys.length];
+    private byte[] postToServer(byte[] messageBytes, SecretKey secretKey, String endpoint) throws Exception {
+        List<byte[]> responsesBytes = new ArrayList<>();
         for (int serverId = 0; serverId < _serverKeys.length; serverId++) {
             PublicKey serverKey = _serverKeys[serverId];
             SecureMessage secureRequest = new SecureMessage(messageBytes, secretKey, serverKey, _keyPair.getPrivate());
-            HttpEntity<SecureMessage> request = new HttpEntity<>(secureMessage);
-            secureMessages[serverId] = _restTemplate.postForObject(getServerURL(serverId) + endpoint, request, SecureMessage.class);
+            HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
+            SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + endpoint, request, SecureMessage.class);
+
+            if (secureResponse == null) {
+                responsesBytes.add(null);
+                continue;
+            }
+
+            // Check response's freshness, signature and decipher
+            if (!secureResponse.getSecretKey(_keyPair.getPrivate()).equals( secretKey ))
+                throw new IllegalArgumentException("Server response not fresh!");
+            responsesBytes.add( secureResponse.decipherAndVerify(_keyPair.getPrivate(), serverKey) );
         }
-        return secureMessages[0];
+
+        return responsesBytes.get(0); //FIXME
     }
 
     public String getUserURL(int userId) {
@@ -220,14 +231,8 @@ public class User {
     /* ====[             Obtain Location Report             ]==== */
     /* ========================================================== */
 
-    public SignedLocationReport checkObtainLocationResponse(SecureMessage secureResponse, SecretKey secretKey, int id, int epoch) throws Exception {
-        // Check response's secret key for freshness
-        if (!secureResponse.getSecretKey(_keyPair.getPrivate()).equals( secretKey ))
-            throw new IllegalArgumentException("Server response not fresh!");
-
-        // Decipher and check response signature
-        byte[] messageBytes = secureResponse.decipherAndVerify(_keyPair.getPrivate(), _serverKey);
-        SignedLocationReport report = SignedLocationReport.getFromBytes(messageBytes);
+    public SignedLocationReport checkObtainLocationResponse(byte[] responseBytes, int id, int epoch) throws Exception {
+        SignedLocationReport report = SignedLocationReport.getFromBytes(responseBytes);
 
         // Check content
         if (report.get_userId() != id || report.get_epoch() != epoch)
@@ -256,14 +261,14 @@ public class User {
         // Create request
         SecretKey secretKey = AESKeyGenerator.makeAESKey();
         ObtainLocationRequest locationRequest = new ObtainLocationRequest(_id, epoch);
-        byte[] bytes = writeValueAsBytes(locationRequest);
+        byte[] requestBytes = writeValueAsBytes(locationRequest);
 
         // Perform request
-        SecureMessage secureResponse = postToServer(bytes, secretKey, "/obtain-location-report");
+        byte[] responseBytes = postToServer(requestBytes, secretKey, "/obtain-location-report");
 
         // Check response
-        if (secureResponse == null) return null;
-        SignedLocationReport signedReport = checkObtainLocationResponse(secureResponse, secretKey, _id, epoch);
+        if (responseBytes == null) return null;
+        SignedLocationReport signedReport = checkObtainLocationResponse(responseBytes, _id, epoch);
         LocationReport report = checkLocationReport(signedReport, _keyPair.getPublic());
 
         return report;
@@ -274,21 +279,12 @@ public class User {
     /* ====[                Request My Proofs               ]==== */
     /* ========================================================== */
 
-    public SecureMessage makeProofsRequest(int id, Set<Integer> epochs, SecretKey secretKey) throws Exception {
-        WitnessProofsRequest witnessProofsRequest = new WitnessProofsRequest(id, epochs);
-        byte[] bytes = writeValueAsBytes(witnessProofsRequest);
-        return new SecureMessage(bytes, secretKey, _serverKey, _keyPair.getPrivate());
-    }
+    public List<LocationProof> checkRequestProofsResponse(byte[] responseBytes, int witnessId, Set<Integer> epochs) throws Exception {
+        if (responseBytes == null)
+            throw new IllegalArgumentException("Bad server response!");
 
-    public List<LocationProof> checkRequestProofsResponse(SecureMessage secureResponse, SecretKey secretKey, int witnessId, Set<Integer> epochs) throws Exception {
-        // Check response's secret key for freshness
-        if (!secureResponse.getSecretKey(_keyPair.getPrivate()).equals( secretKey ))
-            throw new IllegalArgumentException("Server response not fresh!");
-
-        // Decipher and check response signature
-        byte[] messageBytes = secureResponse.decipherAndVerify(_keyPair.getPrivate(), _serverKey);
         ObjectMapper objectMapper = new ObjectMapper();
-        List<LocationProof> proofs = objectMapper.readValue(messageBytes, new TypeReference<>(){});
+        List<LocationProof> proofs = objectMapper.readValue(responseBytes, new TypeReference<>(){});
 
         // Check content
         for (LocationProof proof : proofs) //FIXME invalid proofs?
@@ -306,13 +302,13 @@ public class User {
         // Create request
         SecretKey secretKey = AESKeyGenerator.makeAESKey();
         WitnessProofsRequest witnessProofsRequest = new WitnessProofsRequest(_id, epochs);
-        byte[] bytes = writeValueAsBytes(witnessProofsRequest);
+        byte[] requestBytes = writeValueAsBytes(witnessProofsRequest);
 
         // Perform request
-        SecureMessage secureResponse = postToServer(bytes, secretKey, "/request-proofs");
+        byte[] responseBytes = postToServer(requestBytes, secretKey, "/request-proofs");
 
         // Check response
-        List<LocationProof> proofs = checkRequestProofsResponse(secureResponse, secretKey, _id, epochs);
+        List<LocationProof> proofs = checkRequestProofsResponse(responseBytes, _id, epochs);
         for (LocationProof proof : proofs)
             proof.verify(_keyPair.getPublic()); // throws exception
 
