@@ -22,7 +22,7 @@ import static java.lang.System.exit;
 public class ClientApplication {
 
     /* constants definition */
-    private static final String USAGE = "Usage: ./mvnw spring-boot:run -Dspring-boot.run.arguments=\"[ID]\" -\"Dstart-class=pt.tecnico.sec.client.ClientApplication";
+    private static final String USAGE = "Usage: ./mvnw spring-boot:run -Dspring-boot.run.arguments=\"[userId serverCount]\" -\"Dstart-class=pt.tecnico.sec.client.ClientApplication";
     private static final String EXCEPTION_STR = "Caught exception with description: ";
     private static final String EXIT_CMD = "exit";
     private static final String HELP_CMD = "help";
@@ -50,13 +50,23 @@ public class ClientApplication {
             if (!userIds.contains(id))  // client must exist in environment
                 throw new NumberFormatException("Invalid user ID. Please choose an ID value from the ones shown.");
 
+            // get serverIds from the serverCount
+            int serverCount = Integer.parseInt(args[1]);
+            if (serverCount <= 0)  // client must exist in environment
+                throw new NumberFormatException("Argument 'number of users' be a positive integer.");
+
             // get keys
-            String keysPath = RSAKeyGenerator.KEYS_PATH;
-            KeyPair keyPair = RSAKeyGenerator.readKeyPair(keysPath + id + ".pub", keysPath + id + ".priv");
-            PublicKey serverKey = RSAKeyGenerator.readPublicKey(keysPath + "server.pub");
+            String keysPath = RSAKeyGenerator.KEYS_PATH + "c" + id;
+            KeyPair keyPair = RSAKeyGenerator.readKeyPair(keysPath + ".pub", keysPath + ".priv");
+            // get all server keys
+            PublicKey[] serverKeys = new PublicKey[serverCount];
+            for (int serverId = 0; serverId < serverCount; serverId++) {
+                PublicKey serverKey = RSAKeyGenerator.readServerPublicKey(serverId);
+                serverKeys[serverId] = serverKey;
+            }
 
             // create user
-            _user = new User(_environment.getGrid(_epoch), id, keyPair, serverKey);
+            _user = new User(_environment.getGrid(_epoch), id, keyPair, serverKeys);
             System.out.println("The user \"C00lD0060 No." + id + "\" has SPAWNED.\n");
 
             // create spring application

@@ -28,9 +28,12 @@ import static java.lang.System.exit;
 public class HealthAuthorityApplication {
 
     // constants
-    private static final int HA_PORT     = 6000;
-    private static final int SERVER_PORT = 9000;
-    private static final String HELP     = """
+    private static final int SERVER_BASE_PORT = 9000;
+    private static final int BYZANTINE_USERS  = 1;
+    private static final int HA_PORT          = 6000;
+
+    private static final String USAGE = "Usage: ./mvnw spring-boot:run -Dspring-boot.run.arguments=\"[serverCount]\" -\"Dstart-class=pt.tecnico.sec.healthauthority.HealthAuthorityApplication";
+    private static final String HELP          = """
             ======================== Available Commands ========================
             obtainLocationReport, [userId], [ep]
             > returns the position of "userId" at the epoch "ep"
@@ -42,12 +45,21 @@ public class HealthAuthorityApplication {
             > exits the Health Authority application
             ====================================================================
             """;
-    private static final int BYZANTINE_USERS = 1;
+    
+    private static final int _serverCount;
 
     public static void main(String[] args) {
-        SpringApplication app = new SpringApplication(HealthAuthorityApplication.class);
-        app.setDefaultProperties(Collections.singletonMap("server.port", HA_PORT));
-        app.run(args);
+        try {
+            _serverCount = Integer.parseInt(args[0]);
+
+            SpringApplication app = new SpringApplication(HealthAuthorityApplication.class);
+            app.setDefaultProperties(Collections.singletonMap("server.port", HA_PORT));
+            app.run(args);
+        }
+        catch (Exception e) {
+            System.out.println(EXCEPTION_STR + e.getMessage());
+            System.out.println(USAGE);
+        }
     }
 
     @Bean
@@ -61,7 +73,12 @@ public class HealthAuthorityApplication {
             // get keys
             String keysPath = RSAKeyGenerator.KEYS_PATH;
             KeyPair keyPair = RSAKeyGenerator.readKeyPair(keysPath + "ha.pub", keysPath + "ha.priv");
-            PublicKey serverKey = RSAKeyGenerator.readPublicKey(keysPath + "server.pub");
+
+            PublicKey[] serverKeys = new PublicKey[_serverCount];
+            for (int serverId = 0; serverId < _serverCount; serverId++){
+                serverKeys[serverId] = RSAKeyGenerator.readServerPublicKey(serverId);
+            }
+            PublicKey serverKey = serverKeys[0]; // FIXME
 
             try (Scanner scanner = new Scanner(System.in)) {
                 while (true) {
@@ -92,15 +109,15 @@ public class HealthAuthorityApplication {
 
                             // Perform request
                             HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
-                            SecureMessage secureResponse = restTemplate.postForObject(getServerURL() + "/obtain-location-report-ha", request, SecureMessage.class);
+                            SecureMessage[] secureResponse = postToServer(restTemplate, request, "/obtain-location-report-ha");
 
                             // Check response
-                            if (secureResponse == null) {
+                            if (secureResponse.length == 0 || secureResponse[0] == null) {
                                 System.out.println("Location Report not found");
                                 continue;
                             }
-                            SignedLocationReport signedReport = checkObtainLocationResponse(keyPair, serverKey, secureResponse, secretKey, id, epoch);
-                            LocationReport report = checkLocationReport(signedReport, getClientPublicKey(signedReport.get_userId()));
+                            SignedLocationReport signedReport = checkObtainLocationResponse(keyPair, serverKey, secureResponse[0], secretKey, id, epoch);
+                            LocationReport report = checkLocationReport(signedReport, RSAKeyGenerator.readClientPublicKey(signedReport.get_userId()));
 
                             // Print report
                             System.out.println( "User " + id + ", epoch " + epoch + ", location: " + report.get_location() + "\nReport: " + report );
@@ -120,14 +137,14 @@ public class HealthAuthorityApplication {
 
                             // Perform request
                             HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
-                            SecureMessage secureResponse = restTemplate.postForObject(getServerURL() + "/users", request, SecureMessage.class);
-                            if (secureResponse == null)
+                            SecureMessage[] secureResponse = postToServer(restTemplate, request, "/users");
+                            if (secureResponse.length == 0 || secureResponse[0] == null)
                                 throw new IllegalArgumentException("Error in response");
 
                             // Check response
-                            UsersAtLocation usersAtLocation = checkObtainUsersResponse(keyPair, serverKey, secureResponse, secretKey, location, epoch);
+                            UsersAtLocation usersAtLocation = checkObtainUsersResponse(keyPair, serverKey, secureResponse[0], secretKey, location, epoch);
                             for (SignedLocationReport signedReport : usersAtLocation.get_reports())
-                                checkLocationReport(signedReport, getClientPublicKey(signedReport.get_userId()));
+                                checkLocationReport(signedReport, RSAKeyGenerator.readClientPublicKey(signedReport.get_userId()));
 
                             // Print reports
                             System.out.println(usersAtLocation);
@@ -154,13 +171,24 @@ public class HealthAuthorityApplication {
     /* ====[              Auxiliary functions               ]==== */
     /* ========================================================== */
 
-    private String getServerURL() {
-        return "http://localhost:" + SERVER_PORT;
+    private String[] getServerAdresses() {
+        String[] servers = new String[_serverCount];
+        int serverPort;
+        for (int serverId = 0; serverId < _serverCount; serverId++) {
+            serverPort = SERVER_BASE_PORT + serverId;
+            servers[serverId] = "http://localhost:" + serverPort;
+        }
+        return servers;
     }
 
-    public static PublicKey getClientPublicKey(int clientId) throws GeneralSecurityException, IOException {
-        String keyPath = RSAKeyGenerator.KEYS_PATH + clientId + ".pub";
-        return RSAKeyGenerator.readPublicKey(keyPath);
+    private SecureMessage[] postToServer(RestTemplate restTemplate, SecureMessage secureMessage, String endpoint) {
+        SecureMessage[] messages = new SecureMessage[_serverCount];
+        HttpEntity<SecureMessage> request = new HttpEntity<>(secureMessage);
+        int serverId = 0;
+        for (String serverAdress : getServerAdresses()) {
+            messages[serverId++] = restTemplate.postForObject(serverAdress + endpoint, request, SecureMessage.class);
+        }
+        return messages;
     }
 
     public LocationReport checkLocationReport(SignedLocationReport signedReport, PublicKey verifyKey) throws Exception {

@@ -6,9 +6,10 @@ public class Environment {
 
     // Map Epoch -> Grid
     private final Map<Integer, Grid> _environment = new HashMap<>();
+    private final int _serverCount;
 
-    public Environment() {
-        // empty constructor
+    public Environment(int serverCount) {
+        _serverCount = serverCount;
     }
 
     public Grid getGrid(int epoch) {
@@ -26,6 +27,10 @@ public class Environment {
 
     public void addEpochGrid(int epoch, Grid grid) {
         _environment.put(epoch, grid);
+    }
+
+    public int getServerCount() {
+        return _serverCount;
     }
 
 }

@@ -22,17 +22,24 @@ public class ServerApplication {
 
     /* constants definition */
     private static final String USAGE = "Usage: ./mvnw spring-boot:run -\"Dstart-class=pt.tecnico.sec.server.ServerApplication";
-    private static final int SERVER_PORT = 9000;
+    private static final int BASE_PORT = 9000;
     private static final int BYZANTINE_USERS = 1;
 
     private static KeyPair _keyPair;
+    private static int _serverId;
 
     public static void main(String[] args) {
         try {
+            // get serverId to determine its port
+            _serverId = Integer.parseInt(args[0]);
+            // TODO : check if serverId is valid (ex: according to the serverCount)
+            int serverPort = BASE_PORT + _serverId;
+
             SpringApplication springApplication = new SpringApplication(ServerApplication.class);
-            springApplication.setDefaultProperties(Collections.singletonMap("server.port", String.valueOf(SERVER_PORT)));
+            springApplication.setDefaultProperties(Collections.singletonMap("server.port", String.valueOf(serverPort)));
             springApplication.run(args);
-        } catch (Exception e) {
+        } 
+        catch (Exception e) {
             System.out.println(e.getMessage());
             System.out.println(USAGE);
         }
@@ -45,7 +52,7 @@ public class ServerApplication {
 
     public static void fetchRSAKeyPair() throws IOException, GeneralSecurityException {
         // get server's keyPair
-        String keysPath = RSAKeyGenerator.KEYS_PATH + "server";
+        String keysPath = RSAKeyGenerator.KEYS_PATH + "s" + _serverId;
         _keyPair = RSAKeyGenerator.readKeyPair(keysPath + ".pub", keysPath + ".priv");
     }
 
@@ -63,11 +70,6 @@ public class ServerApplication {
         return RSAKeyGenerator.readPublicKey(keyPath);
     }
 
-    public static PublicKey getClientPublicKey(int clientId) throws GeneralSecurityException, IOException {
-        String keyPath = RSAKeyGenerator.KEYS_PATH + clientId + ".pub";
-        return RSAKeyGenerator.readPublicKey(keyPath);
-    }
-
 
     /* ========================================================== */
     /* ====[              Secure communication              ]==== */
@@ -79,7 +81,7 @@ public class ServerApplication {
         LocationReport locationReport = LocationReport.getFromBytes(messageBytes);
 
         // check report signature
-        PublicKey verifyKey = getClientPublicKey(locationReport.get_userId());
+        PublicKey verifyKey = RSAKeyGenerator.readClientPublicKey(locationReport.get_userId());
         secureMessage.verify(messageBytes, verifyKey);
 
         // check proofs signatures
@@ -96,7 +98,7 @@ public class ServerApplication {
         ObtainLocationRequest request = ObtainLocationRequest.getFromBytes(messageBytes);
 
         // check report signature
-        PublicKey verifyKey = fromHA ? getHAPublicKey() : getClientPublicKey(request.get_userId());
+        PublicKey verifyKey = fromHA ? getHAPublicKey() : RSAKeyGenerator.readClientPublicKey(request.get_userId());
         secureMessage.verify(messageBytes, verifyKey);
 
         return request;
@@ -108,7 +110,7 @@ public class ServerApplication {
         WitnessProofsRequest request = WitnessProofsRequest.getFromBytes(messageBytes);
 
         // check report signature
-        PublicKey verifyKey = getClientPublicKey(request.get_userId());
+        PublicKey verifyKey = RSAKeyGenerator.readClientPublicKey(request.get_userId());
         secureMessage.verify(messageBytes, verifyKey);
 
         return request;

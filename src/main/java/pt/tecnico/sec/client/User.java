@@ -16,7 +16,7 @@ import java.util.*;
 
 public class User {
     private static final int BASE_PORT = 8000;
-    private static final int SERVER_PORT = 9000;
+    private static final int SERVER_BASE_PORT = 9000;
     private static final int BYZANTINE_USERS = 1;
 
     private RestTemplate _restTemplate;
@@ -28,13 +28,13 @@ public class User {
     private final Map<Integer, List<LocationProof>> _proofs =  new HashMap<>();
 
     private final KeyPair _keyPair;
-    private final PublicKey _serverKey;
+    private final PublicKey[] _serverKeys;
 
-    public User(Grid grid, int id, KeyPair keyPair, PublicKey serverKey) {
+    public User(Grid grid, int id, KeyPair keyPair, PublicKey[] serverKeys) {
         _grid = grid;
         _id = id;
         _keyPair = keyPair;
-        _serverKey = serverKey;
+        _serverKeys = serverKeys;
     }
 
 
@@ -63,13 +63,25 @@ public class User {
     /* ====[                   Auxiliary                    ]==== */
     /* ========================================================== */
 
+    private SecureMessage postToServer(byte[] messageBytes, SecretKey secretKey, String endpoint) {
+        SecureMessage[] secureMessages = new SecureMessage[_serverKeys.length];
+        for (int serverId = 0; serverId < _serverKeys.length; serverId++) {
+            PublicKey serverKey = _serverKeys[serverId];
+            SecureMessage secureRequest = new SecureMessage(messageBytes, secretKey, serverKey, _keyPair.getPrivate());
+            HttpEntity<SecureMessage> request = new HttpEntity<>(secureMessage);
+            secureMessages[serverId] = _restTemplate.postForObject(getServerURL(serverId) + endpoint, request, SecureMessage.class);
+        }
+        return secureMessages[0];
+    }
+
     public String getUserURL(int userId) {
         int port = BASE_PORT + userId;
         return "http://localhost:" + port;
     }
 
-    public String getServerURL() {
-        return "http://localhost:" + SERVER_PORT;
+    public String getServerURL(int serverId) {
+        int serverPort = SERVER_BASE_PORT + serverId;
+        return "http://localhost:" + serverPort;
     }
 
     public List<Integer> findNearbyUsers() {
@@ -189,11 +201,6 @@ public class User {
     /* ====[             Submit Location Report             ]==== */
     /* ========================================================== */
 
-    private void submitLocationReport(SecureMessage secureLocationReport) {
-        HttpEntity<SecureMessage> request = new HttpEntity<>(secureLocationReport);
-        _restTemplate.postForObject(getServerURL() + "/submit-location-report", request, SecureMessage.class);
-    }
-
     public void reportLocation(int epoch, Location epochLocation) throws Exception {
         if (!(0 <= epoch && epoch <= _epoch))
             throw new IllegalArgumentException("Epoch must be positive and not exceed the current epoch.");
@@ -201,30 +208,17 @@ public class User {
         List<LocationProof> epochProofs = getEpochProofs(epoch);
         LocationReport locationReport = new LocationReport(_id, epoch, epochLocation, epochProofs);
         System.out.println(locationReport);
-
+        
         // encrypt using server public key, sign using client private key
+        SecretKey secretKey = AESKeyGenerator.makeAESKey();
         byte[] bytes = writeValueAsBytes(locationReport);
-        SecureMessage secureLocationReport = new SecureMessage(bytes, _serverKey, _keyPair.getPrivate());
-
-        secureLocationReport.verify(bytes, _keyPair.getPublic());
-        submitLocationReport(secureLocationReport);
+        postToServer(bytes, secretKey, "/submit-location-report");
     }
 
 
     /* ========================================================== */
     /* ====[             Obtain Location Report             ]==== */
     /* ========================================================== */
-
-    private SecureMessage obtainLocationReport(SecureMessage secureMessage) {
-        HttpEntity<SecureMessage> request = new HttpEntity<>(secureMessage);
-        return _restTemplate.postForObject(getServerURL() + "/obtain-location-report", request, SecureMessage.class);
-    }
-
-    public SecureMessage makeObtainRequest(int id, int epoch, SecretKey secretKey) throws Exception {
-        ObtainLocationRequest locationRequest = new ObtainLocationRequest(id, epoch);
-        byte[] bytes = writeValueAsBytes(locationRequest);
-        return new SecureMessage(bytes, secretKey, _serverKey, _keyPair.getPrivate());
-    }
 
     public SignedLocationReport checkObtainLocationResponse(SecureMessage secureResponse, SecretKey secretKey, int id, int epoch) throws Exception {
         // Check response's secret key for freshness
@@ -261,10 +255,11 @@ public class User {
 
         // Create request
         SecretKey secretKey = AESKeyGenerator.makeAESKey();
-        SecureMessage secureRequest = makeObtainRequest(_id, epoch, secretKey);
+        ObtainLocationRequest locationRequest = new ObtainLocationRequest(_id, epoch);
+        byte[] bytes = writeValueAsBytes(locationRequest);
 
         // Perform request
-        SecureMessage secureResponse = obtainLocationReport(secureRequest);
+        SecureMessage secureResponse = postToServer(bytes, secretKey, "/obtain-location-report");
 
         // Check response
         if (secureResponse == null) return null;
@@ -278,11 +273,6 @@ public class User {
     /* ========================================================== */
     /* ====[                Request My Proofs               ]==== */
     /* ========================================================== */
-
-    private SecureMessage requestProofs(SecureMessage secureMessage) {
-        HttpEntity<SecureMessage> request = new HttpEntity<>(secureMessage);
-        return _restTemplate.postForObject(getServerURL() + "/request-proofs", request, SecureMessage.class);
-    }
 
     public SecureMessage makeProofsRequest(int id, Set<Integer> epochs, SecretKey secretKey) throws Exception {
         WitnessProofsRequest witnessProofsRequest = new WitnessProofsRequest(id, epochs);
@@ -315,10 +305,11 @@ public class User {
 
         // Create request
         SecretKey secretKey = AESKeyGenerator.makeAESKey();
-        SecureMessage secureRequest = makeProofsRequest(_id, epochs, secretKey);
+        WitnessProofsRequest witnessProofsRequest = new WitnessProofsRequest(_id, epochs);
+        byte[] bytes = writeValueAsBytes(witnessProofsRequest);
 
         // Perform request
-        SecureMessage secureResponse = requestProofs(secureRequest);
+        SecureMessage secureResponse = postToServer(bytes, secretKey, "/request-proofs");
 
         // Check response
         List<LocationProof> proofs = checkRequestProofsResponse(secureResponse, secretKey, _id, epochs);

@@ -21,20 +21,21 @@ public class RSAKeyGenerator {
     public static void main(String[] args) throws Exception {
 
         try {
-            int userCount  = Integer.parseInt(args[0]);
-            if (userCount <= 0)
+            int userCount = Integer.parseInt(args[0]);
+            int serverCount = Integer.parseInt(args[1]);
+            if (userCount <= 0 || serverCount <= 0)
                 throw new NumberFormatException();
 
-            writeKeyPairs(userCount);
+            writeKeyPairs(userCount, serverCount);
         }
         catch (NumberFormatException e) {
-            System.out.println("Argument 'number of users' be a positive integer.");
-            System.out.println("USAGE: ./mvnw spring-boot:run -Dspring-boot.run.arguments=\"[userCount]\" -Dstart-class=pt.tecnico.sec.RSAKeyGenerator");
+            System.out.println("Arguments must positive integers.");
+            System.out.println("USAGE: ./mvnw spring-boot:run -Dspring-boot.run.arguments=\"[userCount] [serverCount]\" -Dstart-class=pt.tecnico.sec.RSAKeyGenerator");
         }
     }
 
     @SuppressWarnings("ResultOfMethodCallIgnored")
-    public static void writeKeyPairs(int userCount) throws Exception {
+    public static void writeKeyPairs(int userCount, int serverCount) throws Exception {
         try {
             // create key directory if it doesnt exist already
             File directory = new File(KEYS_PATH);
@@ -45,9 +46,11 @@ public class RSAKeyGenerator {
             // clean key directory before generating new keys
             FileUtils.cleanDirectory(new File(KEYS_PATH));
             for (int id = 0; id < userCount; id++) {
-                writeKeyPair(KEYS_PATH + id);
+                writeKeyPair(KEYS_PATH + "c" + id);
             }
-            writeKeyPair(KEYS_PATH + "server");
+            for (int id = 0; id < serverCount; id++) {
+                writeKeyPair(KEYS_PATH + "s" + id);
+            }
             writeKeyPair(KEYS_PATH + "ha");
         }
         catch (IOException e) {
@@ -106,6 +109,14 @@ public class RSAKeyGenerator {
         X509EncodedKeySpec pubSpec = new X509EncodedKeySpec(pubEncoded);
         KeyFactory keyFacPub = KeyFactory.getInstance("RSA");
         return keyFacPub.generatePublic(pubSpec);
+    }
+
+    public static PublicKey readClientPublicKey(int clientId) {
+        return readPublicKey(KEYS_PATH + "c" + clientId + ".pub");
+    }
+
+    public static PublicKey readServerPublicKey(int serverId) {
+        return readPublicKey(KEYS_PATH + "s" + serverId + ".pub");
     }
 
     @SuppressWarnings("ResultOfMethodCallIgnored")

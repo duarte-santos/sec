@@ -84,18 +84,13 @@ public class LocationReport {
         return objectMapper.readValue(reportBytes, LocationReport.class);
     }
 
-    public static PublicKey getClientPublicKey(int clientId) throws GeneralSecurityException, IOException {
-        String keyPath = RSAKeyGenerator.KEYS_PATH + clientId + ".pub";
-        return RSAKeyGenerator.readPublicKey(keyPath);
-    }
-
     public boolean isProofValid(LocationProof signedProof, Set<Integer> prevWitnessIds) throws Exception {
         ProofData proofData = signedProof.get_proofData();
 
         ObjectMapper objectMapper = new ObjectMapper();
         byte[] data = objectMapper.writeValueAsBytes(proofData);
         String signature = signedProof.get_signature();
-        PublicKey clientKey = getClientPublicKey(signedProof.get_witnessId());
+        PublicKey clientKey = RSAKeyGenerator.readClientPublicKey(signedProof.get_witnessId());
 
         return !( signature == null || !RSAKeyGenerator.verify(data, signature, clientKey)
                 || proofData.get_epoch() != _epoch

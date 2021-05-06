@@ -16,20 +16,23 @@ public class EnvironmentGenerator {
 
     public static final String ENVIRONMENT_PATH = "src/main/resources/environment.json";
 
+    public static int _serverCount;
+
     public static void main(String[] args) {
         try {
             int nX = Integer.parseInt(args[0]);
             int nY = Integer.parseInt(args[1]);
             int epochCount = Integer.parseInt(args[2]);
             int userCount  = Integer.parseInt(args[3]);
-            if (nX <= 0 || nY <= 0 || epochCount <= 0 || userCount <= 0)
+            _serverCount  = Integer.parseInt(args[4]);
+            if (nX <= 0 || nY <= 0 || epochCount <= 0 || userCount <= 0 || serverCount <= 0)
                 throw new NumberFormatException();
 
             writeEnvironmentJSON(nX, nY, epochCount, userCount);
         }
         catch (NumberFormatException e) {
             System.out.println("All arguments must be positive integers.");
-            System.out.println("USAGE: ./mvnw spring-boot:run -Dspring-boot.run.arguments=\"[nX] [nY] [epochCount] [userCount]\" -Dstart-class=pt.tecnico.sec.EnvironmentGenerator");
+            System.out.println("USAGE: ./mvnw spring-boot:run -Dspring-boot.run.arguments=\"[nX] [nY] [epochCount] [userCount] [serverCount]\" -Dstart-class=pt.tecnico.sec.EnvironmentGenerator");
         }
         catch (IOException e) {
             System.out.println(e.getMessage());
@@ -68,7 +71,7 @@ public class EnvironmentGenerator {
     }
 
     public static Environment parseEnvironmentJSON() throws IOException, ParseException {
-        Environment environment = new Environment();
+        Environment environment = new Environment(_serverCount);
         JSONParser jsonParser = new JSONParser();
         try (FileReader reader = new FileReader(ENVIRONMENT_PATH)) {
             // access all epochs

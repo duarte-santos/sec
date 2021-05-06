@@ -64,7 +64,7 @@ public class ServerController {
     /* ========================================================== */
 
     @PostMapping("/submit-location-report")
-    public void reportLocation(@RequestBody SecureMessage secureMessage) {
+    public SecureMessage reportLocation(@RequestBody SecureMessage secureMessage) {
         DBLocationReport locationReport;
         try {
             // Decipher and check signatures
@@ -86,6 +86,8 @@ public class ServerController {
         // Save report in database
         System.out.println(locationReport);
         _reportRepository.save(locationReport);
+
+        return null; // FIXME : oi sofi :)
     }
 
     @PostMapping("/obtain-location-report")
