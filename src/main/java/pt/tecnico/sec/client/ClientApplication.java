@@ -14,10 +14,7 @@ import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.PublicKey;
-import java.util.Collections;
-import java.util.List;
-import java.util.NoSuchElementException;
-import java.util.Scanner;
+import java.util.*;
 
 import static java.lang.System.exit;
 
@@ -32,6 +29,7 @@ public class ClientApplication {
     private static final String STEP_CMD = "step";
     private static final String SUBMIT_CMD = "submit";
     private static final String OBTAIN_CMD = "obtain";
+    private static final String PROOFS_CMD = "proofs";
     private static final int BASE_PORT = 8000;
 
     private static Environment _environment;
@@ -121,7 +119,7 @@ public class ClientApplication {
                             }
                         }
 
-                        // submit [epoch] - user submits the DBLocation report of the given epoch to the server
+                        // submit, [epoch] - user submits the DBLocation report of the given epoch to the server
                         else if (tokens[0].equals(SUBMIT_CMD) && tokens.length == 2) {
                             int ep = Integer.parseInt(tokens[1]);
                             if (ep >= _epoch) { // check proofs have been obtained
@@ -138,7 +136,7 @@ public class ClientApplication {
                             }
                         }
 
-                        // obtain [epoch] - user asks server for its DBLocation report at the given epoch
+                        // obtain, [epoch] - user asks server for its DBLocation report at the given epoch
                         else if (tokens[0].equals(OBTAIN_CMD) && tokens.length == 2) {
                             int ep = Integer.parseInt(tokens[1]);
                             try {
@@ -147,6 +145,24 @@ public class ClientApplication {
                                     System.out.println("The requested report doesn't exist");
                                 else
                                     System.out.println( "User " + report.get_userId() + ", epoch " + ep + ", location: " + report.get_location() + "\nReport: " + report );
+                            }
+                            catch (Exception e) {
+                                System.out.println(e.getMessage());
+                            }
+                        }
+
+                        // proofs, [epoch1], [epoch2], (...) - user asks server for its proofs' as witness on given epochs
+                        else if (tokens[0].equals(PROOFS_CMD) && tokens.length >= 2) {
+                            Set<Integer> epochs = new HashSet<>();
+                            for (String token : Arrays.copyOfRange(tokens, 1, tokens.length) )
+                                epochs.add( Integer.parseInt(token) );
+
+                            try {
+                                List<LocationProof> proofs = _user.requestMyProofs(epochs);
+                                if (proofs.size() == 0)
+                                    System.out.println("No proofs generated as witness at given epochs");
+                                else
+                                    System.out.println(proofs);
                             }
                             catch (Exception e) {
                                 System.out.println(e.getMessage());
@@ -178,14 +194,17 @@ public class ClientApplication {
     @SuppressWarnings("SameReturnValue")
     private static String getHelpString() {
         return """
-                  ======================= Available Commands =======================
-                  step            - Increase current epoch
-                  submit, [epoch] - Send the user's DBLocation report of the given
-                                     epoch to the server
-                  obtain, [epoch] - Ask the server for the user's DBLocation report
-                                     at the given epoch
-                  exit            - Quit Client App
-                  ==================================================================
+                  ============================= Available Commands =============================
+                  step                       - Increase current epoch
+                  submit, [epoch]            - Send the user's DBLocation report of the given
+                                                epoch to the server
+                  obtain, [epoch]            - Ask the server for the user's DBLocation report
+                                                at the given epoch
+                  proofs, [ep1], [ep2], ...  - Ask the server for the proofs that the user
+                                                generated as witness
+                  exit                       - Quit Client App
+                  ==============================================================================
+
                 """;
     }
 

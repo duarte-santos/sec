@@ -79,6 +79,10 @@ public class SignedLocationReport {
         return _report.get_epoch();
     }
 
+    public LocationProof get_witness_proof(int id) {
+        return _report.get_witness_proof(id);
+    }
+
 
     @Override
     public String toString() {

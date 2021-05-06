@@ -6,6 +6,7 @@ import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.client.LocationReport;
 import pt.tecnico.sec.client.ObtainLocationRequest;
 import pt.tecnico.sec.client.SecureMessage;
+import pt.tecnico.sec.client.WitnessProofsRequest;
 import pt.tecnico.sec.healthauthority.ObtainUsersRequest;
 import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
@@ -89,13 +90,25 @@ public class ServerApplication {
         return new DBLocationReport(locationReport, secureMessage.get_signature());
     }
 
-    public ObtainLocationRequest decipherAndVerifyRequest(SecureMessage secureMessage, boolean fromHA) throws Exception {
+    public ObtainLocationRequest decipherAndVerifyLocationRequest(SecureMessage secureMessage, boolean fromHA) throws Exception {
         // decipher request
         byte[] messageBytes = secureMessage.decipher( getPrivateKey() );
         ObtainLocationRequest request = ObtainLocationRequest.getFromBytes(messageBytes);
 
         // check report signature
         PublicKey verifyKey = fromHA ? getHAPublicKey() : getClientPublicKey(request.get_userId());
+        secureMessage.verify(messageBytes, verifyKey);
+
+        return request;
+    }
+
+    public WitnessProofsRequest decipherAndVerifyProofsRequest(SecureMessage secureMessage) throws Exception {
+        // decipher request
+        byte[] messageBytes = secureMessage.decipher( getPrivateKey() );
+        WitnessProofsRequest request = WitnessProofsRequest.getFromBytes(messageBytes);
+
+        // check report signature
+        PublicKey verifyKey = getClientPublicKey(request.get_userId());
         secureMessage.verify(messageBytes, verifyKey);
 
         return request;

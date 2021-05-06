@@ -1,6 +1,7 @@
 package pt.tecnico.sec.client;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpEntity;
 import org.springframework.web.client.RestTemplate;
@@ -11,10 +12,7 @@ import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 import javax.crypto.SecretKey;
 import java.security.KeyPair;
 import java.security.PublicKey;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class User {
     private static final int BASE_PORT = 8000;
@@ -97,6 +95,11 @@ public class User {
     }
 
     public byte[] writeValueAsBytes(ObtainLocationRequest request) throws JsonProcessingException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        return objectMapper.writeValueAsBytes(request);
+    }
+
+    public byte[] writeValueAsBytes(WitnessProofsRequest request) throws JsonProcessingException {
         ObjectMapper objectMapper = new ObjectMapper();
         return objectMapper.writeValueAsBytes(request);
     }
@@ -188,7 +191,7 @@ public class User {
 
     private void submitLocationReport(SecureMessage secureLocationReport) {
         HttpEntity<SecureMessage> request = new HttpEntity<>(secureLocationReport);
-        _restTemplate.postForObject(getServerURL() + "/location-report", request, SecureMessage.class);
+        _restTemplate.postForObject(getServerURL() + "/submit-location-report", request, SecureMessage.class);
     }
 
     public void reportLocation(int epoch, Location epochLocation) throws Exception {
@@ -223,7 +226,7 @@ public class User {
         return new SecureMessage(bytes, secretKey, _serverKey, _keyPair.getPrivate());
     }
 
-    public SignedLocationReport checkObtainResponse(SecureMessage secureResponse, SecretKey secretKey, int id, int epoch) throws Exception {
+    public SignedLocationReport checkObtainLocationResponse(SecureMessage secureResponse, SecretKey secretKey, int id, int epoch) throws Exception {
         // Check response's secret key for freshness
         if (!secureResponse.getSecretKey(_keyPair.getPrivate()).equals( secretKey ))
             throw new IllegalArgumentException("Server response not fresh!");
@@ -265,10 +268,64 @@ public class User {
 
         // Check response
         if (secureResponse == null) return null;
-        SignedLocationReport signedReport = checkObtainResponse(secureResponse, secretKey, _id, epoch);
+        SignedLocationReport signedReport = checkObtainLocationResponse(secureResponse, secretKey, _id, epoch);
         LocationReport report = checkLocationReport(signedReport, _keyPair.getPublic());
 
         return report;
+    }
+
+
+    /* ========================================================== */
+    /* ====[                Request My Proofs               ]==== */
+    /* ========================================================== */
+
+    private SecureMessage requestProofs(SecureMessage secureMessage) {
+        HttpEntity<SecureMessage> request = new HttpEntity<>(secureMessage);
+        return _restTemplate.postForObject(getServerURL() + "/request-proofs", request, SecureMessage.class);
+    }
+
+    public SecureMessage makeProofsRequest(int id, Set<Integer> epochs, SecretKey secretKey) throws Exception {
+        WitnessProofsRequest witnessProofsRequest = new WitnessProofsRequest(id, epochs);
+        byte[] bytes = writeValueAsBytes(witnessProofsRequest);
+        return new SecureMessage(bytes, secretKey, _serverKey, _keyPair.getPrivate());
+    }
+
+    public List<LocationProof> checkRequestProofsResponse(SecureMessage secureResponse, SecretKey secretKey, int witnessId, Set<Integer> epochs) throws Exception {
+        // Check response's secret key for freshness
+        if (!secureResponse.getSecretKey(_keyPair.getPrivate()).equals( secretKey ))
+            throw new IllegalArgumentException("Server response not fresh!");
+
+        // Decipher and check response signature
+        byte[] messageBytes = secureResponse.decipherAndVerify(_keyPair.getPrivate(), _serverKey);
+        ObjectMapper objectMapper = new ObjectMapper();
+        List<LocationProof> proofs = objectMapper.readValue(messageBytes, new TypeReference<>(){});
+
+        // Check content
+        for (LocationProof proof : proofs) //FIXME invalid proofs?
+            if (proof.get_witnessId() != witnessId || !epochs.contains( proof.get_epoch() ))
+                throw new IllegalArgumentException("Bad server response!");
+
+        return proofs;
+    }
+
+    public List<LocationProof> requestMyProofs(Set<Integer> epochs) throws Exception {
+        for (int epoch : epochs)
+            if (!(0 <= epoch && epoch <= _epoch))
+                throw new IllegalArgumentException("The epochs must be positive and not exceed the current epoch.");
+
+        // Create request
+        SecretKey secretKey = AESKeyGenerator.makeAESKey();
+        SecureMessage secureRequest = makeProofsRequest(_id, epochs, secretKey);
+
+        // Perform request
+        SecureMessage secureResponse = requestProofs(secureRequest);
+
+        // Check response
+        List<LocationProof> proofs = checkRequestProofsResponse(secureResponse, secretKey, _id, epochs);
+        for (LocationProof proof : proofs)
+            proof.verify(_keyPair.getPublic()); // throws exception
+
+        return proofs;
     }
 
 }

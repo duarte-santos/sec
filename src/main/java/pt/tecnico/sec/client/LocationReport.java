@@ -140,6 +140,12 @@ public class LocationReport {
         return distance <= DETECTION_RANGE;
     }
 
+    public LocationProof get_witness_proof(int id) {
+        for (LocationProof proof : _proofs)
+            if (proof.get_witnessId() == id) return proof;
+        return null;
+    }
+
     @Override
     public String toString() {
         return "LocationReport{" +

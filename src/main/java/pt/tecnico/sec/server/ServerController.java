@@ -5,10 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
-import pt.tecnico.sec.client.Location;
-import pt.tecnico.sec.client.ObtainLocationRequest;
-import pt.tecnico.sec.client.SecureMessage;
-import pt.tecnico.sec.client.SignedLocationReport;
+import pt.tecnico.sec.client.*;
 import pt.tecnico.sec.healthauthority.ObtainUsersRequest;
 import pt.tecnico.sec.healthauthority.UsersAtLocation;
 import pt.tecnico.sec.server.exception.InvalidSignatureException;
@@ -33,8 +30,40 @@ public class ServerController {
         _reportRepository = reportRepository;
     }
 
+    /* ========================================================== */
+    /* ====[                     General                    ]==== */
+    /* ========================================================== */
 
-    @PostMapping("/location-report")
+    public SecureMessage getLocation(SecureMessage secureRequest, boolean fromHA) throws Exception {
+        ObtainLocationRequest request;
+        SecretKey secretKey;
+        try {
+            // decipher and verify request
+            request = _serverApp.decipherAndVerifyLocationRequest(secureRequest, fromHA);
+            secretKey = secureRequest.getSecretKey(_serverApp.getPrivateKey());
+        }
+        catch (Exception e) {
+            throw new InvalidSignatureException("Invalid signature");
+        }
+
+        // find requested report
+        DBLocationReport dbLocationReport = _reportRepository.findReportByEpochAndUser(request.get_userId(), request.get_epoch());
+        if (dbLocationReport == null)
+            return null;
+        SignedLocationReport report = new SignedLocationReport(dbLocationReport);
+
+        // encrypt using same secret key and client/HA public key, sign using server private key
+        ObjectMapper objectMapper = new ObjectMapper();
+        byte[] bytes = objectMapper.writeValueAsBytes(report);
+        PublicKey cipherKey = fromHA ? _serverApp.getHAPublicKey() : _serverApp.getClientPublicKey(report.get_userId());
+        return new SecureMessage(bytes, secretKey, cipherKey, _serverApp.getPrivateKey());
+    }
+
+    /* ========================================================== */
+    /* ====[                      Users                     ]==== */
+    /* ========================================================== */
+
+    @PostMapping("/submit-location-report")
     public void reportLocation(@RequestBody SecureMessage secureMessage) {
         DBLocationReport locationReport;
         try {
@@ -59,41 +88,54 @@ public class ServerController {
         _reportRepository.save(locationReport);
     }
 
-    // used by clients
     @PostMapping("/obtain-location-report")
     public SecureMessage getLocationClient(@RequestBody SecureMessage secureRequest) throws Exception {
         return getLocation(secureRequest, false);
     }
 
-    // used by health authority
-    @PostMapping("/obtain-location-report-ha")
-    public SecureMessage getLocationHA(@RequestBody SecureMessage secureRequest) throws Exception {
-        return getLocation(secureRequest, true);
-    }
-
-    public SecureMessage getLocation(SecureMessage secureRequest, boolean fromHA) throws Exception {
-        ObtainLocationRequest request;
+    @PostMapping("/request-proofs")
+    public SecureMessage getWitnessProofs(@RequestBody SecureMessage secureRequest) throws Exception {
+        WitnessProofsRequest request;
         SecretKey secretKey;
         try {
             // decipher and verify request
-            request = _serverApp.decipherAndVerifyRequest(secureRequest, fromHA);
+            request = _serverApp.decipherAndVerifyProofsRequest(secureRequest);
             secretKey = secureRequest.getSecretKey(_serverApp.getPrivateKey());
         }
         catch (Exception e) {
             throw new InvalidSignatureException("Invalid signature");
         }
 
-        // find requested report
-        DBLocationReport dbLocationReport = _reportRepository.findReportByEpochAndUser(request.get_userId(), request.get_epoch());
-        if (dbLocationReport == null)
-            return null;
-        SignedLocationReport report = new SignedLocationReport(dbLocationReport);
+        // find requested reports
+        int witnessId = request.get_userId();
+        List<DBLocationReport> dbLocationReports = new ArrayList<>();
+        for (int epoch : request.get_epochs())
+            dbLocationReports.addAll( _reportRepository.findReportsByEpochAndWitness(witnessId, epoch) );
+
+        // convert reports to client form
+        List<SignedLocationReport> reports = new ArrayList<>();
+        for (DBLocationReport dbLocationReport : dbLocationReports)
+            reports.add( new SignedLocationReport(dbLocationReport) );
+
+        // extract requested proofs
+        List<LocationProof> locationProofs = new ArrayList<>();
+        for (SignedLocationReport report : reports)
+            locationProofs.add( report.get_witness_proof(witnessId) );
 
         // encrypt using same secret key and client public key, sign using server private key
         ObjectMapper objectMapper = new ObjectMapper();
-        byte[] bytes = objectMapper.writeValueAsBytes(report);
-        PublicKey cipherKey = fromHA ? _serverApp.getHAPublicKey() : _serverApp.getClientPublicKey(report.get_userId());
+        byte[] bytes = objectMapper.writeValueAsBytes(locationProofs);
+        PublicKey cipherKey = _serverApp.getClientPublicKey(witnessId);
         return new SecureMessage(bytes, secretKey, cipherKey, _serverApp.getPrivateKey());
+    }
+
+    /* ========================================================== */
+    /* ====[                 Health Authority               ]==== */
+    /* ========================================================== */
+
+    @PostMapping("/obtain-location-report-ha")
+    public SecureMessage getLocationHA(@RequestBody SecureMessage secureRequest) throws Exception {
+        return getLocation(secureRequest, true);
     }
 
     @PostMapping("/users")
@@ -101,6 +143,7 @@ public class ServerController {
         ObtainUsersRequest request;
         SecretKey secretKey;
         try {
+            // decipher and verify request
             request = _serverApp.decipherAndVerifyHAUsersRequest(secureRequest);
             secretKey = secureRequest.getSecretKey(_serverApp.getPrivateKey());
         }
@@ -108,10 +151,12 @@ public class ServerController {
             throw new InvalidSignatureException("Invalid signature");
         }
 
+        // find requested reports
         Location location = request.get_location();
         int epoch = request.get_epoch();
         List<DBLocationReport> dbLocationReports = _reportRepository.findUsersByLocationAndEpoch(epoch, location.get_x(), location.get_y());
 
+        // convert reports to client form
         List<SignedLocationReport> reports = new ArrayList<>();
         for (DBLocationReport dbLocationReport : dbLocationReports)
             reports.add( new SignedLocationReport(dbLocationReport) );

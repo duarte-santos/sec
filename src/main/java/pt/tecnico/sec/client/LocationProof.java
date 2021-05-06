@@ -1,7 +1,11 @@
 package pt.tecnico.sec.client;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.server.DBLocationProof;
+
+import java.security.PublicKey;
 
 @SuppressWarnings("unused")
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -40,6 +44,17 @@ public class LocationProof {
 
     public int get_witnessId() {
         return _proofData.get_witnessId();
+    }
+
+    public int get_epoch() {
+        return _proofData.get_epoch();
+    }
+
+    public void verify(PublicKey verifyKey) throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        byte[] bytes = objectMapper.writeValueAsBytes(_proofData);
+        if (_signature == null || !RSAKeyGenerator.verify(bytes, _signature, verifyKey))
+            throw new IllegalArgumentException("Signature verify failed!");
     }
 
     public String completeString() {

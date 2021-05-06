@@ -27,9 +27,8 @@ public class ClientController {
 
     @GetMapping("/location-proof/{epoch}/{proverId}")
     public LocationProof locationProof(@PathVariable(value = "epoch") int proverEpoch, @PathVariable(value = "proverId") int proverId) throws Exception {
-        LocationProof proof = _clientApp.getUser().makeLocationProof(proverId, proverEpoch);
+        return _clientApp.getUser().makeLocationProof(proverId, proverEpoch);
         //System.out.print("\r[Request received] Type: LocationProof, From: " + proverId + ", Epoch: " + proverEpoch + ", Result: " + proof.get_proofData().get_type() + "\n> ");
-        return proof;
     }
 
 }
