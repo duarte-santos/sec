@@ -20,7 +20,7 @@ public class ClientController {
 
     @GetMapping("/step/")
     public void step(HttpServletRequest request) {
-        System.out.println("\r  \n[Request received] Type: Step, From: " + request.getRemoteAddr() + ":" + request.getRemotePort());
+        //System.out.println("\r  \n[Request received] Type: Step, From: " + request.getRemoteAddr() + ":" + request.getRemotePort());
         _clientApp.step();
         System.out.print("\n> ");
     }
@@ -28,7 +28,7 @@ public class ClientController {
     @GetMapping("/location-proof/{epoch}/{proverId}")
     public LocationProof locationProof(@PathVariable(value = "epoch") int proverEpoch, @PathVariable(value = "proverId") int proverId) throws Exception {
         LocationProof proof = _clientApp.getUser().makeLocationProof(proverId, proverEpoch);
-        System.out.print("\r[Request received] Type: LocationProof, From: " + proverId + ", Epoch: " + proverEpoch + ", Result: " + proof.get_proofData().get_type() + "\n> ");
+        //System.out.print("\r[Request received] Type: LocationProof, From: " + proverId + ", Epoch: " + proverEpoch + ", Result: " + proof.get_proofData().get_type() + "\n> ");
         return proof;
     }
 

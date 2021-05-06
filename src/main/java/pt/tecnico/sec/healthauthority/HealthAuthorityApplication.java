@@ -19,7 +19,6 @@ import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.PublicKey;
 import java.util.Collections;
-import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Scanner;
 
@@ -67,7 +66,7 @@ public class HealthAuthorityApplication {
             try (Scanner scanner = new Scanner(System.in)) {
                 while (true) {
                     try {
-                        System.out.print("\n> Type your command ('help' to view available commands)\n> ");
+                        System.out.print("\n\n> Type your command ('help' to view available commands)\n> ");
 
                         // read command line and parse arguments
                         String line = scanner.nextLine();
@@ -89,7 +88,7 @@ public class HealthAuthorityApplication {
 
                             // Create request
                             SecretKey secretKey = AESKeyGenerator.makeAESKey();
-                            SecureMessage secureRequest = makeObtainRequest(keyPair, serverKey, id, epoch, secretKey);
+                            SecureMessage secureRequest = makeObtainLocationRequest(keyPair, serverKey, id, epoch, secretKey);
 
                             // Perform request
                             HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
@@ -100,10 +99,11 @@ public class HealthAuthorityApplication {
                                 System.out.println("Location Report not found");
                                 continue;
                             }
-                            SignedLocationReport signedReport = checkObtainResponse(keyPair, serverKey, secureResponse, secretKey, id, epoch);
+                            SignedLocationReport signedReport = checkObtainLocationResponse(keyPair, serverKey, secureResponse, secretKey, id, epoch);
                             LocationReport report = checkLocationReport(signedReport, getClientPublicKey(signedReport.get_userId()));
 
-                            System.out.println(report);
+                            // Print report
+                            System.out.println( "User " + id + ", epoch " + epoch + ", location: " + report.get_location() + "\nReport: " + report );
                         }
 
                         // obtainUsersAtLocation, [x], [y], [ep]
@@ -111,52 +111,26 @@ public class HealthAuthorityApplication {
                         else if (tokens[0].equals("obtainUsersAtLocation") && tokens.length == 4) {
                             int x = Integer.parseInt(tokens[1]);
                             int y = Integer.parseInt(tokens[2]);
+                            Location location = new Location(x, y);
                             int epoch = Integer.parseInt(tokens[3]);
 
-                            // create secure request
-                            Location location = new Location(x, y);
-                            ObtainUsersRequest usersRequest = new ObtainUsersRequest(location, epoch);
-                            ObjectMapper objectMapper = new ObjectMapper();
-                            byte[] bytes = objectMapper.writeValueAsBytes(usersRequest);
+                            // Create request
                             SecretKey secretKey = AESKeyGenerator.makeAESKey();
-                            SecureMessage secureRequest = new SecureMessage(bytes, secretKey, serverKey, keyPair.getPrivate());
+                            SecureMessage secureRequest = makeObtainUsersRequest(keyPair, serverKey, location, epoch, secretKey);
 
-                            SecureMessage secureMessage;
-                            try {
-                                // send secure request
-                                HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
-                                secureMessage = restTemplate.postForObject(getServerURL() + "/users", request, SecureMessage.class);
-                                if (secureMessage == null)
-                                    throw new IllegalArgumentException("Error in response");
-                            }
-                            catch (Exception e) {
-                                System.out.println(e.getMessage());
-                                continue;
-                            }
+                            // Perform request
+                            HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
+                            SecureMessage secureResponse = restTemplate.postForObject(getServerURL() + "/users", request, SecureMessage.class);
+                            if (secureResponse == null)
+                                throw new IllegalArgumentException("Error in response");
 
-                            // check secret key for freshness
-                            if (!secureMessage.getSecretKey(keyPair.getPrivate()).equals( secretKey ))
-                                throw new IllegalArgumentException("Server response not fresh!");
+                            // Check response
+                            UsersAtLocation usersAtLocation = checkObtainUsersResponse(keyPair, serverKey, secureResponse, secretKey, location, epoch);
+                            for (SignedLocationReport signedReport : usersAtLocation.get_reports())
+                                checkLocationReport(signedReport, getClientPublicKey(signedReport.get_userId()));
 
-                            // decipher and check signature
-                            byte[] messageBytes = secureMessage.decipherAndVerify(keyPair.getPrivate(), serverKey);
-                            UsersAtLocation usersAtLocation = UsersAtLocation.getFromBytes(messageBytes);
-                            List<Integer> userIds = usersAtLocation.get_userIds();
-
-                            // check content
-                            if (!usersAtLocation.get_location().equals(location) || usersAtLocation.get_epoch() != epoch)
-                                throw new IllegalArgumentException("Bad server response!");
-
-                            // print response
-                            if (userIds.size() == 0) {
-                                System.out.println("No users at that location in that epoch.");
-                                continue;
-                            }
-                            System.out.print("UserIds: ");
-                            for (Integer userId : userIds) {
-                                System.out.print(userId + " ");
-                            }
-                            System.out.println();
+                            // Print reports
+                            System.out.println(usersAtLocation);
                         }
 
                         else {
@@ -189,18 +163,29 @@ public class HealthAuthorityApplication {
         return RSAKeyGenerator.readPublicKey(keyPath);
     }
 
+    public LocationReport checkLocationReport(SignedLocationReport signedReport, PublicKey verifyKey) throws Exception {
+        // Check report
+        signedReport.verify(verifyKey);
+        int validProofCount = signedReport.verifyProofs();
+        if (validProofCount <= BYZANTINE_USERS)
+            throw new ReportNotAcceptableException("Not enough proofs to constitute an acceptable Location Report");
+
+        // Return safe report
+        return signedReport.get_report();
+    }
+
     /* ========================================================== */
     /* ====[             Obtain Location Report             ]==== */
     /* ========================================================== */
 
-    public SecureMessage makeObtainRequest(KeyPair keyPair, PublicKey serverKey, int id, int epoch, SecretKey secretKey) throws Exception {
+    public SecureMessage makeObtainLocationRequest(KeyPair keyPair, PublicKey serverKey, int id, int epoch, SecretKey secretKey) throws Exception {
         ObtainLocationRequest locationRequest = new ObtainLocationRequest(id, epoch);
         ObjectMapper objectMapper = new ObjectMapper();
         byte[] bytes = objectMapper.writeValueAsBytes(locationRequest);
         return new SecureMessage(bytes, secretKey, serverKey, keyPair.getPrivate());
     }
 
-    public SignedLocationReport checkObtainResponse(KeyPair keyPair, PublicKey serverKey, SecureMessage secureResponse, SecretKey secretKey, int id, int epoch) throws Exception {
+    public SignedLocationReport checkObtainLocationResponse(KeyPair keyPair, PublicKey serverKey, SecureMessage secureResponse, SecretKey secretKey, int id, int epoch) throws Exception {
         // Check response's secret key for freshness
         if (!secureResponse.getSecretKey(keyPair.getPrivate()).equals( secretKey ))
             throw new IllegalArgumentException("Server response not fresh!");
@@ -216,15 +201,32 @@ public class HealthAuthorityApplication {
         return report;
     }
 
-    public LocationReport checkLocationReport(SignedLocationReport signedReport, PublicKey verifyKey) throws Exception {
-        // Check report
-        signedReport.verify(verifyKey);
-        int validProofCount = signedReport.verifyProofs();
-        if (validProofCount <= BYZANTINE_USERS)
-            throw new ReportNotAcceptableException("Not enough proofs to constitute an acceptable Location Report");
 
-        // Return safe report
-        return signedReport.get_report();
+    /* ========================================================== */
+    /* ====[            Obtain Users at Location            ]==== */
+    /* ========================================================== */
+
+    public SecureMessage makeObtainUsersRequest(KeyPair keyPair, PublicKey serverKey, Location location, int epoch, SecretKey secretKey) throws Exception {
+        ObtainUsersRequest usersRequest = new ObtainUsersRequest(location, epoch);
+        ObjectMapper objectMapper = new ObjectMapper();
+        byte[] bytes = objectMapper.writeValueAsBytes(usersRequest);
+        return new SecureMessage(bytes, secretKey, serverKey, keyPair.getPrivate());
+    }
+
+    public UsersAtLocation checkObtainUsersResponse(KeyPair keyPair, PublicKey serverKey, SecureMessage secureResponse, SecretKey secretKey, Location location, int epoch) throws Exception {
+        // Check response's secret key for freshness
+        if (!secureResponse.getSecretKey(keyPair.getPrivate()).equals( secretKey ))
+            throw new IllegalArgumentException("Server response not fresh!");
+
+        // Decipher and check response signature
+        byte[] messageBytes = secureResponse.decipherAndVerify(keyPair.getPrivate(), serverKey);
+        UsersAtLocation response = UsersAtLocation.getFromBytes(messageBytes);
+
+        // Check content
+        if (!response.get_location().equals(location) || response.get_epoch() != epoch)
+            throw new IllegalArgumentException("Bad server response!");
+
+        return response;
     }
 
 }

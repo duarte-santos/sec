@@ -88,7 +88,7 @@ public class ClientApplication {
             try (Scanner scanner = new Scanner(System.in)) {
                 while (true) {
                     try {
-                        System.out.print("\r  \n> Type your command ('help' to view available commands)\n> ");
+                        System.out.print("\r  \n\n> Type your command ('help' to view available commands)\n> ");
 
                         // read next line
                         String line = scanner.nextLine();
@@ -142,11 +142,11 @@ public class ClientApplication {
                         else if (tokens[0].equals(OBTAIN_CMD) && tokens.length == 2) {
                             int ep = Integer.parseInt(tokens[1]);
                             try {
-                                LocationReport locationReport = _user.obtainReport(ep);
-                                if (locationReport == null)
+                                LocationReport report = _user.obtainReport(ep);
+                                if (report == null)
                                     System.out.println("The requested report doesn't exist");
                                 else
-                                    System.out.println(locationReport);
+                                    System.out.println( "User " + report.get_userId() + ", epoch " + ep + ", location: " + report.get_location() + "\nReport: " + report );
                             }
                             catch (Exception e) {
                                 System.out.println(e.getMessage());

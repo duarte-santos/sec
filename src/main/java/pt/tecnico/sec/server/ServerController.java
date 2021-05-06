@@ -112,14 +112,14 @@ public class ServerController {
         int epoch = request.get_epoch();
         List<DBLocationReport> dbLocationReports = _reportRepository.findUsersByLocationAndEpoch(epoch, location.get_x(), location.get_y());
 
-        List<Integer> users = new ArrayList<>();
+        List<SignedLocationReport> reports = new ArrayList<>();
         for (DBLocationReport dbLocationReport : dbLocationReports)
-            users.add(dbLocationReport.get_userId());
-        UsersAtLocation userIds = new UsersAtLocation(location, epoch, users);
+            reports.add( new SignedLocationReport(dbLocationReport) );
+        UsersAtLocation response = new UsersAtLocation(location, epoch, reports);
 
         // encrypt using HA public key, sign using server private key
         ObjectMapper objectMapper = new ObjectMapper();
-        byte[] bytes = objectMapper.writeValueAsBytes(userIds);
+        byte[] bytes = objectMapper.writeValueAsBytes(response);
         return new SecureMessage(bytes, secretKey, _serverApp.getHAPublicKey(), _serverApp.getPrivateKey());
     }
 

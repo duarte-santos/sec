@@ -107,12 +107,14 @@ public class User {
     /* ========================================================== */
 
     public void step(Grid nextGrid) {
+        System.out.println("Stepping...");
         System.out.println("Previous epoch " + _epoch + ", location " + getLocation());
         proveLocation();
         _epoch++;
         _prevGrid = _grid;
         _grid = nextGrid;
         System.out.println("Current epoch " + _epoch + ", location " + getLocation());
+        System.out.println("Done!");
     }
 
     public void stepRequest(int userId) {
@@ -129,7 +131,7 @@ public class User {
         Map<String, Integer> params = new HashMap<>();
         params.put("epoch", _epoch);
         params.put("proverId", _id);
-        System.out.println("[Request sent] Type: LocationProof To: " + getUserURL(userId) + ", From: " + _id + ", Epoch: " + _epoch);
+        //System.out.println("[Request sent] Type: LocationProof To: " + getUserURL(userId) + ", From: " + _id + ", Epoch: " + _epoch);
         return _restTemplate.getForObject(getUserURL(userId)+ "/location-proof/{epoch}/{proverId}", LocationProof.class, params);
     }
 
