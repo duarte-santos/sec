@@ -53,7 +53,7 @@ public class ClientApplication {
             // get serverIds from the serverCount
             int serverCount = Integer.parseInt(args[1]);
             if (serverCount <= 0)  // client must exist in environment
-                throw new NumberFormatException("Argument 'number of users' be a positive integer.");
+                throw new NumberFormatException("Argument 'serverCount' be a positive integer.");
 
             // get keys
             String keysPath = RSAKeyGenerator.KEYS_PATH + "c" + id;

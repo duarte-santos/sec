@@ -38,7 +38,7 @@ The bellow commands must be run in a terminal inside the root directory of the p
 
 To run the **EnvironmentGenerator**:
 ```bash
-./mvnw spring-boot:run -Dspring-boot.run.arguments="[nX] [nY] [epochCount] [userCount]" -Dstart-class=pt.tecnico.sec.EnvironmentGenerator
+./mvnw spring-boot:run -Dspring-boot.run.arguments="[nX] [nY] [epochCount] [userCount] [serverCount]" -Dstart-class=pt.tecnico.sec.EnvironmentGenerator
 ```
 ***Suggestion:** 3x3 grid with 3 users (the amount of epochs is not that relevant)*
 
@@ -47,7 +47,7 @@ To run the **EnvironmentGenerator**:
 
 To run the **RSAKeyGenerator**:
 ```bash
-./mvnw spring-boot:run -Dspring-boot.run.arguments="[userCount]" -Dstart-class=pt.tecnico.sec.RSAKeyGenerator
+./mvnw spring-boot:run -Dspring-boot.run.arguments="[userCount] [serverCount]" -Dstart-class=pt.tecnico.sec.RSAKeyGenerator
 ```
 ***Suggestion:** 3 users*
 
@@ -71,7 +71,7 @@ To run the **RSAKeyGenerator**:
 
 To run the **ServerApplication**:
 ```bash
-./mvnw spring-boot:run -Dstart-class=pt.tecnico.sec.server.ServerApplication
+./mvnw spring-boot:run -Dstart-class=pt.tecnico.sec.server.ServerApplication -Dspring-boot.run.arguments="[serverId]"
 ```
 
 <br/>
@@ -79,7 +79,7 @@ To run the **ServerApplication**:
 
 To run the **ClientApplication**:
 ```bash
-./mvnw spring-boot:run -Dspring-boot.run.arguments="[userId]" -Dstart-class=pt.tecnico.sec.client.ClientApplication
+./mvnw spring-boot:run -Dstart-class=pt.tecnico.sec.client.ClientApplication -Dspring-boot.run.arguments="[userId] [serverCount]"
 ```
 ***Suggestion:** 3 users using userIds 0, 1 and 2*
 
@@ -90,7 +90,7 @@ To run the **ClientApplication**:
 
 To run the **HealthAuthorityApplication**:
 ```bash
-./mvnw spring-boot:run -Dstart-class=pt.tecnico.sec.healthauthority.HealthAuthorityApplication
+./mvnw spring-boot:run -Dstart-class=pt.tecnico.sec.healthauthority.HealthAuthorityApplication -Dspring-boot.run.arguments="[serverCount]"
 ```
 
 <br/>
