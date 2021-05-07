@@ -4,6 +4,7 @@ import org.json.simple.parser.ParseException;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.web.client.RestTemplate;
@@ -18,7 +19,7 @@ import java.util.*;
 
 import static java.lang.System.exit;
 
-@SpringBootApplication
+@SpringBootApplication(exclude=DataSourceAutoConfiguration.class)
 public class ClientApplication {
 
     /* constants definition */
@@ -139,7 +140,8 @@ public class ClientApplication {
 
                             Location DBLocation = _environment.getGrid(ep).getUserLocation(_user.getId());
                             try {
-                                _user.reportLocation(ep, DBLocation);
+                                String response = _user.reportLocation(ep, DBLocation);
+                                System.out.println(response);
                             }
                             catch (Exception e) {
                                 System.out.println(e.getMessage());

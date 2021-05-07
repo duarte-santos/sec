@@ -10,6 +10,7 @@ import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
 import javax.crypto.SecretKey;
+import java.io.IOException;
 import java.security.KeyPair;
 import java.security.PublicKey;
 import java.util.*;
@@ -63,28 +64,6 @@ public class User {
     /* ====[                   Auxiliary                    ]==== */
     /* ========================================================== */
 
-    private byte[] postToServer(byte[] messageBytes, SecretKey secretKey, String endpoint) throws Exception {
-        List<byte[]> responsesBytes = new ArrayList<>();
-        for (int serverId = 0; serverId < _serverKeys.length; serverId++) {
-            PublicKey serverKey = _serverKeys[serverId];
-            SecureMessage secureRequest = new SecureMessage(messageBytes, secretKey, serverKey, _keyPair.getPrivate());
-            HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
-            SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + endpoint, request, SecureMessage.class);
-
-            if (secureResponse == null) {
-                responsesBytes.add(null);
-                continue;
-            }
-
-            // Check response's freshness, signature and decipher
-            if (!secureResponse.getSecretKey(_keyPair.getPrivate()).equals( secretKey ))
-                throw new IllegalArgumentException("Server response not fresh!");
-            responsesBytes.add( secureResponse.decipherAndVerify(_keyPair.getPrivate(), serverKey) );
-        }
-
-        return responsesBytes.get(0); //FIXME
-    }
-
     public String getUserURL(int userId) {
         int port = BASE_PORT + userId;
         return "http://localhost:" + port;
@@ -117,6 +96,11 @@ public class User {
         return objectMapper.writeValueAsBytes(report);
     }
 
+    public String getStringFromBytes(byte[] bytes) throws IOException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        return objectMapper.readValue(bytes, String.class);
+    }
+
     public byte[] writeValueAsBytes(ObtainLocationRequest request) throws JsonProcessingException {
         ObjectMapper objectMapper = new ObjectMapper();
         return objectMapper.writeValueAsBytes(request);
@@ -125,6 +109,28 @@ public class User {
     public byte[] writeValueAsBytes(WitnessProofsRequest request) throws JsonProcessingException {
         ObjectMapper objectMapper = new ObjectMapper();
         return objectMapper.writeValueAsBytes(request);
+    }
+
+    private byte[] postToServer(byte[] messageBytes, SecretKey secretKey, String endpoint) throws Exception {
+        List<byte[]> responsesBytes = new ArrayList<>();
+        for (int serverId = 0; serverId < _serverKeys.length; serverId++) {
+            PublicKey serverKey = _serverKeys[serverId];
+            SecureMessage secureRequest = new SecureMessage(messageBytes, secretKey, serverKey, _keyPair.getPrivate());
+            HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
+            SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + endpoint, request, SecureMessage.class);
+
+            if (secureResponse == null) {
+                responsesBytes.add(null);
+                continue;
+            }
+
+            // Check response's freshness, signature and decipher
+            if (!secureResponse.getSecretKey(_keyPair.getPrivate()).equals( secretKey ))
+                throw new IllegalArgumentException("Server response not fresh!");
+            responsesBytes.add( secureResponse.decipherAndVerify(_keyPair.getPrivate(), serverKey) );
+        }
+
+        return responsesBytes.get(0); //FIXME
     }
 
 
@@ -212,18 +218,24 @@ public class User {
     /* ====[             Submit Location Report             ]==== */
     /* ========================================================== */
 
-    public void reportLocation(int epoch, Location epochLocation) throws Exception {
+    public String reportLocation(int epoch, Location epochLocation) throws Exception {
         if (!(0 <= epoch && epoch <= _epoch))
             throw new IllegalArgumentException("Epoch must be positive and not exceed the current epoch.");
 
+        // Build report
         List<LocationProof> epochProofs = getEpochProofs(epoch);
         LocationReport locationReport = new LocationReport(_id, epoch, epochLocation, epochProofs);
-        System.out.println(locationReport);
-        
-        // encrypt using server public key, sign using client private key
         SecretKey secretKey = AESKeyGenerator.makeAESKey();
         byte[] bytes = writeValueAsBytes(locationReport);
-        postToServer(bytes, secretKey, "/submit-location-report");
+        System.out.println(locationReport);
+
+        // Send report
+        byte[] responseBytes = postToServer(bytes, secretKey, "/submit-location-report");
+
+        // Check response
+        if (responseBytes == null || !getStringFromBytes(responseBytes).equals("OK"))
+            throw new IllegalArgumentException("Bad server response!");
+        return "OK";
     }
 
 

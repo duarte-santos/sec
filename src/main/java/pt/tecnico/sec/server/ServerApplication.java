@@ -15,7 +15,8 @@ import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.PrivateKey;
 import java.security.PublicKey;
-import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
 @SpringBootApplication
 public class ServerApplication {
@@ -35,10 +36,10 @@ public class ServerApplication {
             // TODO : check if serverId is valid (ex: according to the serverCount)
             int serverPort = BASE_PORT + _serverId;
 
-            Map<String, Object> defaults = new HashMap<String, Object>();
+            Map<String, Object> defaults = new HashMap<>();
             defaults.put("server.port", serverPort);
             defaults.put("spring.jpa.hibernate.ddl-auto", "update");
-            defaults.put("spring.datasource.url", "jdbc:mysql://${MYSQL_HOST:localhost}:3306/sec" + serverId);
+            defaults.put("spring.datasource.url", "jdbc:mysql://${MYSQL_HOST:localhost}:3306/sec" + _serverId);
             defaults.put("spring.datasource.username", "user");
             defaults.put("spring.datasource.password", "pass");
 

@@ -65,11 +65,13 @@ public class ServerController {
     /* ========================================================== */
 
     @PostMapping("/submit-location-report")
-    public SecureMessage reportLocation(@RequestBody SecureMessage secureMessage) {
+    public SecureMessage reportLocation(@RequestBody SecureMessage secureMessage) throws Exception {
         DBLocationReport locationReport;
+        SecretKey secretKey;
         try {
             // Decipher and check signatures
             locationReport = _serverApp.decipherAndVerifyReport(secureMessage);
+            secretKey = secureMessage.getSecretKey(_serverApp.getPrivateKey());
         }
         catch (ReportNotAcceptableException e) {
             throw e;
@@ -88,7 +90,12 @@ public class ServerController {
         System.out.println(locationReport);
         _reportRepository.save(locationReport);
 
-        return null; // FIXME : oi sofi :)
+        // Send secure response
+        String response = "OK";
+        ObjectMapper objectMapper = new ObjectMapper();
+        byte[] bytes = objectMapper.writeValueAsBytes(response);
+        PublicKey cipherKey = RSAKeyGenerator.readClientPublicKey(userId);
+        return new SecureMessage(bytes, secretKey, cipherKey, _serverApp.getPrivateKey());
     }
 
     @PostMapping("/obtain-location-report")

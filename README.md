@@ -14,7 +14,7 @@ CREATE USER 'user'@'localhost' IDENTIFIED BY 'pass';
 GRANT ALL PRIVILEGES ON * . * TO 'user'@'localhost';
 ```
 ```mysql
-CREATE DATABASE sec;
+CREATE DATABASE sec0;
 ```
 
 <br/><br/>
