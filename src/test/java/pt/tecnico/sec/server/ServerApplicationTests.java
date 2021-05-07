@@ -1,6 +1,6 @@
 package pt.tecnico.sec.server;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+/*import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;
@@ -27,9 +27,9 @@ import java.security.PublicKey;
 import java.util.ArrayList;
 import java.util.List;
 
-@ExtendWith(MockitoExtension.class)
+@ExtendWith(MockitoExtension.class)*/
 class ServerApplicationTests {
-
+/*
     private Environment environment;
     private User user0;
     private User user1;
@@ -304,5 +304,5 @@ class ServerApplicationTests {
         }
     }
 
-
+*/
 }

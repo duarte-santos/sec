@@ -1,6 +1,7 @@
 package pt.tecnico.sec;
 
 import org.apache.tomcat.util.http.fileupload.FileUtils;
+import pt.tecnico.sec.server.exception.InvalidSignatureException;
 
 import javax.crypto.*;
 import java.io.File;
@@ -175,12 +176,16 @@ public class RSAKeyGenerator {
     }
 
     @SuppressWarnings("BooleanMethodIsAlwaysInverted")
-    public static boolean verify(byte[] data, String signature, PublicKey key) throws Exception {
-        Signature publicSignature = Signature.getInstance("SHA256withRSA");
-        publicSignature.initVerify(key);
-        publicSignature.update(data);
-        byte[] signatureBytes = Base64.getDecoder().decode(signature);
-        return publicSignature.verify(signatureBytes);
+    public static boolean verify(byte[] data, String signature, PublicKey key) {
+        try {
+            Signature publicSignature = Signature.getInstance("SHA256withRSA");
+            publicSignature.initVerify(key);
+            publicSignature.update(data);
+            byte[] signatureBytes = Base64.getDecoder().decode(signature);
+            return publicSignature.verify(signatureBytes);
+        } catch (Exception e) {
+            throw new InvalidSignatureException("Invalid signature");
+        }
     }
 
 }

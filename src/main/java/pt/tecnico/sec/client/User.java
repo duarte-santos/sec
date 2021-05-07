@@ -18,6 +18,7 @@ import java.util.*;
 public class User {
     private static final int BASE_PORT = 8000;
     private static final int SERVER_BASE_PORT = 9000;
+    private static final int SECRET_KEY_DURATION = 1;
     private static final int BYZANTINE_USERS = 1;
 
     private RestTemplate _restTemplate;
@@ -30,6 +31,9 @@ public class User {
 
     private final KeyPair _keyPair;
     private final PublicKey[] _serverKeys;
+
+    private SecretKey _secretKey;
+    private int _sKeyCreationEpoch;
 
     public User(Grid grid, int id, KeyPair keyPair, PublicKey[] serverKeys) {
         _grid = grid;
@@ -110,29 +114,6 @@ public class User {
         ObjectMapper objectMapper = new ObjectMapper();
         return objectMapper.writeValueAsBytes(request);
     }
-
-    private byte[] postToServer(byte[] messageBytes, SecretKey secretKey, String endpoint) throws Exception {
-        List<byte[]> responsesBytes = new ArrayList<>();
-        for (int serverId = 0; serverId < _serverKeys.length; serverId++) {
-            PublicKey serverKey = _serverKeys[serverId];
-            SecureMessage secureRequest = new SecureMessage(messageBytes, secretKey, serverKey, _keyPair.getPrivate());
-            HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
-            SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + endpoint, request, SecureMessage.class);
-
-            if (secureResponse == null) {
-                responsesBytes.add(null);
-                continue;
-            }
-
-            // Check response's freshness, signature and decipher
-            if (!secureResponse.getSecretKey(_keyPair.getPrivate()).equals( secretKey ))
-                throw new IllegalArgumentException("Server response not fresh!");
-            responsesBytes.add( secureResponse.decipherAndVerify(_keyPair.getPrivate(), serverKey) );
-        }
-
-        return responsesBytes.get(0); //FIXME
-    }
-
 
     /* ========================================================== */
     /* ====[                      Step                      ]==== */
@@ -215,6 +196,78 @@ public class User {
 
 
     /* ========================================================== */
+    /* ====[                 Get Secret Key                 ]==== */
+    /* ========================================================== */
+
+    public boolean secretKeyValid() {
+        return _secretKey != null && _epoch - _sKeyCreationEpoch <= SECRET_KEY_DURATION;
+    }
+
+    private List<byte[]> sendSecretKey(SecretKey keyToSend) throws Exception {
+        List<byte[]> responsesBytes = new ArrayList<>();
+        for (int serverId = 0; serverId < _serverKeys.length; serverId++) {
+            PublicKey serverKey = _serverKeys[serverId];
+            SecureMessage secureRequest = new SecureMessage(_id, keyToSend, serverKey, _keyPair.getPrivate());
+            responsesBytes.add( postToServer(serverId, secureRequest, keyToSend, "/secret-key") );
+        }
+        return responsesBytes; //FIXME
+    }
+
+    public SecretKey getSecretKey() throws Exception {
+
+        if (!secretKeyValid()) {
+            System.out.print("Generating new secret key...");
+
+            // Generate secret key
+            SecretKey newSecretKey = AESKeyGenerator.makeAESKey();
+
+            // Send key
+            List<byte[]> responsesBytes = sendSecretKey(newSecretKey);
+
+            // Check response
+            for (byte[] responseBytes : responsesBytes) {
+                if (responseBytes == null || !getStringFromBytes(responseBytes).equals("OK"))
+                    throw new IllegalArgumentException("Error exchanging new secret key");
+            }
+
+            // Success! Update key
+            _secretKey = newSecretKey;
+            _sKeyCreationEpoch = _epoch;
+
+            System.out.println("Done!");
+        }
+
+        return _secretKey;
+    }
+
+    /* ========================================================== */
+    /* ====[              Server communication              ]==== */
+    /* ========================================================== */
+
+    private byte[] postToServer(int serverId, SecureMessage secureRequest, SecretKey secretKey, String endpoint) throws Exception {
+        PublicKey serverKey = _serverKeys[serverId];
+        HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
+        SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + endpoint, request, SecureMessage.class);
+
+        if (secureResponse == null) return null;
+
+        // Check response's signature and decipher TODO freshness
+        return secureResponse.decipherAndVerify( secretKey, serverKey);
+    }
+
+    private byte[] postToServers(byte[] messageBytes, String endpoint) throws Exception {
+        SecretKey secretKey = getSecretKey();
+        SecureMessage secureRequest = new SecureMessage(_id, messageBytes, secretKey, _keyPair.getPrivate());
+
+        List<byte[]> responsesBytes = new ArrayList<>();
+        for (int serverId = 0; serverId < _serverKeys.length; serverId++) {
+            responsesBytes.add( postToServer(serverId, secureRequest, secretKey, endpoint) );
+        }
+        return responsesBytes.get(0); //FIXME
+    }
+
+
+    /* ========================================================== */
     /* ====[             Submit Location Report             ]==== */
     /* ========================================================== */
 
@@ -225,12 +278,11 @@ public class User {
         // Build report
         List<LocationProof> epochProofs = getEpochProofs(epoch);
         LocationReport locationReport = new LocationReport(_id, epoch, epochLocation, epochProofs);
-        SecretKey secretKey = AESKeyGenerator.makeAESKey();
         byte[] bytes = writeValueAsBytes(locationReport);
         System.out.println(locationReport);
 
         // Send report
-        byte[] responseBytes = postToServer(bytes, secretKey, "/submit-location-report");
+        byte[] responseBytes = postToServers(bytes, "/submit-location-report");
 
         // Check response
         if (responseBytes == null || !getStringFromBytes(responseBytes).equals("OK"))
@@ -271,12 +323,11 @@ public class User {
             throw new IllegalArgumentException("Epoch must be positive and not exceed the current epoch.");
 
         // Create request
-        SecretKey secretKey = AESKeyGenerator.makeAESKey();
         ObtainLocationRequest locationRequest = new ObtainLocationRequest(_id, epoch);
         byte[] requestBytes = writeValueAsBytes(locationRequest);
 
         // Perform request
-        byte[] responseBytes = postToServer(requestBytes, secretKey, "/obtain-location-report");
+        byte[] responseBytes = postToServers(requestBytes, "/obtain-location-report");
 
         // Check response
         if (responseBytes == null) return null;
@@ -312,12 +363,11 @@ public class User {
                 throw new IllegalArgumentException("The epochs must be positive and not exceed the current epoch.");
 
         // Create request
-        SecretKey secretKey = AESKeyGenerator.makeAESKey();
         WitnessProofsRequest witnessProofsRequest = new WitnessProofsRequest(_id, epochs);
         byte[] requestBytes = writeValueAsBytes(witnessProofsRequest);
 
         // Perform request
-        byte[] responseBytes = postToServer(requestBytes, secretKey, "/request-proofs");
+        byte[] responseBytes = postToServers(requestBytes, "/request-proofs");
 
         // Check response
         List<LocationProof> proofs = checkRequestProofsResponse(responseBytes, _id, epochs);

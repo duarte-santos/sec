@@ -5,16 +5,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
-import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.client.*;
 import pt.tecnico.sec.healthauthority.ObtainUsersRequest;
 import pt.tecnico.sec.healthauthority.UsersAtLocation;
-import pt.tecnico.sec.server.exception.InvalidSignatureException;
 import pt.tecnico.sec.server.exception.RecordAlreadyExistsException;
-import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
 import javax.crypto.SecretKey;
-import java.security.PublicKey;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -35,17 +31,10 @@ public class ServerController {
     /* ====[                     General                    ]==== */
     /* ========================================================== */
 
-    public SecureMessage getLocation(SecureMessage secureRequest, boolean fromHA) throws Exception {
-        ObtainLocationRequest request;
-        SecretKey secretKey;
-        try {
-            // decipher and verify request
-            request = _serverApp.decipherAndVerifyLocationRequest(secureRequest, fromHA);
-            secretKey = secureRequest.getSecretKey(_serverApp.getPrivateKey());
-        }
-        catch (Exception e) {
-            throw new InvalidSignatureException("Invalid signature");
-        }
+    @PostMapping("/obtain-location-report")
+    public SecureMessage getLocationClient(@RequestBody SecureMessage secureRequest) throws Exception {
+        // decipher and verify request
+        ObtainLocationRequest request = _serverApp.decipherAndVerifyReportRequest(secureRequest);
 
         // find requested report
         DBLocationReport dbLocationReport = _reportRepository.findReportByEpochAndUser(request.get_userId(), request.get_epoch());
@@ -56,8 +45,27 @@ public class ServerController {
         // encrypt using same secret key and client/HA public key, sign using server private key
         ObjectMapper objectMapper = new ObjectMapper();
         byte[] bytes = objectMapper.writeValueAsBytes(report);
-        PublicKey cipherKey = fromHA ? _serverApp.getHAPublicKey() : RSAKeyGenerator.readClientPublicKey(report.get_userId());
-        return new SecureMessage(bytes, secretKey, cipherKey, _serverApp.getPrivateKey());
+        return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), bytes);
+    }
+
+
+    /* ========================================================== */
+    /* ====[               Handle Secret Keys               ]==== */
+    /* ========================================================== */
+
+    @PostMapping("/secret-key")
+    public SecureMessage newSecretKey(@RequestBody SecureMessage secureMessage) throws Exception {
+        // decipher and verify message
+        SecretKey newSecretKey = _serverApp.decipherAndVerifyKey(secureMessage);
+
+        // save new key
+        _serverApp.saveSecretKey(secureMessage.get_senderId(), newSecretKey);
+
+        // Send secure response
+        String response = "OK";
+        ObjectMapper objectMapper = new ObjectMapper();
+        byte[] bytes = objectMapper.writeValueAsBytes(response);
+        return _serverApp.cipherAndSignMessage(secureMessage.get_senderId(), bytes);
     }
 
     /* ========================================================== */
@@ -66,19 +74,8 @@ public class ServerController {
 
     @PostMapping("/submit-location-report")
     public SecureMessage reportLocation(@RequestBody SecureMessage secureMessage) throws Exception {
-        DBLocationReport locationReport;
-        SecretKey secretKey;
-        try {
-            // Decipher and check signatures
-            locationReport = _serverApp.decipherAndVerifyReport(secureMessage);
-            secretKey = secureMessage.getSecretKey(_serverApp.getPrivateKey());
-        }
-        catch (ReportNotAcceptableException e) {
-            throw e;
-        }
-        catch (Exception e) {
-            throw new InvalidSignatureException("Invalid signature");
-        }
+        // Decipher and check report
+        DBLocationReport locationReport = _serverApp.decipherAndVerifyReport(secureMessage);
 
         // Check if already exists a report with the same userId and epoch
         int userId = locationReport.get_userId();
@@ -87,34 +84,20 @@ public class ServerController {
             throw new RecordAlreadyExistsException("Report for userId " + userId + " and epoch " + epoch + " already exists.");
 
         // Save report in database
-        System.out.println(locationReport);
         _reportRepository.save(locationReport);
+        System.out.println(locationReport);
 
         // Send secure response
         String response = "OK";
         ObjectMapper objectMapper = new ObjectMapper();
         byte[] bytes = objectMapper.writeValueAsBytes(response);
-        PublicKey cipherKey = RSAKeyGenerator.readClientPublicKey(userId);
-        return new SecureMessage(bytes, secretKey, cipherKey, _serverApp.getPrivateKey());
-    }
-
-    @PostMapping("/obtain-location-report")
-    public SecureMessage getLocationClient(@RequestBody SecureMessage secureRequest) throws Exception {
-        return getLocation(secureRequest, false);
+        return _serverApp.cipherAndSignMessage(secureMessage.get_senderId(), bytes);
     }
 
     @PostMapping("/request-proofs")
     public SecureMessage getWitnessProofs(@RequestBody SecureMessage secureRequest) throws Exception {
-        WitnessProofsRequest request;
-        SecretKey secretKey;
-        try {
-            // decipher and verify request
-            request = _serverApp.decipherAndVerifyProofsRequest(secureRequest);
-            secretKey = secureRequest.getSecretKey(_serverApp.getPrivateKey());
-        }
-        catch (Exception e) {
-            throw new InvalidSignatureException("Invalid signature");
-        }
+        // decipher and verify request
+        WitnessProofsRequest request = _serverApp.decipherAndVerifyProofsRequest(secureRequest);
 
         // find requested reports
         int witnessId = request.get_userId();
@@ -135,31 +118,18 @@ public class ServerController {
         // encrypt using same secret key and client public key, sign using server private key
         ObjectMapper objectMapper = new ObjectMapper();
         byte[] bytes = objectMapper.writeValueAsBytes(locationProofs);
-        PublicKey cipherKey = RSAKeyGenerator.readClientPublicKey(witnessId);
-        return new SecureMessage(bytes, secretKey, cipherKey, _serverApp.getPrivateKey());
+        return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), bytes);
+
     }
 
     /* ========================================================== */
     /* ====[                 Health Authority               ]==== */
     /* ========================================================== */
 
-    @PostMapping("/obtain-location-report-ha")
-    public SecureMessage getLocationHA(@RequestBody SecureMessage secureRequest) throws Exception {
-        return getLocation(secureRequest, true);
-    }
-
     @PostMapping("/users")
     public SecureMessage getUsers(@RequestBody SecureMessage secureRequest) throws Exception {
-        ObtainUsersRequest request;
-        SecretKey secretKey;
-        try {
-            // decipher and verify request
-            request = _serverApp.decipherAndVerifyHAUsersRequest(secureRequest);
-            secretKey = secureRequest.getSecretKey(_serverApp.getPrivateKey());
-        }
-        catch (Exception e) {
-            throw new InvalidSignatureException("Invalid signature");
-        }
+        // decipher and verify request
+        ObtainUsersRequest request = _serverApp.decipherAndVerifyUsersRequest(secureRequest);
 
         // find requested reports
         Location location = request.get_location();
@@ -175,7 +145,7 @@ public class ServerController {
         // encrypt using HA public key, sign using server private key
         ObjectMapper objectMapper = new ObjectMapper();
         byte[] bytes = objectMapper.writeValueAsBytes(response);
-        return new SecureMessage(bytes, secretKey, _serverApp.getHAPublicKey(), _serverApp.getPrivateKey());
+        return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), bytes);
     }
 
 }

@@ -12,59 +12,58 @@ import java.security.PublicKey;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class SecureMessage {
 
-    private String _cipheredKey;
+    private int _senderId;
     private String _cipheredMessage;
     private String _signature;
 
     public SecureMessage() {}
 
-    public SecureMessage(String cipheredKey, String cipheredMessage, String signature) {
-        _cipheredKey = cipheredKey;
+    public SecureMessage(int senderId, String cipheredMessage, String signature) {
+        _senderId = senderId;
         _cipheredMessage = cipheredMessage;
         _signature = signature;
     }
 
-    public SecureMessage(byte[] messageBytes, PublicKey cipherKey, PrivateKey signKey) throws Exception {
-        // make secret key
-        SecretKey secretKey = AESKeyGenerator.makeAESKey();
+    public SecureMessage(int senderId, byte[] messageBytes, SecretKey cipherKey, PrivateKey signKey) throws Exception {
+        _senderId = senderId;
 
-        // encrypt message with secret key
-        _cipheredMessage = AESKeyGenerator.encrypt(messageBytes, secretKey);
-
-        // encrypt secret key with given public cipher key
-        _cipheredKey = RSAKeyGenerator.encryptSecretKey(secretKey, cipherKey);
+        // encrypt message with given secret key
+        _cipheredMessage = AESKeyGenerator.encrypt(messageBytes, cipherKey);
 
         // sign message with given private sign key
         _signature = RSAKeyGenerator.sign(messageBytes, signKey);
     }
 
-    public SecureMessage(byte[] messageBytes, SecretKey secretKey, PublicKey cipherKey, PrivateKey signKey) throws Exception {
-        // encrypt message with secret key
-        _cipheredMessage = AESKeyGenerator.encrypt(messageBytes, secretKey);
+    // Used to exchange secret Keys - keyToSend is the new secretKey
+    public SecureMessage(int senderId, SecretKey keyToSend, PublicKey cipherKey, PrivateKey signKey) throws Exception {
+        _senderId = senderId;
 
-        // encrypt secret key with given public cipher key
-        _cipheredKey = RSAKeyGenerator.encryptSecretKey(secretKey, cipherKey);
+        // write secret key in bytes
+        byte[] encodedKey = keyToSend.getEncoded();
+
+        // encrypt message with given public cipher key
+        _cipheredMessage = RSAKeyGenerator.encrypt(encodedKey, cipherKey);
 
         // sign message with given private sign key
-        _signature = RSAKeyGenerator.sign(messageBytes, signKey);
+        _signature = RSAKeyGenerator.sign(encodedKey, signKey);
     }
 
-    public byte[] decipherAndVerify(PrivateKey decipherKey, PublicKey verifyKey) throws Exception {
+    public byte[] decipherAndVerify(SecretKey decipherKey, PublicKey verifyKey) throws Exception {
         byte[] messageBytes = decipher(decipherKey);
         verify(messageBytes, verifyKey);
         return messageBytes;
     }
 
-    public byte[] decipher(PrivateKey decipherKey) throws Exception {
-        // Decipher secret key
-        SecretKey secretKey = getSecretKey(decipherKey);
+    public SecretKey decipherAndVerifyKey(PrivateKey decipherKey, PublicKey verifyKey) throws Exception {
+        byte[] encodedKey = RSAKeyGenerator.decrypt(_cipheredMessage, decipherKey);
+        verify(encodedKey, verifyKey);
 
-        // Decipher message
-        return AESKeyGenerator.decrypt(_cipheredMessage, secretKey);
+        // get secret key from bytes
+        return AESKeyGenerator.fromEncoded(encodedKey);
     }
 
-    public SecretKey getSecretKey(PrivateKey decipherKey) throws Exception {
-        return RSAKeyGenerator.decryptSecretKey(_cipheredKey, decipherKey);
+    public byte[] decipher(SecretKey decipherKey) throws Exception {
+        return AESKeyGenerator.decrypt(_cipheredMessage, decipherKey);
     }
 
     public void verify(byte[] messageBytes, PublicKey verifyKey) throws Exception {
@@ -72,12 +71,12 @@ public class SecureMessage {
             throw new IllegalArgumentException("Signature verify failed!");
     }
 
-    public String get_cipheredKey() {
-        return _cipheredKey;
+    public int get_senderId() {
+        return _senderId;
     }
 
-    public void set_cipheredKey(String _cipheredKey) {
-        this._cipheredKey = _cipheredKey;
+    public void set_senderId(int _senderId) {
+        this._senderId = _senderId;
     }
 
     public String get_cipheredMessage() {
@@ -99,7 +98,7 @@ public class SecureMessage {
     @Override
     public String toString() {
         return "SecureMessage{" +
-                "_cipheredKey='" + _cipheredKey + '\'' +
+                ", _senderId=" + _senderId +
                 ", _cipheredMessage='" + _cipheredMessage + '\'' +
                 ", _signature='" + _signature + '\'' +
                 '}';

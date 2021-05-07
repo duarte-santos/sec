@@ -10,6 +10,7 @@ import pt.tecnico.sec.client.WitnessProofsRequest;
 import pt.tecnico.sec.healthauthority.ObtainUsersRequest;
 import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
+import javax.crypto.SecretKey;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
@@ -17,6 +18,7 @@ import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.util.HashMap;
 import java.util.Map;
+
 
 @SpringBootApplication
 public class ServerApplication {
@@ -28,6 +30,8 @@ public class ServerApplication {
 
     private static KeyPair _keyPair;
     private static int _serverId;
+
+    private static Map<Integer, SecretKey> _secretKeys = new HashMap<>();
 
     public static void main(String[] args) {
         try {
@@ -79,19 +83,42 @@ public class ServerApplication {
         return RSAKeyGenerator.readPublicKey(keyPath);
     }
 
+    public SecretKey getSecretKey(int id) {
+        return _secretKeys.get(id);
+    }
+
+    public void saveSecretKey(int id, SecretKey secretKey) {
+        _secretKeys.put(id, secretKey);
+    }
+
 
     /* ========================================================== */
     /* ====[              Secure communication              ]==== */
     /* ========================================================== */
 
+    public SecretKey decipherAndVerifyKey(SecureMessage secureMessage) throws Exception {
+        int senderId = secureMessage.get_senderId();
+        PublicKey verifyKey = (senderId == -1) ? getHAPublicKey() : RSAKeyGenerator.readClientPublicKey(senderId);
+        return secureMessage.decipherAndVerifyKey( getPrivateKey(), verifyKey );
+    }
+
+    public SecureMessage cipherAndSignMessage(int receiverId, byte[] messageBytes) throws Exception {
+        return new SecureMessage(_serverId, messageBytes, getSecretKey(receiverId), getPrivateKey());
+    }
+
+    public byte[] decipherAndVerifyMessage(SecureMessage secureMessage) throws Exception {
+        int senderId = secureMessage.get_senderId();
+        PublicKey verifyKey = (senderId == -1) ? getHAPublicKey() : RSAKeyGenerator.readClientPublicKey(senderId);
+        return secureMessage.decipherAndVerify( getSecretKey(senderId), verifyKey );
+    }
+
     public DBLocationReport decipherAndVerifyReport(SecureMessage secureMessage) throws Exception {
-        // decipher report
-        byte[] messageBytes = secureMessage.decipher( getPrivateKey() );
+        byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
         LocationReport locationReport = LocationReport.getFromBytes(messageBytes);
 
-        // check report signature
-        PublicKey verifyKey = RSAKeyGenerator.readClientPublicKey(locationReport.get_userId());
-        secureMessage.verify(messageBytes, verifyKey);
+        // check sender
+        if (secureMessage.get_senderId() != locationReport.get_userId())
+            throw new ReportNotAcceptableException("Cannot submit reports from other users");
 
         // check proofs signatures
         int validProofCount = locationReport.verifyProofs();
@@ -101,41 +128,38 @@ public class ServerApplication {
         return new DBLocationReport(locationReport, secureMessage.get_signature());
     }
 
-    public ObtainLocationRequest decipherAndVerifyLocationRequest(SecureMessage secureMessage, boolean fromHA) throws Exception {
-        // decipher request
-        byte[] messageBytes = secureMessage.decipher( getPrivateKey() );
+    public ObtainLocationRequest decipherAndVerifyReportRequest(SecureMessage secureMessage) throws Exception {
+        byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
         ObtainLocationRequest request = ObtainLocationRequest.getFromBytes(messageBytes);
 
-        // check report signature
-        PublicKey verifyKey = fromHA ? getHAPublicKey() : RSAKeyGenerator.readClientPublicKey(request.get_userId());
-        secureMessage.verify(messageBytes, verifyKey);
+        // check sender
+        int sender_id = secureMessage.get_senderId();
+        if ( !(sender_id == -1 || sender_id == request.get_userId()) ) // if not from HA or user itself
+            throw new IllegalArgumentException("Cannot request reports from other users");
 
         return request;
     }
 
     public WitnessProofsRequest decipherAndVerifyProofsRequest(SecureMessage secureMessage) throws Exception {
-        // decipher request
-        byte[] messageBytes = secureMessage.decipher( getPrivateKey() );
+        byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
         WitnessProofsRequest request = WitnessProofsRequest.getFromBytes(messageBytes);
 
-        // check report signature
-        PublicKey verifyKey = RSAKeyGenerator.readClientPublicKey(request.get_userId());
-        secureMessage.verify(messageBytes, verifyKey);
+        // check sender
+        if (secureMessage.get_senderId() != request.get_userId())
+            throw new IllegalArgumentException("Cannot request proofs from other users");
 
         return request;
     }
 
-    public ObtainUsersRequest decipherAndVerifyHAUsersRequest(SecureMessage secureMessage) throws Exception {
-        // decipher request
-        byte[] messageBytes = secureMessage.decipher( getPrivateKey() );
+    public ObtainUsersRequest decipherAndVerifyUsersRequest(SecureMessage secureMessage) throws Exception {
+        byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
         ObtainUsersRequest request = ObtainUsersRequest.getFromBytes(messageBytes);
 
-        // check report signature
-        PublicKey verifyKey = getHAPublicKey();
-        secureMessage.verify(messageBytes, verifyKey);
+        // check sender
+        if (secureMessage.get_senderId() != -1)
+            throw new IllegalArgumentException("Only the health authority can make 'users at location' requests");
 
         return request;
     }
-
 
 }
