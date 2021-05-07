@@ -1,16 +1,11 @@
 package pt.tecnico.sec;
 
-import org.json.simple.JSONObject;
-import org.json.simple.parser.JSONParser;
-import org.json.simple.parser.ParseException;
-import pt.tecnico.sec.client.Environment;
-import pt.tecnico.sec.client.Grid;
-import pt.tecnico.sec.client.Location;
-
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.util.Random;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.Arrays;
 
 public class Setup {
 
@@ -24,7 +19,7 @@ public class Setup {
     private static final String DATABASE_NAME = "sec";
 
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
 
         try {
             final int nX = Integer.parseInt(args[0]);
@@ -62,7 +57,7 @@ public class Setup {
         final String databaseName = DATABASE_NAME + serverId;
 
         Connection conn = null;
-        Statement  stmt = null;
+        Statement stmt = null;
 
         try {
             // Register JDBC driver

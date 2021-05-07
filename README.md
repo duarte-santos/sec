@@ -36,6 +36,17 @@ The bellow commands must be run in a terminal inside the root directory of the p
 <br/>
 
 
+To run the **Setup**:
+```bash
+./mvnw spring-boot:run -Dstart-class=pt.tecnico.sec.Setup -Dspring-boot.run.arguments="[nX] [nY] [epochCount] [userCount] [serverCount]"
+```
+***Suggestion:** 3x3 grid with 3 users (the amount of epochs is not that relevant)*
+
+<br/>
+
+<br/>
+
+
 To run the **EnvironmentGenerator**:
 ```bash
 ./mvnw spring-boot:run -Dspring-boot.run.arguments="[nX] [nY] [epochCount] [userCount] [serverCount]" -Dstart-class=pt.tecnico.sec.EnvironmentGenerator
