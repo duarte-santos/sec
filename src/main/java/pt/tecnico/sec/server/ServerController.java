@@ -2,9 +2,7 @@ package pt.tecnico.sec.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import pt.tecnico.sec.client.*;
 import pt.tecnico.sec.healthauthority.ObtainUsersRequest;
 import pt.tecnico.sec.healthauthority.UsersAtLocation;
@@ -40,6 +38,10 @@ public class ServerController {
         DBLocationReport dbLocationReport = _reportRepository.findReportByEpochAndUser(request.get_userId(), request.get_epoch());
         if (dbLocationReport == null)
             return null;
+
+        // Broadcast Read operation
+        dbLocationReport = _serverApp.broadcastRead(dbLocationReport);
+
         SignedLocationReport report = new SignedLocationReport(dbLocationReport);
 
         // encrypt using same secret key and client/HA public key, sign using server private key
@@ -86,6 +88,9 @@ public class ServerController {
         // Save report in database
         _reportRepository.save(locationReport);
         System.out.println(locationReport);
+
+        // Broadcast write operation to other servers
+        _serverApp.broadcastWrite(locationReport);
 
         // Send secure response
         String response = "OK";
@@ -138,8 +143,12 @@ public class ServerController {
 
         // convert reports to client form
         List<SignedLocationReport> reports = new ArrayList<>();
-        for (DBLocationReport dbLocationReport : dbLocationReports)
-            reports.add( new SignedLocationReport(dbLocationReport) );
+        for (DBLocationReport dbLocationReport : dbLocationReports) {
+            // Broadcast Read operation
+            dbLocationReport = _serverApp.broadcastRead(dbLocationReport);
+
+            reports.add(new SignedLocationReport(dbLocationReport));
+        }
         UsersAtLocation response = new UsersAtLocation(location, epoch, reports);
 
         // encrypt using HA public key, sign using server private key
@@ -147,5 +156,36 @@ public class ServerController {
         byte[] bytes = objectMapper.writeValueAsBytes(response);
         return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), bytes);
     }
+
+    /* ========================================================== */
+    /* ====[               Regular Registers                ]==== */
+    /* ========================================================== */
+
+    @PostMapping("/broadcast-write")
+    public int broadcastWrite(@RequestBody DBLocationReport locationReport) {
+        int epoch = locationReport.get_epoch();
+        int userId = locationReport.get_userId();
+        int timestamp = locationReport.get_timestamp();
+        int mytimestamp = 0;
+
+        System.out.println("Received Write broadcast for report:" + locationReport.toString());
+
+        DBLocationReport mylocationReport = _reportRepository.findReportByEpochAndUser(userId, epoch);
+        if (mylocationReport != null)
+            mytimestamp = mylocationReport.get_timestamp();
+
+        if (timestamp > mytimestamp){
+            if (mylocationReport != null) _reportRepository.delete(mylocationReport);
+            _reportRepository.save(locationReport);
+        }
+
+        return timestamp;
+    }
+
+    @GetMapping("/broadcast-read/{userId}/{epoch}")
+    public DBLocationReport broadcastRead(@PathVariable(value = "epoch") int epoch, @PathVariable(value = "userId") int userId) throws Exception {
+        return _reportRepository.findReportByEpochAndUser(userId, epoch);
+     }
+
 
 }

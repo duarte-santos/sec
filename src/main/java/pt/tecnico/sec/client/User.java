@@ -260,7 +260,7 @@ public class User {
         SecureMessage secureRequest = new SecureMessage(_id, messageBytes, secretKey, _keyPair.getPrivate());
 
         List<byte[]> responsesBytes = new ArrayList<>();
-        for (int serverId = 0; serverId < _serverKeys.length; serverId++) {
+        for (int serverId = 0; serverId < /*_serverKeys.length*/ 1; serverId++) {
             responsesBytes.add( postToServer(serverId, secureRequest, secretKey, endpoint) );
         }
         return responsesBytes.get(0); //FIXME

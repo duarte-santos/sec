@@ -21,6 +21,9 @@ public class DBLocationReport {
 
     private int _epoch;
 
+    // Register timestamp
+    private int _timestamp;
+
     @ManyToOne(cascade=CascadeType.ALL)
     private DBLocation _DB_location;
 
@@ -38,6 +41,7 @@ public class DBLocationReport {
         _DB_location = DBLocation;
         _DB_proofs = proofs;
         _signature = signature;
+        _timestamp = 0;
     }
 
     // convert from client version
@@ -56,6 +60,7 @@ public class DBLocationReport {
                 "id=" + id +
                 ", _userId=" + _userId +
                 ", _epoch=" + _epoch +
+                ", _timestamp=" + _timestamp +
                 ", _DB_location=" + _DB_location +
                 ", _DB_proofs=" + _DB_proofs +
                 ", _signature='" + _signature + '\'' +
@@ -108,5 +113,13 @@ public class DBLocationReport {
 
     public void set_signature(String _signature) {
         this._signature = _signature;
+    }
+
+    public int get_timestamp() {
+        return _timestamp;
+    }
+
+    public void set_timestamp(int _timestamp) {
+        this._timestamp = _timestamp;
     }
 }
