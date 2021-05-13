@@ -29,7 +29,7 @@ import java.util.Map;
 public class ServerApplication {
 
     /* constants definition */
-    private static final String USAGE = "Usage: ./mvnw spring-boot:run -\"Dstart-class=pt.tecnico.sec.server.ServerApplication -Dspring-boot.run.arguments=\"[serverId] [serverCount]\"";
+    private static final String USAGE = "Usage: ./mvnw spring-boot:run -Dstart-class=pt.tecnico.sec.server.ServerApplication -Dspring-boot.run.arguments=\"[serverId] [serverCount]\"";
     private static final int BASE_PORT = 9000;
     private static final int SECRET_KEY_DURATION = 2;
     private static final int BYZANTINE_USERS = 1;
@@ -347,6 +347,9 @@ public class ServerApplication {
             if (finalLocationReport == null || locationReport.get_timestamp() > finalLocationReport.get_timestamp())
                 finalLocationReport = locationReport;
         }
+
+        // Atomic Register: Write-back phase after Read
+        broadcastWrite(finalLocationReport);
 
         return finalLocationReport;
 

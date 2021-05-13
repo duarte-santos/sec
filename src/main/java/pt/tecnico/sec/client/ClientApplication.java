@@ -23,7 +23,7 @@ import static java.lang.System.exit;
 public class ClientApplication {
 
     /* constants definition */
-    private static final String USAGE = "Usage: ./mvnw spring-boot:run -Dspring-boot.run.arguments=\"[userId serverCount]\" -\"Dstart-class=pt.tecnico.sec.client.ClientApplication";
+    private static final String USAGE = "Usage: ./mvnw spring-boot:run -Dstart-class=pt.tecnico.sec.client.ClientApplication -Dspring-boot.run.arguments=\"[userId serverCount]\"";
     private static final String EXCEPTION_STR = "Caught exception with description: ";
     private static final String EXIT_CMD = "exit";
     private static final String HELP_CMD = "help";
