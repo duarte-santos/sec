@@ -1,10 +1,12 @@
 package pt.tecnico.sec.server;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import pt.tecnico.sec.client.LocationProof;
 import pt.tecnico.sec.client.LocationReport;
 
 import javax.persistence.*;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -121,5 +123,11 @@ public class DBLocationReport {
 
     public void set_timestamp(int _timestamp) {
         this._timestamp = _timestamp;
+    }
+
+    // convert from bytes
+    public static DBLocationReport getFromBytes(byte[] reportBytes) throws IOException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        return objectMapper.readValue(reportBytes, DBLocationReport.class);
     }
 }

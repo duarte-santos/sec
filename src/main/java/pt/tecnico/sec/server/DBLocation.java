@@ -1,5 +1,6 @@
 package pt.tecnico.sec.server;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import pt.tecnico.sec.client.Location;
 
 import javax.persistence.Entity;
@@ -8,6 +9,7 @@ import javax.persistence.GenerationType;
 import javax.persistence.Id;
 
 @SuppressWarnings("unused")
+@JsonIgnoreProperties(ignoreUnknown = true)
 @Entity
 public class DBLocation {
 

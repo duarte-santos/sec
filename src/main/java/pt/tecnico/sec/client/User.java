@@ -18,7 +18,7 @@ import java.util.*;
 public class User {
     private static final int BASE_PORT = 8000;
     private static final int SERVER_BASE_PORT = 9000;
-    private static final int SECRET_KEY_DURATION = 1;
+    private static final int SECRET_KEY_DURATION = 2;
     private static final int BYZANTINE_USERS = 1;
 
     private RestTemplate _restTemplate;
@@ -256,14 +256,12 @@ public class User {
     }
 
     private byte[] postToServers(byte[] messageBytes, String endpoint) throws Exception {
+        Random random = new Random();
+        int serverId = random.nextInt(_serverKeys.length); // Choose random server to send request
+        System.out.println("Requesting from server " + serverId);
         SecretKey secretKey = getSecretKey();
         SecureMessage secureRequest = new SecureMessage(_id, messageBytes, secretKey, _keyPair.getPrivate());
-
-        List<byte[]> responsesBytes = new ArrayList<>();
-        for (int serverId = 0; serverId < /*_serverKeys.length*/ 1; serverId++) {
-            responsesBytes.add( postToServer(serverId, secureRequest, secretKey, endpoint) );
-        }
-        return responsesBytes.get(0); //FIXME
+        return postToServer(serverId, secureRequest, secretKey, endpoint);
     }
 
 
@@ -319,7 +317,7 @@ public class User {
 
     @SuppressWarnings("UnnecessaryLocalVariable")
     public LocationReport obtainReport(int epoch) throws Exception {
-        if (!(0 <= epoch && epoch <= _epoch))
+        if (!(0 <= epoch && epoch < _epoch))
             throw new IllegalArgumentException("Epoch must be positive and not exceed the current epoch.");
 
         // Create request

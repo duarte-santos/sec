@@ -18,7 +18,7 @@ public class AESKeyGenerator {
         keyGen.init(128);
         Key key = keyGen.generateKey();
         byte[] encoded = key.getEncoded();
-        //System.out.println( "New AES secret key: " + printHexBinary(encoded) );
+        //System.out.println( "New AES secret key: " + printHexBinary(key.getEncoded()) );
         return new SecretKeySpec(encoded, 0, 16, "AES");
     }
 

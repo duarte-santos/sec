@@ -2,8 +2,7 @@
 *Sistemas de Elevada Confiabilidade - IST - 2020/2021*
 
 ---
-
-<br/>
+## Setup
 
 First, there must be a local *mysql* database named 'sec' which contains a user named 'user' and with 'pass' as its password.
 
@@ -17,23 +16,14 @@ GRANT ALL PRIVILEGES ON * . * TO 'user'@'localhost';
 CREATE DATABASE sec0;
 ```
 
-<br/><br/>
+<br/>
+
 
 Before running the clients and the server, the environment (a set of grids per epoch), and the key-pairs of each entity must be generated.
 
 The bellow commands must be run in a terminal inside the root directory of the project (```/sec```).
 
-<br/>
-
----
-
-<br/>
-
-## Setup
-
 - 'userCount' must match the intended amount of running users.
-
-<br/>
 
 
 To run the **Setup**:
@@ -43,27 +33,6 @@ To run the **Setup**:
 ***Suggestion:** 3x3 grid with 3 users (the amount of epochs is not that relevant)*
 
 <br/>
-
-<br/>
-
-
-To run the **EnvironmentGenerator**:
-```bash
-./mvnw spring-boot:run -Dspring-boot.run.arguments="[nX] [nY] [epochCount] [userCount] [serverCount]" -Dstart-class=pt.tecnico.sec.EnvironmentGenerator
-```
-***Suggestion:** 3x3 grid with 3 users (the amount of epochs is not that relevant)*
-
-<br/>
-
-
-To run the **RSAKeyGenerator**:
-```bash
-./mvnw spring-boot:run -Dspring-boot.run.arguments="[userCount] [serverCount]" -Dstart-class=pt.tecnico.sec.RSAKeyGenerator
-```
-***Suggestion:** 3 users*
-
-<br/>
-
 
 ## Run the project
 

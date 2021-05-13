@@ -2,7 +2,9 @@ package pt.tecnico.sec.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
 import pt.tecnico.sec.client.*;
 import pt.tecnico.sec.healthauthority.ObtainUsersRequest;
 import pt.tecnico.sec.healthauthority.UsersAtLocation;
@@ -32,22 +34,19 @@ public class ServerController {
     @PostMapping("/obtain-location-report")
     public SecureMessage getLocationClient(@RequestBody SecureMessage secureRequest) throws Exception {
         // decipher and verify request
-        ObtainLocationRequest request = _serverApp.decipherAndVerifyReportRequest(secureRequest);
-
-        // find requested report
-        DBLocationReport dbLocationReport = _reportRepository.findReportByEpochAndUser(request.get_userId(), request.get_epoch());
-        if (dbLocationReport == null)
-            return null;
+        ObtainLocationRequest request = _serverApp.decipherAndVerifyReportRequest(secureRequest, false);
 
         // Broadcast Read operation
-        dbLocationReport = _serverApp.broadcastRead(dbLocationReport);
+        DBLocationReport dbLocationReport = _serverApp.broadcastRead(request);
+        if (dbLocationReport == null)
+            return null;
 
         SignedLocationReport report = new SignedLocationReport(dbLocationReport);
 
         // encrypt using same secret key and client/HA public key, sign using server private key
         ObjectMapper objectMapper = new ObjectMapper();
         byte[] bytes = objectMapper.writeValueAsBytes(report);
-        return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), bytes);
+        return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), bytes, false);
     }
 
 
@@ -56,18 +55,33 @@ public class ServerController {
     /* ========================================================== */
 
     @PostMapping("/secret-key")
-    public SecureMessage newSecretKey(@RequestBody SecureMessage secureMessage) throws Exception {
+    public SecureMessage newClientSecretKey(@RequestBody SecureMessage secureMessage) throws Exception {
         // decipher and verify message
-        SecretKey newSecretKey = _serverApp.decipherAndVerifyKey(secureMessage);
+        SecretKey newSecretKey = _serverApp.decipherAndVerifyKey(secureMessage, false);
 
         // save new key
-        _serverApp.saveSecretKey(secureMessage.get_senderId(), newSecretKey);
+        _serverApp.saveClientSecretKey(secureMessage.get_senderId(), newSecretKey);
 
         // Send secure response
         String response = "OK";
         ObjectMapper objectMapper = new ObjectMapper();
         byte[] bytes = objectMapper.writeValueAsBytes(response);
-        return _serverApp.cipherAndSignMessage(secureMessage.get_senderId(), bytes);
+        return _serverApp.cipherAndSignMessage(secureMessage.get_senderId(), bytes, false);
+    }
+
+    @PostMapping("/secret-key-server")
+    public SecureMessage newServerSecretKey(@RequestBody SecureMessage secureMessage) throws Exception {
+        // decipher and verify message
+        SecretKey newSecretKey = _serverApp.decipherAndVerifyKey(secureMessage, true);
+
+        // save new key
+        _serverApp.saveServerSecretKey(secureMessage.get_senderId(), newSecretKey);
+
+        // Send secure response
+        String response = "OK";
+        ObjectMapper objectMapper = new ObjectMapper();
+        byte[] bytes = objectMapper.writeValueAsBytes(response);
+        return _serverApp.cipherAndSignMessage(secureMessage.get_senderId(), bytes, true);
     }
 
     /* ========================================================== */
@@ -77,17 +91,13 @@ public class ServerController {
     @PostMapping("/submit-location-report")
     public SecureMessage reportLocation(@RequestBody SecureMessage secureMessage) throws Exception {
         // Decipher and check report
-        DBLocationReport locationReport = _serverApp.decipherAndVerifyReport(secureMessage);
+        DBLocationReport locationReport = _serverApp.decipherAndVerifyReport(secureMessage, false);
 
         // Check if already exists a report with the same userId and epoch
         int userId = locationReport.get_userId();
         int epoch = locationReport.get_epoch();
         if (_reportRepository.findReportByEpochAndUser(userId, epoch) != null)
             throw new RecordAlreadyExistsException("Report for userId " + userId + " and epoch " + epoch + " already exists.");
-
-        // Save report in database
-        _reportRepository.save(locationReport);
-        System.out.println(locationReport);
 
         // Broadcast write operation to other servers
         _serverApp.broadcastWrite(locationReport);
@@ -96,13 +106,13 @@ public class ServerController {
         String response = "OK";
         ObjectMapper objectMapper = new ObjectMapper();
         byte[] bytes = objectMapper.writeValueAsBytes(response);
-        return _serverApp.cipherAndSignMessage(secureMessage.get_senderId(), bytes);
+        return _serverApp.cipherAndSignMessage(secureMessage.get_senderId(), bytes, false);
     }
 
     @PostMapping("/request-proofs")
     public SecureMessage getWitnessProofs(@RequestBody SecureMessage secureRequest) throws Exception {
         // decipher and verify request
-        WitnessProofsRequest request = _serverApp.decipherAndVerifyProofsRequest(secureRequest);
+        WitnessProofsRequest request = _serverApp.decipherAndVerifyProofsRequest(secureRequest, false);
 
         // find requested reports
         int witnessId = request.get_userId();
@@ -123,7 +133,7 @@ public class ServerController {
         // encrypt using same secret key and client public key, sign using server private key
         ObjectMapper objectMapper = new ObjectMapper();
         byte[] bytes = objectMapper.writeValueAsBytes(locationProofs);
-        return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), bytes);
+        return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), bytes, false);
 
     }
 
@@ -134,7 +144,7 @@ public class ServerController {
     @PostMapping("/users")
     public SecureMessage getUsers(@RequestBody SecureMessage secureRequest) throws Exception {
         // decipher and verify request
-        ObtainUsersRequest request = _serverApp.decipherAndVerifyUsersRequest(secureRequest);
+        ObtainUsersRequest request = _serverApp.decipherAndVerifyUsersRequest(secureRequest, false);
 
         // find requested reports
         Location location = request.get_location();
@@ -145,7 +155,8 @@ public class ServerController {
         List<SignedLocationReport> reports = new ArrayList<>();
         for (DBLocationReport dbLocationReport : dbLocationReports) {
             // Broadcast Read operation
-            dbLocationReport = _serverApp.broadcastRead(dbLocationReport);
+            ObtainLocationRequest obtainLocationRequest = new ObtainLocationRequest(dbLocationReport.get_userId(), dbLocationReport.get_epoch());
+            dbLocationReport = _serverApp.broadcastRead(obtainLocationRequest);
 
             reports.add(new SignedLocationReport(dbLocationReport));
         }
@@ -154,7 +165,7 @@ public class ServerController {
         // encrypt using HA public key, sign using server private key
         ObjectMapper objectMapper = new ObjectMapper();
         byte[] bytes = objectMapper.writeValueAsBytes(response);
-        return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), bytes);
+        return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), bytes, false);
     }
 
     /* ========================================================== */
@@ -162,14 +173,20 @@ public class ServerController {
     /* ========================================================== */
 
     @PostMapping("/broadcast-write")
-    public int broadcastWrite(@RequestBody DBLocationReport locationReport) {
+    public SecureMessage broadcastWrite(@RequestBody SecureMessage secureMessage) throws Exception {
+        // Decipher and check report
+        DBLocationReport locationReport = _serverApp.decipherAndVerifyDBReport(secureMessage, true);
+        int senderId = secureMessage.get_senderId();
+        if (senderId != _serverApp.getId()) _serverApp.serverSecretKeyUsed(senderId);
+
         int epoch = locationReport.get_epoch();
         int userId = locationReport.get_userId();
         int timestamp = locationReport.get_timestamp();
         int mytimestamp = 0;
 
-        System.out.println("Received Write broadcast for report:" + locationReport.toString());
+        System.out.println("Received Write broadcast for report: " + locationReport.toString());
 
+        // Update database
         DBLocationReport mylocationReport = _reportRepository.findReportByEpochAndUser(userId, epoch);
         if (mylocationReport != null)
             mytimestamp = mylocationReport.get_timestamp();
@@ -179,13 +196,28 @@ public class ServerController {
             _reportRepository.save(locationReport);
         }
 
-        return timestamp;
+        // Encrypt and send response
+        ObjectMapper objectMapper = new ObjectMapper();
+        byte[] bytes = objectMapper.writeValueAsBytes(timestamp);
+        return _serverApp.cipherAndSignMessage(senderId, bytes, true);
     }
 
-    @GetMapping("/broadcast-read/{userId}/{epoch}")
-    public DBLocationReport broadcastRead(@PathVariable(value = "epoch") int epoch, @PathVariable(value = "userId") int userId) throws Exception {
-        return _reportRepository.findReportByEpochAndUser(userId, epoch);
-     }
+    @PostMapping("/broadcast-read")
+    public SecureMessage broadcastRead(@RequestBody SecureMessage secureRequest) throws Exception {
+        // decipher and verify request TODO use different ids for servers, check sender is server
+        ObtainLocationRequest request = _serverApp.decipherAndVerifyReportRequest(secureRequest, true);
+        int senderId = secureRequest.get_senderId();
+        if (senderId != _serverApp.getId()) _serverApp.serverSecretKeyUsed(senderId);
+
+        // find requested report
+        DBLocationReport report = _reportRepository.findReportByEpochAndUser(request.get_userId(), request.get_epoch());
+
+        // encrypt using same secret key and client/HA public key, sign using server private key
+        ObjectMapper objectMapper = new ObjectMapper();
+        byte[] bytes = objectMapper.writeValueAsBytes(report);
+        System.out.println("Returning report: " + report);
+        return _serverApp.cipherAndSignMessage(senderId, bytes, true);
+    }
 
 
 }
