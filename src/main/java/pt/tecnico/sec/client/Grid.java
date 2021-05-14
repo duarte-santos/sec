@@ -5,10 +5,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class Grid {
-    // Constants
-    private static final int DetectionRange = 2;
+import static pt.tecnico.sec.Constants.DETECTION_RANGE;
 
+public class Grid {
     // Map UserID -> Location
     private final Map<Integer, Location> _grid = new HashMap<>();
 
@@ -35,7 +34,7 @@ public class Grid {
     }
 
     public boolean isNearby(int userId1, int userId2) {
-        return distance(userId1, userId2) <= DetectionRange;
+        return distance(userId1, userId2) <= DETECTION_RANGE;
     }
 
     public List<Integer> findNearbyUsers(int userId1) {

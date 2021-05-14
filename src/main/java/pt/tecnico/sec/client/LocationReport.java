@@ -13,13 +13,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import static pt.tecnico.sec.Constants.DETECTION_RANGE;
+import static pt.tecnico.sec.Constants.SUCCESS;
+
 @SuppressWarnings("unused")
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class LocationReport {
-
-    // constants - later put all constants in a file for everyone to read
-    private static final String SUCCESS = "success";
-    private static final double DETECTION_RANGE = 2;
 
     // attributes
     private int _userId;

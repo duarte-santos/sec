@@ -24,16 +24,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
+import static pt.tecnico.sec.Constants.*;
 
 @SpringBootApplication
 public class ServerApplication {
-
-    /* constants definition */
-    private static final String USAGE = "Usage: ./mvnw spring-boot:run -Dstart-class=pt.tecnico.sec.server.ServerApplication -Dspring-boot.run.arguments=\"[serverId] [serverCount] [userCount]\"";
-    private static final int BASE_PORT = 9000;
-    private static final int SECRET_KEY_DURATION = 2;
-    private static final int BYZANTINE_USERS = 1;
-    private static final int FAULTS = 0; //FIXME
 
     private static KeyPair _keyPair;
     private static int _serverId;
@@ -56,7 +50,7 @@ public class ServerApplication {
             if (_serverId >= _serverCount)
                 throw new NumberFormatException("Server ID must be lower than the number of servers");
 
-            int serverPort = BASE_PORT + _serverId;
+            int serverPort = SERVER_BASE_PORT + _serverId;
 
             Map<String, Object> defaults = new HashMap<>();
             defaults.put("server.port", serverPort);
@@ -72,7 +66,7 @@ public class ServerApplication {
         } 
         catch (Exception e) {
             System.out.println(e.getMessage());
-            System.out.println(USAGE);
+            System.out.println(SERVER_USAGE);
         }
     }
 
@@ -91,7 +85,7 @@ public class ServerApplication {
 
     public static void fetchRSAKeyPair() throws IOException, GeneralSecurityException {
         // get server's keyPair
-        String keysPath = RSAKeyGenerator.KEYS_PATH + "s" + _serverId;
+        String keysPath = KEYS_PATH + "s" + _serverId;
         _keyPair = RSAKeyGenerator.readKeyPair(keysPath + ".pub", keysPath + ".priv");
     }
 
@@ -105,7 +99,7 @@ public class ServerApplication {
     }
 
     public static PublicKey getHAPublicKey() throws GeneralSecurityException, IOException {
-        String keyPath = RSAKeyGenerator.KEYS_PATH + "ha.pub";
+        String keyPath = KEYS_PATH + "ha.pub";
         return RSAKeyGenerator.readPublicKey(keyPath);
     }
 
@@ -123,7 +117,7 @@ public class ServerApplication {
     }
 
     public String getServerURL(int serverId) {
-        int serverPort = BASE_PORT + serverId;
+        int serverPort = SERVER_BASE_PORT + serverId;
         return "http://localhost:" + serverPort;
     }
 

@@ -12,9 +12,9 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Random;
 
-public class EnvironmentGenerator {
+import static pt.tecnico.sec.Constants.ENVIRONMENT_PATH;
 
-    public static final String ENVIRONMENT_PATH = "src/main/resources/environment.json";
+public class EnvironmentGenerator {
 
     public static int _serverCount;
 

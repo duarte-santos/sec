@@ -15,11 +15,9 @@ import java.security.KeyPair;
 import java.security.PublicKey;
 import java.util.*;
 
+import static pt.tecnico.sec.Constants.*;
+
 public class User {
-    private static final int BASE_PORT = 8000;
-    private static final int SERVER_BASE_PORT = 9000;
-    private static final int SECRET_KEY_DURATION = 2;
-    private static final int BYZANTINE_USERS = 1;
 
     private RestTemplate _restTemplate;
     private Grid _prevGrid = null; // useful for synchronization
@@ -69,7 +67,7 @@ public class User {
     /* ========================================================== */
 
     public String getUserURL(int userId) {
-        int port = BASE_PORT + userId;
+        int port = CLIENT_BASE_PORT + userId;
         return "http://localhost:" + port;
     }
 

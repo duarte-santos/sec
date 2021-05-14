@@ -18,21 +18,10 @@ import java.security.PublicKey;
 import java.util.*;
 
 import static java.lang.System.exit;
+import static pt.tecnico.sec.Constants.*;
 
 @SpringBootApplication(exclude=DataSourceAutoConfiguration.class)
 public class ClientApplication {
-
-    /* constants definition */
-    private static final String USAGE = "Usage: ./mvnw spring-boot:run -Dstart-class=pt.tecnico.sec.client.ClientApplication -Dspring-boot.run.arguments=\"[userId serverCount]\"";
-    private static final String EXCEPTION_STR = "Caught exception with description: ";
-    private static final String EXIT_CMD = "exit";
-    private static final String HELP_CMD = "help";
-    private static final String STEP_CMD = "step";
-    private static final String SUBMIT_CMD = "submit";
-    private static final String OBTAIN_CMD = "obtain";
-    private static final String PROOFS_CMD = "proofs";
-    private static final int BASE_PORT = 8000;
-
     private static Environment _environment;
     private static int _epoch;
     private static User _user;
@@ -57,7 +46,7 @@ public class ClientApplication {
                 throw new NumberFormatException("Argument 'serverCount' be a positive integer.");
 
             // get keys
-            String keysPath = RSAKeyGenerator.KEYS_PATH + "c" + id;
+            String keysPath = KEYS_PATH + "c" + id;
             KeyPair keyPair = RSAKeyGenerator.readKeyPair(keysPath + ".pub", keysPath + ".priv");
             // get all server keys
             PublicKey[] serverKeys = new PublicKey[serverCount];
@@ -71,7 +60,7 @@ public class ClientApplication {
             System.out.println("The user \"C00lD0060 No." + id + "\" has SPAWNED.\n");
 
             // create spring application
-            int port = BASE_PORT + id;
+            int port = CLIENT_BASE_PORT + id;
             SpringApplication springApplication = new SpringApplication(ClientApplication.class);
             springApplication.setDefaultProperties(Collections.singletonMap("server.port", String.valueOf(port)));
             springApplication.run(args);
@@ -80,7 +69,7 @@ public class ClientApplication {
             System.out.println("Error setting up client. Please make sure to properly run EnvironmentGenerator and RSAKeyGenerator before running the client.");
         } catch (Exception e) {
             System.out.println(EXCEPTION_STR + e.getMessage());
-            System.out.println(USAGE);
+            System.out.println(CLIENT_USAGE);
         }
     }
 

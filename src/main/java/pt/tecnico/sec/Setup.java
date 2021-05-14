@@ -7,17 +7,9 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
 
+import static pt.tecnico.sec.Constants.*;
+
 public class Setup {
-
-    // JDBC driver name and database URL
-    private static final String JDBC_DRIVER = "com.mysql.cj.jdbc.Driver";
-    private static final String DB_URL = "jdbc:mysql://localhost/";
-
-    //  Database credentials
-    private static final String USER = "user";
-    private static final String PASS = "pass";
-    private static final String DATABASE_NAME = "sec";
-
 
     public static void main(String[] args) throws Exception {
 

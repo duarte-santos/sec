@@ -13,11 +13,9 @@ import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
 
-import static javax.xml.bind.DatatypeConverter.printHexBinary;
+import static pt.tecnico.sec.Constants.KEYS_PATH;
 
 public class RSAKeyGenerator {
-
-    public static final String KEYS_PATH = "src/main/resources/keys/";
 
     public static void main(String[] args) throws Exception {
 
@@ -58,7 +56,7 @@ public class RSAKeyGenerator {
             System.out.println(e.getMessage());
         }
 
-        System.out.println("Done.");
+        System.out.println("Done writing RSA Key Pairs.");
     }
 
 
@@ -68,26 +66,26 @@ public class RSAKeyGenerator {
 
     private static void writeKeyPair(String keyPath) throws GeneralSecurityException, IOException {
         // get an AES private key
-        System.out.println("Generating RSA key ..." );
+        //System.out.println("Generating RSA key ..." );
         KeyPairGenerator keyGen = KeyPairGenerator.getInstance("RSA");
         keyGen.initialize(2048);
         KeyPair keys = keyGen.generateKeyPair();
-        System.out.println("Finish generating RSA keys");
+        //System.out.println("Finish generating RSA keys");
 
-        System.out.println("Private Key:");
+        //System.out.println("Private Key:");
         PrivateKey privKey = keys.getPrivate();
         byte[] privKeyEncoded = privKey.getEncoded();
-        System.out.println(printHexBinary(privKeyEncoded));
-        System.out.println("Public Key:");
+        //System.out.println(printHexBinary(privKeyEncoded));
+        //System.out.println("Public Key:");
         PublicKey pubKey = keys.getPublic();
         byte[] pubKeyEncoded = pubKey.getEncoded();
-        System.out.println(printHexBinary(pubKeyEncoded));
+        //System.out.println(printHexBinary(pubKeyEncoded));
 
-        System.out.println("Writing Private key to '" + keyPath + "' ..." );
+        //System.out.println("Writing Private key to '" + keyPath + "' ..." );
         FileOutputStream privFos = new FileOutputStream(keyPath + ".priv");
         privFos.write(privKeyEncoded);
         privFos.close();
-        System.out.println("Writing Pubic key to '" + keyPath + "' ..." );
+        //System.out.println("Writing Pubic key to '" + keyPath + "' ..." );
         FileOutputStream pubFos = new FileOutputStream(keyPath + ".pub");
         pubFos.write(pubKeyEncoded);
         pubFos.close();

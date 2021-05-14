@@ -22,30 +22,11 @@ import java.security.PublicKey;
 import java.util.*;
 
 import static java.lang.System.exit;
+import static pt.tecnico.sec.Constants.*;
 
 @SpringBootApplication(exclude=DataSourceAutoConfiguration.class)
 public class HealthAuthorityApplication {
 
-    // constants
-    private static final int SERVER_BASE_PORT = 9000;
-    private static final int SECRET_KEY_DURATION = 2;
-    private static final int BYZANTINE_USERS  = 1;
-    private static final int HA_PORT          = 6000;
-
-    private static final String USAGE = "Usage: ./mvnw spring-boot:run -Dspring-boot.run.arguments=\"[serverCount]\" -\"Dstart-class=pt.tecnico.sec.healthauthority.HealthAuthorityApplication";
-    private static final String HELP          = """
-            ======================== Available Commands ========================
-            obtainLocationReport, [userId], [ep]
-            > returns the position of "userId" at the epoch "ep"
-
-            obtainUsersAtLocation, [x], [y], [ep]
-            > returns a list of users that were at position (x,y) at epoch "ep"
-
-            exit
-            > exits the Health Authority application
-            ====================================================================
-            """;
-    
     private static int _serverCount;
     private SecretKey _secretKey;
     private int _sKeyUsages;
@@ -55,12 +36,12 @@ public class HealthAuthorityApplication {
             _serverCount = Integer.parseInt(args[0]);
 
             SpringApplication app = new SpringApplication(HealthAuthorityApplication.class);
-            app.setDefaultProperties(Collections.singletonMap("server.port", HA_PORT));
+            app.setDefaultProperties(Collections.singletonMap("server.port", HA_BASE_PORT));
             app.run(args);
         }
         catch (Exception e) {
             System.out.println(e.getMessage());
-            System.out.println(USAGE);
+            System.out.println(HA_USAGE);
         }
     }
 
@@ -73,7 +54,7 @@ public class HealthAuthorityApplication {
     public CommandLineRunner run(RestTemplate restTemplate) {
         return args -> {
             // get keys
-            String keysPath = RSAKeyGenerator.KEYS_PATH;
+            String keysPath = KEYS_PATH;
             KeyPair keyPair = RSAKeyGenerator.readKeyPair(keysPath + "ha.pub", keysPath + "ha.priv");
 
             PublicKey[] serverKeys = new PublicKey[_serverCount];
@@ -95,7 +76,7 @@ public class HealthAuthorityApplication {
                         }
 
                         else if (line.equals("help")) {
-                            System.out.println(HELP);
+                            System.out.println( getHelpString() );
                         }
 
                         // obtainLocationReport, [userId], [ep]
@@ -171,6 +152,24 @@ public class HealthAuthorityApplication {
     /* ========================================================== */
     /* ====[              Auxiliary functions               ]==== */
     /* ========================================================== */
+
+    // auxiliary function: returns a string with the help message
+    @SuppressWarnings("SameReturnValue")
+    private static String getHelpString() {
+        return """
+                  ============================= Available Commands =============================
+                  step                       - Increase current epoch
+                  submit, [epoch]            - Send the user's DBLocation report of the given
+                                                epoch to the server
+                  obtain, [epoch]            - Ask the server for the user's DBLocation report
+                                                at the given epoch
+                  proofs, [ep1], [ep2], ...  - Ask the server for the proofs that the user
+                                                generated as witness
+                  exit                       - Quit Client App
+                  ==============================================================================
+
+                """;
+    }
 
     public String getServerURL(int serverId) {
         int serverPort = SERVER_BASE_PORT + serverId;
@@ -261,16 +260,13 @@ public class HealthAuthorityApplication {
     }
 
     private byte[] postToServers(RestTemplate restTemplate, PrivateKey privateKey, PublicKey[] serverKeys, byte[] messageBytes, String endpoint) throws Exception {
+        Random random = new Random();
+        int serverId = random.nextInt(serverKeys.length); // Choose random server to send request
+        System.out.println("Requesting from server " + serverId);
         SecretKey secretKey = getSecretKey(restTemplate, privateKey, serverKeys);
-        SecureMessage secureRequest = new SecureMessage(-1, messageBytes, secretKey, privateKey);
-
-        List<byte[]> responsesBytes = new ArrayList<>();
-        for (int serverId = 0; serverId < serverKeys.length; serverId++) {
-            responsesBytes.add( postToServer(restTemplate, serverId, serverKeys[serverId], secureRequest, secretKey, endpoint) );
-        }
-
         _sKeyUsages++;
-        return responsesBytes.get(0); //FIXME
+        SecureMessage secureRequest = new SecureMessage(-1, messageBytes, secretKey, privateKey);
+        return postToServer(restTemplate, serverId, serverKeys[serverId], secureRequest, secretKey, endpoint);
     }
 
     /* ========================================================== */
