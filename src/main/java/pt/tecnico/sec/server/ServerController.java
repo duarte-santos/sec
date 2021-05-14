@@ -13,6 +13,7 @@ import pt.tecnico.sec.server.exception.RecordAlreadyExistsException;
 import javax.crypto.SecretKey;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 @SuppressWarnings("AccessStaticViaInstance")
 @RestController
@@ -113,24 +114,28 @@ public class ServerController {
     public SecureMessage getWitnessProofs(@RequestBody SecureMessage secureRequest) throws Exception {
         // decipher and verify request
         WitnessProofsRequest request = _serverApp.decipherAndVerifyProofsRequest(secureRequest, false);
-
-        // find requested reports
         int witnessId = request.get_userId();
-        List<DBLocationReport> dbLocationReports = new ArrayList<>();
-        for (int epoch : request.get_epochs())
-            dbLocationReports.addAll( _reportRepository.findReportsByEpochAndWitness(witnessId, epoch) );
+        Set<Integer> epochs = request.get_epochs();
 
-        // convert reports to client form
-        List<SignedLocationReport> reports = new ArrayList<>();
-        for (DBLocationReport dbLocationReport : dbLocationReports)
-            reports.add( new SignedLocationReport(dbLocationReport) );
-
-        // extract requested proofs
         List<LocationProof> locationProofs = new ArrayList<>();
-        for (SignedLocationReport report : reports)
-            locationProofs.add( report.get_witness_proof(witnessId) );
 
-        // encrypt using same secret key and client public key, sign using server private key
+        // set of read operations
+        int userCount = _serverApp.getUserCount();
+        for (int id = 0; id < userCount; id++) {
+            if (id == witnessId) continue; // user will never be a witness of itself
+            for (int ep : epochs) {
+                ObtainLocationRequest userReportRequest = new ObtainLocationRequest(id, ep);
+                DBLocationReport dbLocationReport = _serverApp.broadcastRead(userReportRequest);
+
+                // filter requested reports
+                if (dbLocationReport == null) continue;
+                DBLocationProof proof = dbLocationReport.get_witness_proof(witnessId);
+                if (proof != null)
+                    locationProofs.add(new LocationProof(proof));
+            }
+        }
+
+        // encrypt and send response
         ObjectMapper objectMapper = new ObjectMapper();
         byte[] bytes = objectMapper.writeValueAsBytes(locationProofs);
         return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), bytes, false);

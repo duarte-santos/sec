@@ -125,6 +125,12 @@ public class DBLocationReport {
         this._timestamp = _timestamp;
     }
 
+    public DBLocationProof get_witness_proof(int id) {
+        for (DBLocationProof proof : _DB_proofs)
+            if (proof.get_witnessId() == id) return proof;
+        return null;
+    }
+
     // convert from bytes
     public static DBLocationReport getFromBytes(byte[] reportBytes) throws IOException {
         ObjectMapper objectMapper = new ObjectMapper();
