@@ -19,6 +19,9 @@ public final class Constants {
     public static final int SECRET_KEY_DURATION = 2;
     public static final int BYZANTINE_USERS  = 1;
     public static final int FAULTS = 0; //FIXME
+    public static final String SUCCESS = "success";
+    public static final String FAILURE = "failure";
+    public static final String OK = "OK";
 
     // Health Authority
     public static final int HA_BASE_PORT = 6000;
@@ -34,7 +37,6 @@ public final class Constants {
     public static final String SUBMIT_CMD = "submit";
     public static final String OBTAIN_CMD = "obtain";
     public static final String PROOFS_CMD = "proofs";
-    public static final String SUCCESS = "success";
 
     // Server
     public static final int SERVER_BASE_PORT = 9000;

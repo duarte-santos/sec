@@ -48,29 +48,6 @@ public class SecureMessage {
         _signature = RSAKeyGenerator.sign(encodedKey, signKey);
     }
 
-    public byte[] decipherAndVerify(SecretKey decipherKey, PublicKey verifyKey) throws Exception {
-        byte[] messageBytes = decipher(decipherKey);
-        verify(messageBytes, verifyKey);
-        return messageBytes;
-    }
-
-    public SecretKey decipherAndVerifyKey(PrivateKey decipherKey, PublicKey verifyKey) throws Exception {
-        byte[] encodedKey = RSAKeyGenerator.decrypt(_cipheredMessage, decipherKey);
-        verify(encodedKey, verifyKey);
-
-        // get secret key from bytes
-        return AESKeyGenerator.fromEncoded(encodedKey);
-    }
-
-    public byte[] decipher(SecretKey decipherKey) throws Exception {
-        return AESKeyGenerator.decrypt(_cipheredMessage, decipherKey);
-    }
-
-    public void verify(byte[] messageBytes, PublicKey verifyKey) throws Exception {
-        if (_signature == null || !RSAKeyGenerator.verify(messageBytes, _signature, verifyKey))
-            throw new IllegalArgumentException("Signature verify failed!");
-    }
-
     public int get_senderId() {
         return _senderId;
     }
@@ -102,5 +79,32 @@ public class SecureMessage {
                 ", _cipheredMessage='" + _cipheredMessage + '\'' +
                 ", _signature='" + _signature + '\'' +
                 '}';
+    }
+
+    /* ========================================================== */
+    /* ====[             Ciphers and Signatures             ]==== */
+    /* ========================================================== */
+
+    public byte[] decipherAndVerify(SecretKey decipherKey, PublicKey verifyKey) throws Exception {
+        byte[] messageBytes = decipher(decipherKey);
+        verify(messageBytes, verifyKey);
+        return messageBytes;
+    }
+
+    public SecretKey decipherAndVerifyKey(PrivateKey decipherKey, PublicKey verifyKey) throws Exception {
+        byte[] encodedKey = RSAKeyGenerator.decrypt(_cipheredMessage, decipherKey);
+        verify(encodedKey, verifyKey);
+
+        // get secret key from bytes
+        return AESKeyGenerator.fromEncoded(encodedKey);
+    }
+
+    public byte[] decipher(SecretKey decipherKey) throws Exception {
+        return AESKeyGenerator.decrypt(_cipheredMessage, decipherKey);
+    }
+
+    public void verify(byte[] messageBytes, PublicKey verifyKey) {
+        if (_signature == null || !RSAKeyGenerator.verify(messageBytes, _signature, verifyKey))
+            throw new IllegalArgumentException("Signature verify failed!");
     }
 }

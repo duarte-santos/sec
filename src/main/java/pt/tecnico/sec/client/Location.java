@@ -48,11 +48,6 @@ public class Location {
     }
 
     @Override
-    public String toString() {
-        return "[" + _x + ", " + _y + "]";
-    }
-
-    @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null) return false;
@@ -70,5 +65,10 @@ public class Location {
     @Override
     public int hashCode() {
         return Objects.hash(_x, _y);
+    }
+
+    @Override
+    public String toString() {
+        return "[" + _x + ", " + _y + "]";
     }
 }

@@ -3,7 +3,10 @@ package pt.tecnico.sec;
 import org.apache.tomcat.util.http.fileupload.FileUtils;
 import pt.tecnico.sec.server.exception.InvalidSignatureException;
 
-import javax.crypto.*;
+import javax.crypto.BadPaddingException;
+import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -16,6 +19,10 @@ import java.util.Base64;
 import static pt.tecnico.sec.Constants.KEYS_PATH;
 
 public class RSAKeyGenerator {
+
+    /* ========================================================== */
+    /* ====[                      Main                      ]==== */
+    /* ========================================================== */
 
     public static void main(String[] args) throws Exception {
 
@@ -66,26 +73,18 @@ public class RSAKeyGenerator {
 
     private static void writeKeyPair(String keyPath) throws GeneralSecurityException, IOException {
         // get an AES private key
-        //System.out.println("Generating RSA key ..." );
         KeyPairGenerator keyGen = KeyPairGenerator.getInstance("RSA");
         keyGen.initialize(2048);
         KeyPair keys = keyGen.generateKeyPair();
-        //System.out.println("Finish generating RSA keys");
 
-        //System.out.println("Private Key:");
         PrivateKey privKey = keys.getPrivate();
         byte[] privKeyEncoded = privKey.getEncoded();
-        //System.out.println(printHexBinary(privKeyEncoded));
-        //System.out.println("Public Key:");
         PublicKey pubKey = keys.getPublic();
         byte[] pubKeyEncoded = pubKey.getEncoded();
-        //System.out.println(printHexBinary(pubKeyEncoded));
 
-        //System.out.println("Writing Private key to '" + keyPath + "' ..." );
         FileOutputStream privFos = new FileOutputStream(keyPath + ".priv");
         privFos.write(privKeyEncoded);
         privFos.close();
-        //System.out.println("Writing Pubic key to '" + keyPath + "' ..." );
         FileOutputStream pubFos = new FileOutputStream(keyPath + ".pub");
         pubFos.write(pubKeyEncoded);
         pubFos.close();
@@ -99,7 +98,6 @@ public class RSAKeyGenerator {
 
     @SuppressWarnings("ResultOfMethodCallIgnored")
     public static PublicKey readPublicKey(String publicKeyPath) throws GeneralSecurityException, IOException {
-        //System.out.println("Reading public key from file " + publicKeyPath + " ...");
         FileInputStream pubFis = new FileInputStream(publicKeyPath);
         byte[] pubEncoded = new byte[pubFis.available()];
         pubFis.read(pubEncoded);
@@ -108,14 +106,6 @@ public class RSAKeyGenerator {
         X509EncodedKeySpec pubSpec = new X509EncodedKeySpec(pubEncoded);
         KeyFactory keyFacPub = KeyFactory.getInstance("RSA");
         return keyFacPub.generatePublic(pubSpec);
-    }
-
-    public static PublicKey readClientPublicKey(int clientId) throws GeneralSecurityException, IOException {
-        return readPublicKey(KEYS_PATH + "c" + clientId + ".pub");
-    }
-
-    public static PublicKey readServerPublicKey(int serverId) throws GeneralSecurityException, IOException {
-        return readPublicKey(KEYS_PATH + "s" + serverId + ".pub");
     }
 
     @SuppressWarnings("ResultOfMethodCallIgnored")
@@ -150,17 +140,6 @@ public class RSAKeyGenerator {
         return cipher.doFinal(bytes);
     }
 
-    public static String encryptSecretKey(SecretKey secretKey, PublicKey key) throws BadPaddingException, IllegalBlockSizeException, InvalidKeyException, NoSuchPaddingException, NoSuchAlgorithmException {
-        byte[] encodedKey = secretKey.getEncoded();
-        return encrypt(encodedKey, key);
-    }
-
-    public static SecretKey decryptSecretKey(String cipheredKey, PrivateKey key) throws NoSuchPaddingException, NoSuchAlgorithmException, InvalidKeyException, BadPaddingException, IllegalBlockSizeException {
-        byte[] encodedKey = decrypt(cipheredKey, key);
-        return AESKeyGenerator.fromEncoded(encodedKey);
-    }
-
-
     /* ========================================================== */
     /* ====[                  Sign/Verify                   ]==== */
     /* ========================================================== */
@@ -184,6 +163,31 @@ public class RSAKeyGenerator {
         } catch (Exception e) {
             throw new InvalidSignatureException("Invalid signature");
         }
+    }
+
+
+    /* ========================================================== */
+    /* ====[              Auxiliary Functions               ]==== */
+    /* ========================================================== */
+
+    public static PublicKey readClientPublicKey(int clientId) throws GeneralSecurityException, IOException {
+        return readPublicKey(KEYS_PATH + "c" + clientId + ".pub");
+    }
+
+    public static PublicKey readHAKey() throws GeneralSecurityException, IOException {
+        return readPublicKey(KEYS_PATH + "ha.pub");
+    }
+
+    public static PublicKey readServerPublicKey(int serverId) throws GeneralSecurityException, IOException {
+        return readPublicKey(KEYS_PATH + "s" + serverId + ".pub");
+    }
+
+    public static PublicKey[] readServersKeys(int serverCount) throws GeneralSecurityException, IOException {
+        PublicKey[] serverKeys = new PublicKey[serverCount];
+        for (int serverId = 0; serverId < serverCount; serverId++) {
+            serverKeys[serverId] = RSAKeyGenerator.readServerPublicKey(serverId);
+        }
+        return serverKeys;
     }
 
 }

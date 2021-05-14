@@ -42,38 +42,6 @@ public class DBLocation {
         return _y;
     }
 
-    public double distance(DBLocation DBLocation) {
-        int x = DBLocation.getX();
-        int y = DBLocation.getY();
-        // euclidean distance
-        return Math.sqrt( Math.pow(x - _x, 2) + Math.pow(y - _y, 2) );
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null) return false;
-        if (o.getClass() == Location.class) {
-            Location that = (Location) o;
-            return _x == that.get_x() && _y == that.get_y();
-        }
-        if (o.getClass() == DBLocation.class) {
-            DBLocation that = (DBLocation) o;
-            return _x == that._x && _y == that._y;
-        }
-        return false;
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(_x, _y);
-    }
-
-    @Override
-    public String toString() {
-        return "[" + _x + ", " + _y + "]";
-    }
-
     public Integer getId() {
         return id;
     }
@@ -96,5 +64,37 @@ public class DBLocation {
 
     public void set_y(int _y) {
         this._y = _y;
+    }
+
+    public double distance(DBLocation DBLocation) {
+        int x = DBLocation.getX();
+        int y = DBLocation.getY();
+        // euclidean distance
+        return Math.sqrt( Math.pow(x - _x, 2) + Math.pow(y - _y, 2) );
+    }
+
+    @Override
+    public String toString() {
+        return "[" + _x + ", " + _y + "]";
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null) return false;
+        if (o.getClass() == Location.class) {
+            Location that = (Location) o;
+            return _x == that.get_x() && _y == that.get_y();
+        }
+        if (o.getClass() == DBLocation.class) {
+            DBLocation that = (DBLocation) o;
+            return _x == that._x && _y == that._y;
+        }
+        return false;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(_x, _y);
     }
 }

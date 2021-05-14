@@ -5,8 +5,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 
-import javax.servlet.http.HttpServletRequest;
-
 @SuppressWarnings("AccessStaticViaInstance")
 @RestController
 public class ClientController {
@@ -19,8 +17,7 @@ public class ClientController {
     }
 
     @GetMapping("/step/")
-    public void step(HttpServletRequest request) {
-        //System.out.println("\r  \n[Request received] Type: Step, From: " + request.getRemoteAddr() + ":" + request.getRemotePort());
+    public void step() {
         _clientApp.step();
         System.out.print("\n> ");
     }
@@ -28,7 +25,6 @@ public class ClientController {
     @GetMapping("/location-proof/{epoch}/{proverId}")
     public LocationProof locationProof(@PathVariable(value = "epoch") int proverEpoch, @PathVariable(value = "proverId") int proverId) throws Exception {
         return _clientApp.getUser().makeLocationProof(proverId, proverEpoch);
-        //System.out.print("\r[Request received] Type: LocationProof, From: " + proverId + ", Epoch: " + proverEpoch + ", Result: " + proof.get_proofData().get_type() + "\n> ");
     }
 
 }

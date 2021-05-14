@@ -48,12 +48,7 @@ public class ClientApplication {
             // get keys
             String keysPath = KEYS_PATH + "c" + id;
             KeyPair keyPair = RSAKeyGenerator.readKeyPair(keysPath + ".pub", keysPath + ".priv");
-            // get all server keys
-            PublicKey[] serverKeys = new PublicKey[serverCount];
-            for (int serverId = 0; serverId < serverCount; serverId++) {
-                PublicKey serverKey = RSAKeyGenerator.readServerPublicKey(serverId);
-                serverKeys[serverId] = serverKey;
-            }
+            PublicKey[] serverKeys = RSAKeyGenerator.readServersKeys(serverCount);
 
             // create user
             _user = new User(_environment.getGrid(_epoch), id, keyPair, serverKeys);
@@ -119,17 +114,15 @@ public class ClientApplication {
                             }
                         }
 
-                        // submit, [epoch] - user submits the DBLocation report of the given epoch to the server
+                        // submit, [epoch] - user submits the Location report of the given epoch to the server
                         else if (tokens[0].equals(SUBMIT_CMD) && tokens.length == 2) {
                             int ep = Integer.parseInt(tokens[1]);
-                            if (ep >= _epoch) { // check proofs have been obtained
-                                System.out.println("No proofs to send for this epoch yet.");
-                                continue;
-                            }
+                            if (!(0 <= ep && ep < _epoch))
+                                throw new IllegalArgumentException("Epoch must be positive and not exceed the current epoch.");
 
-                            Location DBLocation = _environment.getGrid(ep).getUserLocation(_user.getId());
+                            Location location = _environment.getGrid(ep).getUserLocation(_user.getId());
                             try {
-                                String response = _user.reportLocation(ep, DBLocation);
+                                String response = _user.submitReport(ep, location);
                                 System.out.println(response);
                             }
                             catch (Exception e) {
@@ -137,9 +130,11 @@ public class ClientApplication {
                             }
                         }
 
-                        // obtain, [epoch] - user asks server for its DBLocation report at the given epoch
+                        // obtain, [epoch] - user asks server for its location report at the given epoch
                         else if (tokens[0].equals(OBTAIN_CMD) && tokens.length == 2) {
                             int ep = Integer.parseInt(tokens[1]);
+                            if (!(0 <= ep && ep <= _epoch))
+                                throw new IllegalArgumentException("Epoch must be positive and not exceed the current epoch.");
                             try {
                                 LocationReport report = _user.obtainReport(ep);
                                 if (report == null)
@@ -155,11 +150,15 @@ public class ClientApplication {
                         // proofs, [epoch1], [epoch2], (...) - user asks server for its proofs' as witness on given epochs
                         else if (tokens[0].equals(PROOFS_CMD) && tokens.length >= 2) {
                             Set<Integer> epochs = new HashSet<>();
-                            for (String token : Arrays.copyOfRange(tokens, 1, tokens.length) )
-                                epochs.add( Integer.parseInt(token) );
+                            for (String token : Arrays.copyOfRange(tokens, 1, tokens.length) ) {
+                                int ep = Integer.parseInt(token);
+                                if (!(0 <= ep && ep <= _epoch))
+                                    throw new IllegalArgumentException("Epochs must be positive and not exceed the current epoch.");
+                                epochs.add(ep);
+                            }
 
                             try {
-                                List<LocationProof> proofs = _user.requestMyProofs(epochs);
+                                List<LocationProof> proofs = _user.obtainWitnessProofs(epochs);
                                 if (proofs.size() == 0)
                                     System.out.println("No proofs generated as witness at given epochs");
                                 else
@@ -197,9 +196,9 @@ public class ClientApplication {
         return """
                   ============================= Available Commands =============================
                   step                       - Increase current epoch
-                  submit, [epoch]            - Send the user's DBLocation report of the given
+                  submit, [epoch]            - Send the user's location report of the given
                                                 epoch to the server
-                  obtain, [epoch]            - Ask the server for the user's DBLocation report
+                  obtain, [epoch]            - Ask the server for the user's location report
                                                 at the given epoch
                   proofs, [ep1], [ep2], ...  - Ask the server for the proofs that the user
                                                 generated as witness

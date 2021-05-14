@@ -2,6 +2,7 @@ package pt.tecnico.sec.client;
 
 import java.util.*;
 
+@SuppressWarnings("unused")
 public class Environment {
 
     // Map Epoch -> Grid

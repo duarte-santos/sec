@@ -2,6 +2,7 @@ package pt.tecnico.sec.client;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import pt.tecnico.sec.ObjectMapperHandler;
 import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.server.DBLocationProof;
 import pt.tecnico.sec.server.DBLocationReport;
@@ -44,6 +45,12 @@ public class LocationReport {
             _proofs.add(new LocationProof( dbProof ));
     }
 
+    // convert from bytes
+    public static LocationReport getFromBytes(byte[] reportBytes) throws IOException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        return objectMapper.readValue(reportBytes, LocationReport.class);
+    }
+
     public int get_userId() {
         return _userId;
     }
@@ -76,17 +83,34 @@ public class LocationReport {
         this._epoch = _epoch;
     }
 
-    // convert from bytes
-    public static LocationReport getFromBytes(byte[] reportBytes) throws IOException {
-        ObjectMapper objectMapper = new ObjectMapper();
-        return objectMapper.readValue(reportBytes, LocationReport.class);
+    public LocationProof get_witness_proof(int id) {
+        for (LocationProof proof : _proofs)
+            if (proof.get_witnessId() == id) return proof;
+        return null;
+    }
+
+    @Override
+    public String toString() {
+        return "LocationReport{" +
+                "_userId=" + _userId +
+                ", _epoch=" + _epoch +
+                ", _location=" + _location +
+                ", _proofs=" + getValidProofs() +
+                '}';
+    }
+
+    /* ========================================================== */
+    /* ====[                Proof validation                ]==== */
+    /* ========================================================== */
+
+    private boolean isNearby(Location location) {
+        double distance = _location.distance(location);
+        return distance <= DETECTION_RANGE;
     }
 
     public boolean isProofValid(LocationProof signedProof, Set<Integer> prevWitnessIds) throws Exception {
         ProofData proofData = signedProof.get_proofData();
-
-        ObjectMapper objectMapper = new ObjectMapper();
-        byte[] data = objectMapper.writeValueAsBytes(proofData);
+        byte[] data = ObjectMapperHandler.writeValueAsBytes(proofData);
         String signature = signedProof.get_signature();
         PublicKey clientKey = RSAKeyGenerator.readClientPublicKey(signedProof.get_witnessId());
 
@@ -126,26 +150,5 @@ public class LocationReport {
             }
         }
         return validProofs;
-    }
-
-    private boolean isNearby(Location location) {
-        double distance = _location.distance(location);
-        return distance <= DETECTION_RANGE;
-    }
-
-    public LocationProof get_witness_proof(int id) {
-        for (LocationProof proof : _proofs)
-            if (proof.get_witnessId() == id) return proof;
-        return null;
-    }
-
-    @Override
-    public String toString() {
-        return "LocationReport{" +
-                "_userId=" + _userId +
-                ", _epoch=" + _epoch +
-                ", _location=" + _location +
-                ", _proofs=" + getValidProofs() +
-                '}';
     }
 }

@@ -56,17 +56,10 @@ public class DBLocationReport {
         _signature = signature;
     }
 
-    @Override
-    public String toString() {
-        return "DBLocationReport{" +
-                "id=" + id +
-                ", _userId=" + _userId +
-                ", _epoch=" + _epoch +
-                ", _timestamp=" + _timestamp +
-                ", _DB_location=" + _DB_location +
-                ", _DB_proofs=" + _DB_proofs +
-                ", _signature='" + _signature + '\'' +
-                '}';
+    // convert from bytes
+    public static DBLocationReport getFromBytes(byte[] reportBytes) throws IOException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        return objectMapper.readValue(reportBytes, DBLocationReport.class);
     }
 
     public int get_userId() {
@@ -131,9 +124,16 @@ public class DBLocationReport {
         return null;
     }
 
-    // convert from bytes
-    public static DBLocationReport getFromBytes(byte[] reportBytes) throws IOException {
-        ObjectMapper objectMapper = new ObjectMapper();
-        return objectMapper.readValue(reportBytes, DBLocationReport.class);
+    @Override
+    public String toString() {
+        return "DBLocationReport{" +
+                "id=" + id +
+                ", _userId=" + _userId +
+                ", _epoch=" + _epoch +
+                ", _timestamp=" + _timestamp +
+                ", _DB_location=" + _DB_location +
+                ", _DB_proofs=" + _DB_proofs +
+                ", _signature='" + _signature + '\'' +
+                '}';
     }
 }

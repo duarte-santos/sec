@@ -2,6 +2,7 @@ package pt.tecnico.sec.client;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import pt.tecnico.sec.ObjectMapperHandler;
 import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.server.DBLocationReport;
 
@@ -27,8 +28,7 @@ public class SignedLocationReport {
         _report = report;
 
         // sign message with given private sign key
-        ObjectMapper objectMapper = new ObjectMapper();
-        byte[] bytes = objectMapper.writeValueAsBytes(report);
+        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(report);
         _signature = RSAKeyGenerator.sign(bytes, signKey);
     }
 
@@ -36,17 +36,6 @@ public class SignedLocationReport {
     public SignedLocationReport(DBLocationReport dbLocationReport) {
         _report = new LocationReport(dbLocationReport);
         _signature = dbLocationReport.get_signature();
-    }
-
-    public void verify(PublicKey verifyKey) throws Exception {
-        ObjectMapper objectMapper = new ObjectMapper();
-        byte[] bytes = objectMapper.writeValueAsBytes(_report);
-        if (_signature == null || !RSAKeyGenerator.verify(bytes, _signature, verifyKey))
-            throw new IllegalArgumentException("Signature verify failed!");
-    }
-
-    public int verifyProofs() throws Exception {
-        return _report.verifyProofs();
     }
 
     // convert from bytes
@@ -83,6 +72,15 @@ public class SignedLocationReport {
         return _report.get_witness_proof(id);
     }
 
+    public void verify(PublicKey verifyKey) throws Exception {
+        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(_report);
+        if (_signature == null || !RSAKeyGenerator.verify(bytes, _signature, verifyKey))
+            throw new IllegalArgumentException("Signature verify failed!");
+    }
+
+    public int verifyProofs() throws Exception {
+        return _report.verifyProofs();
+    }
 
     @Override
     public String toString() {

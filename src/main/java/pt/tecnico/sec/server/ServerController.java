@@ -1,10 +1,10 @@
 package pt.tecnico.sec.server;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import pt.tecnico.sec.ObjectMapperHandler;
 import pt.tecnico.sec.client.*;
 import pt.tecnico.sec.healthauthority.ObtainUsersRequest;
 import pt.tecnico.sec.healthauthority.UsersAtLocation;
@@ -14,6 +14,8 @@ import javax.crypto.SecretKey;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+
+import static pt.tecnico.sec.Constants.OK;
 
 @SuppressWarnings("AccessStaticViaInstance")
 @RestController
@@ -37,7 +39,7 @@ public class ServerController {
         // decipher and verify request
         ObtainLocationRequest request = _serverApp.decipherAndVerifyReportRequest(secureRequest, false);
 
-        // Broadcast Read operation
+        // broadcast Read operation
         DBLocationReport dbLocationReport = _serverApp.broadcastRead(request);
         if (dbLocationReport == null)
             return null;
@@ -45,8 +47,7 @@ public class ServerController {
         SignedLocationReport report = new SignedLocationReport(dbLocationReport);
 
         // encrypt using same secret key and client/HA public key, sign using server private key
-        ObjectMapper objectMapper = new ObjectMapper();
-        byte[] bytes = objectMapper.writeValueAsBytes(report);
+        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(report);
         return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), bytes, false);
     }
 
@@ -64,9 +65,7 @@ public class ServerController {
         _serverApp.saveClientSecretKey(secureMessage.get_senderId(), newSecretKey);
 
         // Send secure response
-        String response = "OK";
-        ObjectMapper objectMapper = new ObjectMapper();
-        byte[] bytes = objectMapper.writeValueAsBytes(response);
+        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(OK);
         return _serverApp.cipherAndSignMessage(secureMessage.get_senderId(), bytes, false);
     }
 
@@ -79,11 +78,10 @@ public class ServerController {
         _serverApp.saveServerSecretKey(secureMessage.get_senderId(), newSecretKey);
 
         // Send secure response
-        String response = "OK";
-        ObjectMapper objectMapper = new ObjectMapper();
-        byte[] bytes = objectMapper.writeValueAsBytes(response);
+        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(OK);
         return _serverApp.cipherAndSignMessage(secureMessage.get_senderId(), bytes, true);
     }
+
 
     /* ========================================================== */
     /* ====[                      Users                     ]==== */
@@ -104,9 +102,7 @@ public class ServerController {
         _serverApp.broadcastWrite(locationReport);
 
         // Send secure response
-        String response = "OK";
-        ObjectMapper objectMapper = new ObjectMapper();
-        byte[] bytes = objectMapper.writeValueAsBytes(response);
+        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(OK);
         return _serverApp.cipherAndSignMessage(secureMessage.get_senderId(), bytes, false);
     }
 
@@ -136,8 +132,7 @@ public class ServerController {
         }
 
         // encrypt and send response
-        ObjectMapper objectMapper = new ObjectMapper();
-        byte[] bytes = objectMapper.writeValueAsBytes(locationProofs);
+        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(locationProofs);
         return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), bytes, false);
 
     }
@@ -146,6 +141,7 @@ public class ServerController {
     /* ====[                 Health Authority               ]==== */
     /* ========================================================== */
 
+    @SuppressWarnings("EqualsBetweenInconvertibleTypes")
     @PostMapping("/users") // FIXME regular operation? ou pode ser atomic? perguntar
     public SecureMessage getUsers(@RequestBody SecureMessage secureRequest) throws Exception {
         // decipher and verify request
@@ -167,13 +163,12 @@ public class ServerController {
 
         // encrypt and send response
         UsersAtLocation response = new UsersAtLocation(loc, ep, reports);
-        ObjectMapper objectMapper = new ObjectMapper();
-        byte[] bytes = objectMapper.writeValueAsBytes(response);
+        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(response);
         return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), bytes, false);
     }
 
     /* ========================================================== */
-    /* ====[               Regular Registers                ]==== */
+    /* ====[                Atomic Registers                ]==== */
     /* ========================================================== */
 
     @PostMapping("/broadcast-write")
@@ -201,8 +196,7 @@ public class ServerController {
         }
 
         // Encrypt and send response
-        ObjectMapper objectMapper = new ObjectMapper();
-        byte[] bytes = objectMapper.writeValueAsBytes(timestamp);
+        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(timestamp);
         return _serverApp.cipherAndSignMessage(senderId, bytes, true);
     }
 
@@ -219,8 +213,7 @@ public class ServerController {
         DBLocationReport report = _reportRepository.findReportByEpochAndUser(request.get_userId(), request.get_epoch());
 
         // encrypt using same secret key and client/HA public key, sign using server private key
-        ObjectMapper objectMapper = new ObjectMapper();
-        byte[] bytes = objectMapper.writeValueAsBytes(report);
+        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(report);
         return _serverApp.cipherAndSignMessage(senderId, bytes, true);
     }
 

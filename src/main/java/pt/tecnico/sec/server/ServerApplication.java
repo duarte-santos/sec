@@ -1,11 +1,11 @@
 package pt.tecnico.sec.server;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.http.HttpEntity;
 import org.springframework.web.client.RestTemplate;
 import pt.tecnico.sec.AESKeyGenerator;
+import pt.tecnico.sec.ObjectMapperHandler;
 import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.client.LocationReport;
 import pt.tecnico.sec.client.ObtainLocationRequest;
@@ -34,15 +34,15 @@ public class ServerApplication {
     private static int _serverCount;
     private static int _userCount;
 
-    public RestTemplate _restTemplate = new RestTemplate();
+    public final RestTemplate _restTemplate = new RestTemplate();
 
-    private static Map<Integer, SecretKey> _clientSecretKeys = new HashMap<>();
-    private static Map<Integer, SecretKey> _serverSecretKeys = new HashMap<>();
-    private static Map<Integer, Integer> _serverSecretKeysUsages = new HashMap<>();
+    private static final Map<Integer, SecretKey> _clientSecretKeys = new HashMap<>();
+    private static final Map<Integer, SecretKey> _serverSecretKeys = new HashMap<>();
+    private static final Map<Integer, Integer> _serverSecretKeysUsages = new HashMap<>();
 
     public static void main(String[] args) {
         try {
-            // get serverId to determine its port
+            // parse arguments
             _serverId = Integer.parseInt(args[0]);
             _serverCount = Integer.parseInt(args[1]);
             _userCount = Integer.parseInt(args[2]);
@@ -50,8 +50,8 @@ public class ServerApplication {
             if (_serverId >= _serverCount)
                 throw new NumberFormatException("Server ID must be lower than the number of servers");
 
+            // set database information
             int serverPort = SERVER_BASE_PORT + _serverId;
-
             Map<String, Object> defaults = new HashMap<>();
             defaults.put("server.port", serverPort);
             defaults.put("spring.jpa.hibernate.ddl-auto", "update");
@@ -60,7 +60,6 @@ public class ServerApplication {
             defaults.put("spring.datasource.password", "pass");
 
             SpringApplication springApplication = new SpringApplication(ServerApplication.class);
-            //springApplication.setDefaultProperties(Collections.singletonMap("server.port", String.valueOf(serverPort)));
             springApplication.setDefaultProperties(defaults);
             springApplication.run(args);
         } 
@@ -72,7 +71,7 @@ public class ServerApplication {
 
 
     /* ========================================================== */
-    /* ====[              Auxiliary functions               ]==== */
+    /* ====[               Getters and Setters              ]==== */
     /* ========================================================== */
 
     public static int getId() {
@@ -83,24 +82,13 @@ public class ServerApplication {
         return _userCount;
     }
 
-    public static void fetchRSAKeyPair() throws IOException, GeneralSecurityException {
-        // get server's keyPair
-        String keysPath = KEYS_PATH + "s" + _serverId;
-        _keyPair = RSAKeyGenerator.readKeyPair(keysPath + ".pub", keysPath + ".priv");
-    }
-
-    public static PrivateKey getPrivateKey() throws IOException, GeneralSecurityException {
-        return getKeyPair().getPrivate();
-    }
-
     public static KeyPair getKeyPair() throws IOException, GeneralSecurityException {
         if (_keyPair == null) fetchRSAKeyPair();
         return _keyPair;
     }
 
-    public static PublicKey getHAPublicKey() throws GeneralSecurityException, IOException {
-        String keyPath = KEYS_PATH + "ha.pub";
-        return RSAKeyGenerator.readPublicKey(keyPath);
+    public static PrivateKey getPrivateKey() throws IOException, GeneralSecurityException {
+        return getKeyPair().getPrivate();
     }
 
     public SecretKey getClientSecretKey(int id) {
@@ -116,28 +104,115 @@ public class ServerApplication {
         _serverSecretKeysUsages.put(id, 0);
     }
 
+
+    /* ========================================================== */
+    /* ====[              Auxiliary functions               ]==== */
+    /* ========================================================== */
+
+    public static void fetchRSAKeyPair() throws IOException, GeneralSecurityException {
+        // get server's keyPair
+        String keysPath = KEYS_PATH + "s" + _serverId;
+        _keyPair = RSAKeyGenerator.readKeyPair(keysPath + ".pub", keysPath + ".priv");
+    }
+
     public String getServerURL(int serverId) {
         int serverPort = SERVER_BASE_PORT + serverId;
         return "http://localhost:" + serverPort;
-    }
-
-    public Integer getIntFromBytes(byte[] bytes) throws IOException {
-        ObjectMapper objectMapper = new ObjectMapper();
-        return objectMapper.readValue(bytes, Integer.class);
-    }
-
-    public String getStringFromBytes(byte[] bytes) throws IOException {
-        ObjectMapper objectMapper = new ObjectMapper();
-        return objectMapper.readValue(bytes, String.class);
     }
 
     public void serverSecretKeyUsed(int id) {
         _serverSecretKeysUsages.put(id, _serverSecretKeysUsages.get(id)+1); // update secret key usages
     }
 
+    /* ========================================================== */
+    /* ====[                Atomic Registers                ]==== */
+    /* ========================================================== */
+
+    private SecureMessage postToServer(int serverId, byte[] messageBytes, String endpoint) throws Exception {
+        SecretKey secretKey = getServerSecretKey(serverId);
+        SecureMessage secureRequest = new SecureMessage(_serverId, messageBytes, secretKey, _keyPair.getPrivate());
+        HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
+        SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + endpoint, request, SecureMessage.class);
+        serverSecretKeyUsed(serverId);
+        return secureResponse;
+    }
+
+    public void broadcastWrite(DBLocationReport locationReport) throws Exception {
+        // setup broadcast
+        int acks = 0;
+        int my_ts = locationReport.get_timestamp() + 1;
+        locationReport.set_timestamp(my_ts);
+
+        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(locationReport);
+
+        System.out.println("Broadcasting write...");
+        for (int serverId = 0; serverId < _serverCount; serverId++) {
+            try {
+                // send report
+                SecureMessage secureResponse = postToServer(serverId, bytes, "/broadcast-write");
+                byte[] responseBytes = decipherAndVerifyMessage(secureResponse, true);
+                if (responseBytes != null && ObjectMapperHandler.getIntFromBytes(responseBytes) == my_ts) acks += 1;
+
+            } catch(IllegalArgumentException e) {
+                throw e;
+            } catch(Exception e) {
+                System.out.println(e.getMessage());
+            } // we don't care if some servers fail, we only need (N+f)/2 to succeed
+        }
+
+        if (acks <= (_serverCount + FAULTS) / 2 )
+            throw new Exception("Write operation broadcast was unsuccessful");
+        // FIXME : Dar rebroadcast?
+    }
+
+
+    public DBLocationReport broadcastRead(ObtainLocationRequest request) throws Exception {
+        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(request);
+
+        ArrayList<DBLocationReport> readList = new ArrayList<>();
+
+        // get reports
+        System.out.println("Broadcasting read...");
+        for (int serverId = 0; serverId < _serverCount; serverId++) {
+            try{
+                // send request
+                SecureMessage secureResponse = postToServer(serverId, bytes, "/broadcast-read");
+                DBLocationReport locationReport = decipherAndVerifyDBReport(secureResponse, true);
+                checkObtainDBReportResponse(request, locationReport);
+                readList.add(locationReport);
+
+                if (readList.size() > (_serverCount+FAULTS)/2) break;
+
+            } catch(IllegalArgumentException e) {
+                throw e;
+            } catch(Exception e) {
+                System.out.println(e.getMessage());
+            }
+        }
+
+        if (readList.size() <= (_serverCount + FAULTS) / 2)
+            throw new Exception("Read operation broadcast was unsuccessful");
+        // FIXME : Dar rebroadcast?
+
+        // Choose the report with the largest timestamp
+        DBLocationReport finalLocationReport = readList.get(0);
+        for (DBLocationReport locationReport : readList) {
+            if (locationReport == null) continue;
+            if (finalLocationReport == null || locationReport.get_timestamp() > finalLocationReport.get_timestamp())
+                finalLocationReport = locationReport;
+        }
+
+        // Atomic Register: Write-back phase after Read
+        if (finalLocationReport != null)
+            broadcastWrite(finalLocationReport);
+
+        return finalLocationReport;
+
+    }
+
 
     /* ========================================================== */
-    /* ====[              Secure communication              ]==== */
+    /* ====[               Handle Secret Keys               ]==== */
     /* ========================================================== */
 
     public boolean secretKeyValid(int id) {
@@ -159,8 +234,6 @@ public class ServerApplication {
     public SecretKey getServerSecretKey(int serverId) throws Exception {
 
         if (!secretKeyValid(serverId)) {
-            //System.out.print("Generating new secret key...");
-
             // Generate secret key
             SecretKey newSecretKey = AESKeyGenerator.makeAESKey();
 
@@ -168,35 +241,43 @@ public class ServerApplication {
             byte[] responseBytes = sendSecretKey(serverId, newSecretKey);
 
             // Check response
-            if (responseBytes == null || !getStringFromBytes(responseBytes).equals("OK"))
+            if (responseBytes == null || !ObjectMapperHandler.getStringFromBytes(responseBytes).equals("OK"))
                 throw new IllegalArgumentException("Error exchanging new secret key");
 
             // Success! Update key
             saveServerSecretKey(serverId, newSecretKey);
-
-            //System.out.println("Done!");
         }
 
         return _serverSecretKeys.get(serverId);
     }
 
+
+    /* ========================================================== */
+    /* ====[          Decipher and Verify Requests          ]==== */
+    /* ========================================================== */
+
+    //TODO refactor; server ids?
+
+    public void checkObtainDBReportResponse(ObtainLocationRequest request, DBLocationReport response) {
+        if (response == null) return;
+        // Check content
+        if (response.get_userId() != request.get_userId() || response.get_epoch() != request.get_epoch())
+            throw new IllegalArgumentException("Bad server response!");
+    }
+
     public SecretKey decipherAndVerifyKey(SecureMessage secureMessage, boolean serverMode) throws Exception {
         int senderId = secureMessage.get_senderId();
         PublicKey verifyKey;
-        if (senderId == -1) verifyKey = getHAPublicKey();
+        if (senderId == -1) verifyKey = RSAKeyGenerator.readHAKey();
         else if (serverMode) verifyKey = RSAKeyGenerator.readServerPublicKey(senderId);
         else verifyKey = RSAKeyGenerator.readClientPublicKey(senderId);
         return secureMessage.decipherAndVerifyKey( getPrivateKey(), verifyKey );
     }
 
-    public SecureMessage cipherAndSignMessage(int receiverId, byte[] messageBytes, boolean serverMode) throws Exception {
-        return new SecureMessage(_serverId, messageBytes, serverMode ? _serverSecretKeys.get(receiverId) : getClientSecretKey(receiverId), getPrivateKey());
-    }
-
     public byte[] decipherAndVerifyMessage(SecureMessage secureMessage, boolean serverMode) throws Exception {
         int senderId = secureMessage.get_senderId();
         PublicKey verifyKey;
-        if (senderId == -1) verifyKey = getHAPublicKey();
+        if (senderId == -1) verifyKey = RSAKeyGenerator.readHAKey();
         else if (serverMode) verifyKey = RSAKeyGenerator.readServerPublicKey(senderId);
         else verifyKey = RSAKeyGenerator.readClientPublicKey(senderId);
         return secureMessage.decipherAndVerify( serverMode ? _serverSecretKeys.get(senderId) : getClientSecretKey(senderId), verifyKey );
@@ -230,13 +311,6 @@ public class ServerApplication {
             throw new ReportNotAcceptableException("Not enough proofs to constitute an acceptable Location Report");
 
         return dbLocationReport;
-    }
-
-    public void checkObtainDBReportResponse(ObtainLocationRequest request, DBLocationReport response) {
-        if (response == null) return;
-        // Check content
-        if (response.get_userId() != request.get_userId() || response.get_epoch() != request.get_epoch())
-            throw new IllegalArgumentException("Bad server response!");
     }
 
     public ObtainLocationRequest decipherAndVerifyReportRequest(SecureMessage secureMessage, boolean serverMode) throws Exception {
@@ -273,87 +347,8 @@ public class ServerApplication {
         return request;
     }
 
-    /* ========================================================== */
-    /* ====[               Regular Registers                ]==== */
-    /* ========================================================== */
-
-    private SecureMessage postToServer(int serverId, byte[] messageBytes, String endpoint) throws Exception {
-        SecretKey secretKey = getServerSecretKey(serverId);
-        SecureMessage secureRequest = new SecureMessage(_serverId, messageBytes, secretKey, _keyPair.getPrivate());
-        HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
-        SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + endpoint, request, SecureMessage.class);
-        serverSecretKeyUsed(serverId);
-        return secureResponse;
-    }
-
-    public void broadcastWrite(DBLocationReport locationReport) throws Exception {
-        boolean success = false;
-        int acks = 0;
-        int my_ts = locationReport.get_timestamp() + 1;
-        locationReport.set_timestamp(my_ts);
-        ObjectMapper objectMapper = new ObjectMapper();
-        byte[] bytes = objectMapper.writeValueAsBytes(locationReport);
-
-        System.out.println("Broadcasting write...");
-        for (int serverId = 0; serverId < _serverCount; serverId++) {
-            try {
-                SecureMessage secureResponse = postToServer(serverId, bytes, "/broadcast-write");
-                byte[] responseBytes = decipherAndVerifyMessage(secureResponse, true);
-                if (responseBytes != null && getIntFromBytes(responseBytes).equals(my_ts)) {
-                    //System.out.println("Acknowledged!");
-                    acks += 1;
-                }
-                if (acks > (_serverCount+FAULTS)/2) success = true; //FIXME servercount+f?
-            } catch(IllegalArgumentException e) {
-                throw e;
-            } catch(Exception ignored) {
-                System.out.println(ignored.getMessage());
-            } // We don't care if some servers fail, we only need (N+f)/2 to succeed
-        }
-
-        if (!success) throw new Exception("Write operation broadcast was unsuccessful");
-        // FIXME : Dar rebroadcast?
-    }
-
-    public DBLocationReport broadcastRead(ObtainLocationRequest request) throws Exception {
-
-        ObjectMapper objectMapper = new ObjectMapper();
-        byte[] bytes = objectMapper.writeValueAsBytes(request);
-        ArrayList<DBLocationReport> readList = new ArrayList<>();
-
-        System.out.println("Broadcasting read...");
-        for (int serverId = 0; serverId < _serverCount; serverId++) {
-            try{
-                SecureMessage secureResponse = postToServer(serverId, bytes, "/broadcast-read");
-                DBLocationReport locationReport = decipherAndVerifyDBReport(secureResponse, true);
-                checkObtainDBReportResponse(request, locationReport);
-                readList.add(locationReport);
-                if (readList.size() > (_serverCount+FAULTS)/2) break;
-            } catch(IllegalArgumentException e) {
-                throw e;
-            } catch(Exception ignored) {
-                System.out.println(ignored.getMessage());
-            }
-        }
-
-        if (readList.size() <= (_serverCount+FAULTS)/2) throw new Exception("Read operation broadcast was unsuccessful");
-        // FIXME : Dar rebroadcast?
-
-
-        // Choose the report with the largest timestamp
-        DBLocationReport finalLocationReport = readList.get(0);
-        for (DBLocationReport locationReport : readList){
-            if (locationReport == null) continue;
-            if (finalLocationReport == null || locationReport.get_timestamp() > finalLocationReport.get_timestamp())
-                finalLocationReport = locationReport;
-        }
-
-        // Atomic Register: Write-back phase after Read
-        if (finalLocationReport != null)
-            broadcastWrite(finalLocationReport);
-
-        return finalLocationReport;
-
+    public SecureMessage cipherAndSignMessage(int receiverId, byte[] messageBytes, boolean serverMode) throws Exception {
+        return new SecureMessage(_serverId, messageBytes, serverMode ? _serverSecretKeys.get(receiverId) : getClientSecretKey(receiverId), getPrivateKey());
     }
 
 }

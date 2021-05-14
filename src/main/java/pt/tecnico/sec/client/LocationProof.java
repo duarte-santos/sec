@@ -1,7 +1,7 @@
 package pt.tecnico.sec.client;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import pt.tecnico.sec.ObjectMapperHandler;
 import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.server.DBLocationProof;
 
@@ -51,8 +51,7 @@ public class LocationProof {
     }
 
     public void verify(PublicKey verifyKey) throws Exception {
-        ObjectMapper objectMapper = new ObjectMapper();
-        byte[] bytes = objectMapper.writeValueAsBytes(_proofData);
+        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(_proofData);
         if (_signature == null || !RSAKeyGenerator.verify(bytes, _signature, verifyKey))
             throw new IllegalArgumentException("Signature verify failed!");
     }

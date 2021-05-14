@@ -16,6 +16,12 @@ public class ObtainLocationRequest {
         this._epoch = _epoch;
     }
 
+    // convert from bytes
+    public static ObtainLocationRequest getFromBytes(byte[] requestBytes) throws IOException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        return objectMapper.readValue(requestBytes, ObtainLocationRequest.class);
+    }
+
     public int get_userId() {
         return _userId;
     }
@@ -30,12 +36,6 @@ public class ObtainLocationRequest {
 
     public void set_epoch(int _epoch) {
         this._epoch = _epoch;
-    }
-
-    // convert from bytes
-    public static ObtainLocationRequest getFromBytes(byte[] requestBytes) throws IOException {
-        ObjectMapper objectMapper = new ObjectMapper();
-        return objectMapper.readValue(requestBytes, ObtainLocationRequest.class);
     }
 
     @Override
