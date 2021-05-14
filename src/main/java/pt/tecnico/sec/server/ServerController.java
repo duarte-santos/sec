@@ -141,28 +141,27 @@ public class ServerController {
     /* ====[                 Health Authority               ]==== */
     /* ========================================================== */
 
-    @PostMapping("/users")
+    @PostMapping("/users") // FIXME regular operation? ou pode ser atomic? perguntar
     public SecureMessage getUsers(@RequestBody SecureMessage secureRequest) throws Exception {
         // decipher and verify request
         ObtainUsersRequest request = _serverApp.decipherAndVerifyUsersRequest(secureRequest, false);
+        int ep = request.get_epoch();
+        Location loc = request.get_location();
 
-        // find requested reports
-        Location location = request.get_location();
-        int epoch = request.get_epoch();
-        List<DBLocationReport> dbLocationReports = _reportRepository.findUsersByLocationAndEpoch(epoch, location.get_x(), location.get_y());
-
-        // convert reports to client form
         List<SignedLocationReport> reports = new ArrayList<>();
-        for (DBLocationReport dbLocationReport : dbLocationReports) {
-            // Broadcast Read operation
-            ObtainLocationRequest obtainLocationRequest = new ObtainLocationRequest(dbLocationReport.get_userId(), dbLocationReport.get_epoch());
-            dbLocationReport = _serverApp.broadcastRead(obtainLocationRequest);
 
-            reports.add(new SignedLocationReport(dbLocationReport));
+        // set of read operations
+        int userCount = _serverApp.getUserCount();
+        for (int id = 0; id < userCount; id++) {
+            ObtainLocationRequest userReportRequest = new ObtainLocationRequest(id, ep);
+            DBLocationReport dbLocationReport = _serverApp.broadcastRead(userReportRequest);
+            // filter requested reports
+            if (dbLocationReport != null && dbLocationReport.get_location().equals(loc))
+                reports.add(new SignedLocationReport(dbLocationReport));
         }
-        UsersAtLocation response = new UsersAtLocation(location, epoch, reports);
 
-        // encrypt using HA public key, sign using server private key
+        // encrypt and send response
+        UsersAtLocation response = new UsersAtLocation(loc, ep, reports);
         ObjectMapper objectMapper = new ObjectMapper();
         byte[] bytes = objectMapper.writeValueAsBytes(response);
         return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), bytes, false);
@@ -174,6 +173,8 @@ public class ServerController {
 
     @PostMapping("/broadcast-write")
     public SecureMessage broadcastWrite(@RequestBody SecureMessage secureMessage) throws Exception {
+        System.out.println("Received Write broadcast");
+
         // Decipher and check report
         DBLocationReport locationReport = _serverApp.decipherAndVerifyDBReport(secureMessage, true);
         int senderId = secureMessage.get_senderId();
@@ -183,8 +184,6 @@ public class ServerController {
         int userId = locationReport.get_userId();
         int timestamp = locationReport.get_timestamp();
         int mytimestamp = 0;
-
-        System.out.println("Received Write broadcast for report: " + locationReport.toString());
 
         // Update database
         DBLocationReport mylocationReport = _reportRepository.findReportByEpochAndUser(userId, epoch);
@@ -204,6 +203,8 @@ public class ServerController {
 
     @PostMapping("/broadcast-read")
     public SecureMessage broadcastRead(@RequestBody SecureMessage secureRequest) throws Exception {
+        System.out.println("Received Read broadcast");
+
         // decipher and verify request TODO use different ids for servers, check sender is server
         ObtainLocationRequest request = _serverApp.decipherAndVerifyReportRequest(secureRequest, true);
         int senderId = secureRequest.get_senderId();
@@ -215,7 +216,6 @@ public class ServerController {
         // encrypt using same secret key and client/HA public key, sign using server private key
         ObjectMapper objectMapper = new ObjectMapper();
         byte[] bytes = objectMapper.writeValueAsBytes(report);
-        System.out.println("Returning report: " + report);
         return _serverApp.cipherAndSignMessage(senderId, bytes, true);
     }
 

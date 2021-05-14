@@ -7,6 +7,7 @@ import javax.persistence.Entity;
 import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 import javax.persistence.Id;
+import java.util.Objects;
 
 @SuppressWarnings("unused")
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -46,6 +47,26 @@ public class DBLocation {
         int y = DBLocation.getY();
         // euclidean distance
         return Math.sqrt( Math.pow(x - _x, 2) + Math.pow(y - _y, 2) );
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null) return false;
+        if (o.getClass() == Location.class) {
+            Location that = (Location) o;
+            return _x == that.get_x() && _y == that.get_y();
+        }
+        if (o.getClass() == DBLocation.class) {
+            DBLocation that = (DBLocation) o;
+            return _x == that._x && _y == that._y;
+        }
+        return false;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(_x, _y);
     }
 
     @Override

@@ -55,9 +55,16 @@ public class Location {
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        Location location = (Location) o;
-        return _x == location._x && _y == location._y;
+        if (o == null) return false;
+        if (o.getClass() == Location.class) {
+            Location that = (Location) o;
+            return _x == that.get_x() && _y == that.get_y();
+        }
+        if (o.getClass() == DBLocation.class) {
+            DBLocation that = (DBLocation) o;
+            return _x == that.get_x() && _y == that.get_y();
+        }
+        return false;
     }
 
     @Override

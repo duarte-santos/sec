@@ -51,7 +51,7 @@ To run the **Setup**:
 
 To run the **ServerApplication**:
 ```bash
-./mvnw spring-boot:run -Dstart-class=pt.tecnico.sec.server.ServerApplication -Dspring-boot.run.arguments="[serverId] [serverCount]"
+./mvnw spring-boot:run -Dstart-class=pt.tecnico.sec.server.ServerApplication -Dspring-boot.run.arguments="[serverId] [serverCount] [userCount]"
 ```
 
 <br/>

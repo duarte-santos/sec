@@ -29,7 +29,7 @@ import java.util.Map;
 public class ServerApplication {
 
     /* constants definition */
-    private static final String USAGE = "Usage: ./mvnw spring-boot:run -Dstart-class=pt.tecnico.sec.server.ServerApplication -Dspring-boot.run.arguments=\"[serverId] [serverCount]\"";
+    private static final String USAGE = "Usage: ./mvnw spring-boot:run -Dstart-class=pt.tecnico.sec.server.ServerApplication -Dspring-boot.run.arguments=\"[serverId] [serverCount] [userCount]\"";
     private static final int BASE_PORT = 9000;
     private static final int SECRET_KEY_DURATION = 2;
     private static final int BYZANTINE_USERS = 1;
@@ -38,6 +38,7 @@ public class ServerApplication {
     private static KeyPair _keyPair;
     private static int _serverId;
     private static int _serverCount;
+    private static int _userCount;
 
     public RestTemplate _restTemplate = new RestTemplate();
 
@@ -50,6 +51,7 @@ public class ServerApplication {
             // get serverId to determine its port
             _serverId = Integer.parseInt(args[0]);
             _serverCount = Integer.parseInt(args[1]);
+            _userCount = Integer.parseInt(args[2]);
 
             if (_serverId >= _serverCount)
                 throw new NumberFormatException("Server ID must be lower than the number of servers");
@@ -79,8 +81,12 @@ public class ServerApplication {
     /* ====[              Auxiliary functions               ]==== */
     /* ========================================================== */
 
-    public static int getId() throws IOException, GeneralSecurityException {
+    public static int getId() {
         return _serverId;
+    }
+
+    public static int getUserCount() {
+        return _userCount;
     }
 
     public static void fetchRSAKeyPair() throws IOException, GeneralSecurityException {
@@ -159,7 +165,7 @@ public class ServerApplication {
     public SecretKey getServerSecretKey(int serverId) throws Exception {
 
         if (!secretKeyValid(serverId)) {
-            System.out.print("Generating new secret key...");
+            //System.out.print("Generating new secret key...");
 
             // Generate secret key
             SecretKey newSecretKey = AESKeyGenerator.makeAESKey();
@@ -174,7 +180,7 @@ public class ServerApplication {
             // Success! Update key
             saveServerSecretKey(serverId, newSecretKey);
 
-            System.out.println("Done!");
+            //System.out.println("Done!");
         }
 
         return _serverSecretKeys.get(serverId);
@@ -300,7 +306,7 @@ public class ServerApplication {
                 SecureMessage secureResponse = postToServer(serverId, bytes, "/broadcast-write");
                 byte[] responseBytes = decipherAndVerifyMessage(secureResponse, true);
                 if (responseBytes != null && getIntFromBytes(responseBytes).equals(my_ts)) {
-                    System.out.println("Acknowledged!");
+                    //System.out.println("Acknowledged!");
                     acks += 1;
                 }
                 if (acks > (_serverCount+FAULTS)/2) success = true; //FIXME servercount+f?
@@ -349,7 +355,8 @@ public class ServerApplication {
         }
 
         // Atomic Register: Write-back phase after Read
-        broadcastWrite(finalLocationReport);
+        if (finalLocationReport != null)
+            broadcastWrite(finalLocationReport);
 
         return finalLocationReport;
 
