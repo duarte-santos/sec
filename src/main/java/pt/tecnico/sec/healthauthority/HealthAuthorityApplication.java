@@ -29,9 +29,8 @@ public class HealthAuthorityApplication {
     private KeyPair _keyPair;
     private static PublicKey[] _serverKeys;
 
-    private SecretKey _secretKey;
-    private int _sKeyUsages;
-
+    private static final Map<Integer, SecretKey> _secretKeys = new HashMap<>();
+    private static final Map<Integer, Integer> _sKeysUsages = new HashMap<>();
 
     public static void main(String[] args) {
         try {
@@ -157,6 +156,15 @@ public class HealthAuthorityApplication {
         return signedReport.get_report();
     }
 
+    public void secretKeyUsed(int id) {
+        _sKeysUsages.put(id, _sKeysUsages.get(id)+1); // update secret key usages
+    }
+
+    public int getRandomServerId() {
+        Random random = new Random();
+        return random.nextInt(_serverKeys.length);
+    }
+
 
     /* ========================================================== */
     /* ====[             Obtain Location Report             ]==== */
@@ -236,25 +244,18 @@ public class HealthAuthorityApplication {
     }
 
     private byte[] postToServers(byte[] messageBytes, String endpoint) throws Exception {
-        // Choose random server to send request
-        Random random = new Random();
-        int serverId = random.nextInt(_serverKeys.length);
+        int serverId = getRandomServerId(); // Choose random server to send request
+        SecretKey secretKey = updateSecretKey(serverId);
+        secretKeyUsed(serverId);
         System.out.println("Requesting from server " + serverId);
-
-        SecretKey secretKey = updateSecretKey();
-        _sKeyUsages++;
         SecureMessage secureRequest = new SecureMessage(-1, messageBytes, secretKey, _keyPair.getPrivate());
         return sendRequest(serverId, secureRequest, secretKey, endpoint);
     }
 
-    private List<byte[]> postKeyToServers(SecretKey keyToSend) throws Exception {
-        List<byte[]> responsesBytes = new ArrayList<>();
-        for (int serverId = 0; serverId < _serverKeys.length; serverId++) {
-            PublicKey serverKey = _serverKeys[serverId];
-            SecureMessage secureRequest = new SecureMessage(-1, keyToSend, serverKey, _keyPair.getPrivate());
-            responsesBytes.add( sendRequest(serverId, secureRequest, keyToSend, "/secret-key") );
-        }
-        return responsesBytes; //FIXME
+    private byte[] postKeyToServers(int serverId, SecretKey keyToSend) throws Exception {
+        PublicKey serverKey = _serverKeys[serverId];
+        SecureMessage secureRequest = new SecureMessage(-1, keyToSend, serverKey, _keyPair.getPrivate());
+        return sendRequest(serverId, secureRequest, keyToSend, "/secret-key");
     }
 
 
@@ -262,32 +263,30 @@ public class HealthAuthorityApplication {
     /* ====[               Handle Secret Keys               ]==== */
     /* ========================================================== */
 
-    public boolean secretKeyValid() {
-        return _secretKey != null && _sKeyUsages <= SECRET_KEY_DURATION;
+    public boolean secretKeyValid(int serverId) {
+        return _secretKeys.get(serverId) != null && _sKeysUsages.get(serverId) <= SECRET_KEY_DURATION;
     }
 
-    public SecretKey updateSecretKey() throws Exception {
-        if (!secretKeyValid()){
+    public SecretKey updateSecretKey(int serverId) throws Exception {
+        if (!secretKeyValid(serverId)){
             System.out.print("Generating new secret key... ");
 
             // Generate secret key
             SecretKey newSecretKey = AESKeyGenerator.makeAESKey();
 
             // Send key
-            List<byte[]> responsesBytes = postKeyToServers(newSecretKey);
+            byte[] responseBytes = postKeyToServers(serverId, newSecretKey);
 
             // Check response
-            for (byte[] responseBytes : responsesBytes) {
-                if (responseBytes == null || !ObjectMapperHandler.getStringFromBytes(responseBytes).equals(OK))
-                    throw new IllegalArgumentException("Error exchanging new secret key");
-            }
+            if (responseBytes == null || !ObjectMapperHandler.getStringFromBytes(responseBytes).equals(OK))
+                throw new IllegalArgumentException("Error exchanging new secret key");
 
             // Success! Update key
-            _secretKey = newSecretKey;
-            _sKeyUsages = 0;
+            _secretKeys.put(serverId, newSecretKey);
+            _sKeysUsages.put(serverId, 0);
 
             System.out.println("Done!");
         }
-        return _secretKey;
+        return _secretKeys.get(serverId);
     }
 }

@@ -36,9 +36,8 @@ public class ServerApplication {
 
     public final RestTemplate _restTemplate = new RestTemplate();
 
-    private static final Map<Integer, SecretKey> _clientSecretKeys = new HashMap<>();
-    private static final Map<Integer, SecretKey> _serverSecretKeys = new HashMap<>();
-    private static final Map<Integer, Integer> _serverSecretKeysUsages = new HashMap<>();
+    private static final Map<Integer, SecretKey> _secretKeys = new HashMap<>();
+    private static final Map<Integer, Integer> _secretKeysUsages = new HashMap<>();
 
     public static void main(String[] args) {
         try {
@@ -91,17 +90,13 @@ public class ServerApplication {
         return getKeyPair().getPrivate();
     }
 
-    public SecretKey getClientSecretKey(int id) {
-        return _clientSecretKeys.get(id);
+    public SecretKey getSecretKey(int id) {
+        return _secretKeys.get(id);
     }
 
-    public void saveClientSecretKey(int id, SecretKey secretKey) {
-        _clientSecretKeys.put(id, secretKey);
-    }
-
-    public void saveServerSecretKey(int id, SecretKey secretKey) {
-        _serverSecretKeys.put(id, secretKey);
-        _serverSecretKeysUsages.put(id, 0);
+    public void saveSecretKey(int id, SecretKey secretKey) {
+        _secretKeys.put(id, secretKey);
+        if (id >= 1000) _secretKeysUsages.put(id, 0); // keep usage count for server keys
     }
 
 
@@ -121,7 +116,8 @@ public class ServerApplication {
     }
 
     public void serverSecretKeyUsed(int id) {
-        _serverSecretKeysUsages.put(id, _serverSecretKeysUsages.get(id)+1); // update secret key usages
+        assert id >= 1000;
+        _secretKeysUsages.put(id, _secretKeysUsages.get(id)+1); // update secret key usages
     }
 
     /* ========================================================== */
@@ -129,11 +125,11 @@ public class ServerApplication {
     /* ========================================================== */
 
     private SecureMessage postToServer(int serverId, byte[] messageBytes, String endpoint) throws Exception {
-        SecretKey secretKey = getServerSecretKey(serverId);
-        SecureMessage secureRequest = new SecureMessage(_serverId, messageBytes, secretKey, _keyPair.getPrivate());
+        updateServerSecretKey(serverId+1000);
+        SecureMessage secureRequest = cipherAndSignMessage(serverId+1000, messageBytes);
         HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
         SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + endpoint, request, SecureMessage.class);
-        serverSecretKeyUsed(serverId);
+        serverSecretKeyUsed(serverId+1000);
         return secureResponse;
     }
 
@@ -150,7 +146,7 @@ public class ServerApplication {
             try {
                 // send report
                 SecureMessage secureResponse = postToServer(serverId, bytes, "/broadcast-write");
-                byte[] responseBytes = decipherAndVerifyMessage(secureResponse, true);
+                byte[] responseBytes = decipherAndVerifyMessage(secureResponse);
                 if (responseBytes != null && ObjectMapperHandler.getIntFromBytes(responseBytes) == my_ts) acks += 1;
 
             } catch(IllegalArgumentException e) {
@@ -177,7 +173,7 @@ public class ServerApplication {
             try{
                 // send request
                 SecureMessage secureResponse = postToServer(serverId, bytes, "/broadcast-read");
-                DBLocationReport locationReport = decipherAndVerifyDBReport(secureResponse, true);
+                DBLocationReport locationReport = decipherAndVerifyServerWrite(secureResponse);
                 checkObtainDBReportResponse(request, locationReport);
                 readList.add(locationReport);
 
@@ -210,54 +206,6 @@ public class ServerApplication {
 
     }
 
-
-    /* ========================================================== */
-    /* ====[               Handle Secret Keys               ]==== */
-    /* ========================================================== */
-
-    public boolean secretKeyValid(int id) {
-        return _serverSecretKeys.get(id) != null && _serverSecretKeysUsages.get(id) <= SECRET_KEY_DURATION;
-    }
-
-    private byte[] sendSecretKey(int serverId, SecretKey keyToSend) throws Exception {
-        PublicKey serverKey = RSAKeyGenerator.readServerPublicKey(serverId);
-        SecureMessage secureRequest = new SecureMessage(_serverId, keyToSend, serverKey, _keyPair.getPrivate());
-
-        HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
-        SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + "/secret-key-server", request, SecureMessage.class);
-
-        // Check response's signature and decipher TODO freshness
-        assert secureResponse != null;
-        return secureResponse.decipherAndVerify( keyToSend, serverKey);
-    }
-
-    public SecretKey getServerSecretKey(int serverId) throws Exception {
-
-        if (!secretKeyValid(serverId)) {
-            // Generate secret key
-            SecretKey newSecretKey = AESKeyGenerator.makeAESKey();
-
-            // Send key
-            byte[] responseBytes = sendSecretKey(serverId, newSecretKey);
-
-            // Check response
-            if (responseBytes == null || !ObjectMapperHandler.getStringFromBytes(responseBytes).equals("OK"))
-                throw new IllegalArgumentException("Error exchanging new secret key");
-
-            // Success! Update key
-            saveServerSecretKey(serverId, newSecretKey);
-        }
-
-        return _serverSecretKeys.get(serverId);
-    }
-
-
-    /* ========================================================== */
-    /* ====[          Decipher and Verify Requests          ]==== */
-    /* ========================================================== */
-
-    //TODO refactor; server ids?
-
     public void checkObtainDBReportResponse(ObtainLocationRequest request, DBLocationReport response) {
         if (response == null) return;
         // Check content
@@ -265,90 +213,158 @@ public class ServerApplication {
             throw new IllegalArgumentException("Bad server response!");
     }
 
-    public SecretKey decipherAndVerifyKey(SecureMessage secureMessage, boolean serverMode) throws Exception {
+
+    /* ========================================================== */
+    /* ====[               Handle Secret Keys               ]==== */
+    /* ========================================================== */
+
+    public boolean serverSecretKeyValid(int id) {
+        assert id >= 1000;
+        return _secretKeys.get(id) != null && _secretKeysUsages.get(id) <= 2;
+    }
+
+    private byte[] sendSecretKey(int serverId, SecretKey keyToSend) throws Exception {
+        PublicKey serverKey = RSAKeyGenerator.readServerPublicKey(serverId);
+        System.out.println("oi key0A " + serverId);
+        SecureMessage secureRequest = new SecureMessage(_serverId+1000, keyToSend, serverKey, _keyPair.getPrivate());
+
+        HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
+        SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + "/secret-key", request, SecureMessage.class);
+
+        System.out.println("oi key0B " + serverId);
+        // Check response's signature and decipher TODO freshness
+        assert secureResponse != null;
+        return secureResponse.decipherAndVerify( keyToSend, serverKey);
+    }
+
+    public void updateServerSecretKey(int serverId) throws Exception {
+
+        if (!serverSecretKeyValid(serverId)) {
+            // Generate secret key
+            SecretKey newSecretKey = AESKeyGenerator.makeAESKey();
+
+            // Send key
+            byte[] responseBytes = sendSecretKey(serverId-1000, newSecretKey);
+
+            // Check response
+            if (responseBytes == null || !ObjectMapperHandler.getStringFromBytes(responseBytes).equals("OK"))
+                throw new IllegalArgumentException("Error exchanging new secret key");
+
+            // Success! Update key
+            saveSecretKey(serverId, newSecretKey);
+        }
+    }
+
+
+    /* ========================================================== */
+    /* ====[          Decipher and Verify Requests          ]==== */
+    /* ========================================================== */
+
+    public byte[] decipherAndVerifyMessage(SecureMessage secureMessage) throws Exception {
         int senderId = secureMessage.get_senderId();
-        PublicKey verifyKey;
-        if (senderId == -1) verifyKey = RSAKeyGenerator.readHAKey();
-        else if (serverMode) verifyKey = RSAKeyGenerator.readServerPublicKey(senderId);
-        else verifyKey = RSAKeyGenerator.readClientPublicKey(senderId);
-        return secureMessage.decipherAndVerifyKey( getPrivateKey(), verifyKey );
+        PublicKey verifyKey = getVerifyKey(senderId);
+        return secureMessage.decipherAndVerify( _secretKeys.get(senderId), verifyKey );
     }
 
-    public byte[] decipherAndVerifyMessage(SecureMessage secureMessage, boolean serverMode) throws Exception {
-        int senderId = secureMessage.get_senderId();
-        PublicKey verifyKey;
-        if (senderId == -1) verifyKey = RSAKeyGenerator.readHAKey();
-        else if (serverMode) verifyKey = RSAKeyGenerator.readServerPublicKey(senderId);
-        else verifyKey = RSAKeyGenerator.readClientPublicKey(senderId);
-        return secureMessage.decipherAndVerify( serverMode ? _serverSecretKeys.get(senderId) : getClientSecretKey(senderId), verifyKey );
-    }
-
-    public DBLocationReport decipherAndVerifyReport(SecureMessage secureMessage, boolean serverMode) throws Exception {
-        byte[] messageBytes = decipherAndVerifyMessage(secureMessage, serverMode);
-        LocationReport locationReport = LocationReport.getFromBytes(messageBytes);
-
-        // check sender
-        if (secureMessage.get_senderId() != locationReport.get_userId() && !serverMode)
-            throw new ReportNotAcceptableException("Cannot submit reports from other users");
-
-        // check proofs signatures
-        int validProofCount = locationReport.verifyProofs();
-        if (validProofCount <= BYZANTINE_USERS)
-            throw new ReportNotAcceptableException("Not enough proofs to constitute an acceptable Location Report");
-
-        return new DBLocationReport(locationReport, secureMessage.get_signature());
-    }
-
-    public DBLocationReport decipherAndVerifyDBReport(SecureMessage secureMessage, boolean serverMode) throws Exception {
-        byte[] messageBytes = decipherAndVerifyMessage(secureMessage, serverMode);
-        DBLocationReport dbLocationReport = DBLocationReport.getFromBytes(messageBytes);
-        if (dbLocationReport == null) return null;
-
-        // check corresponding report proofs signatures
-        LocationReport locationReport = new LocationReport(dbLocationReport);
-        int validProofCount = locationReport.verifyProofs();
-        if (validProofCount <= BYZANTINE_USERS)
-            throw new ReportNotAcceptableException("Not enough proofs to constitute an acceptable Location Report");
-
-        return dbLocationReport;
-    }
-
-    public ObtainLocationRequest decipherAndVerifyReportRequest(SecureMessage secureMessage, boolean serverMode) throws Exception {
-        byte[] messageBytes = decipherAndVerifyMessage(secureMessage, serverMode);
+    public ObtainLocationRequest decipherAndVerifyReportRequest(SecureMessage secureMessage) throws Exception {
+        byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
         ObtainLocationRequest request = ObtainLocationRequest.getFromBytes(messageBytes);
 
         // check sender
         int sender_id = secureMessage.get_senderId();
-        if ( !(sender_id == -1 || serverMode || sender_id == request.get_userId()) ) // if not from HA or user itself
-            throw new IllegalArgumentException("Cannot request reports from other users");
+        if ( !(fromHA(sender_id) || fromServer(sender_id) || fromSelf(sender_id, request.get_userId())) )
+            throw new IllegalArgumentException("Cannot request reports from other users.");
 
         return request;
     }
 
-    public WitnessProofsRequest decipherAndVerifyProofsRequest(SecureMessage secureMessage, boolean serverMode) throws Exception {
-        byte[] messageBytes = decipherAndVerifyMessage(secureMessage, serverMode);
+    public DBLocationReport decipherAndVerifyReport(SecureMessage secureMessage) throws Exception {
+        byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
+        LocationReport locationReport = LocationReport.getFromBytes(messageBytes);
+
+        // check sender
+        if (!fromSelf(secureMessage.get_senderId(), locationReport.get_userId()))
+            throw new ReportNotAcceptableException("Cannot submit reports from other users");
+
+        // check proofs signatures
+        checkReportSignatures(locationReport);
+
+        return new DBLocationReport(locationReport, secureMessage.get_signature());
+    }
+
+    public WitnessProofsRequest decipherAndVerifyProofsRequest(SecureMessage secureMessage) throws Exception {
+        byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
         WitnessProofsRequest request = WitnessProofsRequest.getFromBytes(messageBytes);
 
         // check sender
-        if (secureMessage.get_senderId() != request.get_userId() && !serverMode)
+        if (!fromSelf(secureMessage.get_senderId(), request.get_userId()))
             throw new IllegalArgumentException("Cannot request proofs from other users");
 
         return request;
     }
 
-    public ObtainUsersRequest decipherAndVerifyUsersRequest(SecureMessage secureMessage, boolean serverMode) throws Exception {
-        byte[] messageBytes = decipherAndVerifyMessage(secureMessage, serverMode);
+    public ObtainUsersRequest decipherAndVerifyUsersRequest(SecureMessage secureMessage) throws Exception {
+        byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
         ObtainUsersRequest request = ObtainUsersRequest.getFromBytes(messageBytes);
 
         // check sender
-        if (secureMessage.get_senderId() != -1 && !serverMode)
+        if (!fromHA(secureMessage.get_senderId()))
             throw new IllegalArgumentException("Only the health authority can make 'users at location' requests");
 
         return request;
     }
 
-    public SecureMessage cipherAndSignMessage(int receiverId, byte[] messageBytes, boolean serverMode) throws Exception {
-        return new SecureMessage(_serverId, messageBytes, serverMode ? _serverSecretKeys.get(receiverId) : getClientSecretKey(receiverId), getPrivateKey());
+    public DBLocationReport decipherAndVerifyServerWrite(SecureMessage secureMessage) throws Exception {
+        byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
+        DBLocationReport dbLocationReport = DBLocationReport.getFromBytes(messageBytes);
+        if (dbLocationReport == null) return null;
+
+        // check sender
+        if (!fromServer(secureMessage.get_senderId()))
+            throw new ReportNotAcceptableException("Can only accept register writes from servers.");
+
+        // check corresponding report proofs signatures
+        checkReportSignatures(new LocationReport(dbLocationReport));
+
+        return dbLocationReport;
+    }
+
+    public SecretKey decipherAndVerifyKey(SecureMessage secureMessage) throws Exception {
+        int senderId = secureMessage.get_senderId();
+        PublicKey verifyKey = getVerifyKey(senderId);
+        return secureMessage.decipherAndVerifyKey( getPrivateKey(), verifyKey );
+    }
+
+    public SecureMessage cipherAndSignMessage(int receiverId, byte[] messageBytes) throws Exception {
+        return new SecureMessage(_serverId + 1000, messageBytes, _secretKeys.get(receiverId), getPrivateKey());
+    }
+
+    /* ===========[   Auxiliary   ]=========== */
+
+    public boolean fromServer(int senderId) {
+        return senderId >= 1000;
+    }
+
+    public boolean fromHA(int senderId) {
+        return senderId == -1;
+    }
+
+    public boolean fromSelf(int senderId, int userId) {
+        return senderId == userId;
+    }
+
+    public PublicKey getVerifyKey(int senderId) throws GeneralSecurityException, IOException {
+        if (fromHA(senderId)) return RSAKeyGenerator.readHAKey();
+        else if (fromServer(senderId)) {
+            return RSAKeyGenerator.readServerPublicKey(senderId-1000);
+        }
+        else return RSAKeyGenerator.readClientPublicKey(senderId);
+    }
+
+    public void checkReportSignatures(LocationReport report) throws Exception {
+        int validProofCount = report.verifyProofs();
+        if (validProofCount <= BYZANTINE_USERS)
+            throw new ReportNotAcceptableException("Not enough proofs to constitute an acceptable Location Report");
     }
 
 }

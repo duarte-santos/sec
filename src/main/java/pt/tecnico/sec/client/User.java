@@ -26,8 +26,8 @@ public class User {
     private int _epoch = 0;
     private final Map<Integer, List<LocationProof>> _proofs =  new HashMap<>();
 
-    private SecretKey _secretKey;
-    private int _sKeyCreationEpoch;
+    private static final Map<Integer, SecretKey> _secretKeys = new HashMap<>();
+    private static final Map<Integer, Integer> _sKeysCreationEpoch = new HashMap<>();
 
     public User(Grid grid, int id, KeyPair keyPair, PublicKey[] serverKeys) {
         _grid = grid;
@@ -84,6 +84,10 @@ public class User {
         return _prevGrid.isNearby(_id, userId);
     }
 
+    public int getRandomServerId() {
+        Random random = new Random();
+        return random.nextInt(_serverKeys.length);
+    }
 
     /* ========================================================== */
     /* ====[                      Step                      ]==== */
@@ -279,22 +283,17 @@ public class User {
     }
 
     private byte[] postToServers(byte[] messageBytes, String endpoint) throws Exception {
-        Random random = new Random();
-        int serverId = random.nextInt(_serverKeys.length); // Choose random server to send request
+        int serverId = getRandomServerId(); // Choose random server to send request
+        SecretKey secretKey = updateSecretKey(serverId);
         System.out.println("Requesting from server " + serverId);
-        SecretKey secretKey = getSecretKey();
         SecureMessage secureRequest = new SecureMessage(_id, messageBytes, secretKey, _keyPair.getPrivate());
         return sendRequest(serverId, secureRequest, secretKey, endpoint);
     }
 
-    private List<byte[]> postKeyToServers(SecretKey keyToSend) throws Exception {
-        List<byte[]> responsesBytes = new ArrayList<>();
-        for (int serverId = 0; serverId < _serverKeys.length; serverId++) {
-            PublicKey serverKey = _serverKeys[serverId];
-            SecureMessage secureRequest = new SecureMessage(_id, keyToSend, serverKey, _keyPair.getPrivate());
-            responsesBytes.add( sendRequest(serverId, secureRequest, keyToSend, "/secret-key") );
-        }
-        return responsesBytes; //FIXME
+    private byte[] postKeyToServer(int serverId, SecretKey keyToSend) throws Exception {
+        PublicKey serverKey = _serverKeys[serverId];
+        SecureMessage secureRequest = new SecureMessage(_id, keyToSend, serverKey, _keyPair.getPrivate());
+        return sendRequest(serverId, secureRequest, keyToSend, "/secret-key");
     }
 
 
@@ -302,35 +301,33 @@ public class User {
     /* ====[               Handle Secret Keys               ]==== */
     /* ========================================================== */
 
-    public boolean secretKeyValid() {
-        return _secretKey != null && _epoch - _sKeyCreationEpoch <= SECRET_KEY_DURATION;
+    public boolean secretKeyValid(int serverId) {
+        return _secretKeys.get(serverId) != null && _epoch - _sKeysCreationEpoch.get(serverId) <= SECRET_KEY_DURATION;
     }
 
-    public SecretKey getSecretKey() throws Exception {
+    public SecretKey updateSecretKey(int serverId) throws Exception {
 
-        if (!secretKeyValid()) {
+        if (!secretKeyValid(serverId)) {
             System.out.print("Generating new secret key...");
 
             // Generate secret key
             SecretKey newSecretKey = AESKeyGenerator.makeAESKey();
 
             // Send key
-            List<byte[]> responsesBytes = postKeyToServers(newSecretKey);
+            byte[] responseBytes = postKeyToServer(serverId, newSecretKey);
 
             // Check response
-            for (byte[] responseBytes : responsesBytes) {
-                if (responseBytes == null || !ObjectMapperHandler.getStringFromBytes(responseBytes).equals(OK))
-                    throw new IllegalArgumentException("Error exchanging new secret key");
-            }
+            if (responseBytes == null || !ObjectMapperHandler.getStringFromBytes(responseBytes).equals(OK))
+                throw new IllegalArgumentException("Error exchanging new secret key");
 
             // Success! Update key
-            _secretKey = newSecretKey;
-            _sKeyCreationEpoch = _epoch;
+            _secretKeys.put(serverId, newSecretKey);
+            _sKeysCreationEpoch.put(serverId, _epoch);
 
             System.out.println("Done!");
         }
 
-        return _secretKey;
+        return _secretKeys.get(serverId);
     }
 
 }

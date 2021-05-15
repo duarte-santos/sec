@@ -37,7 +37,7 @@ public class ServerController {
     @PostMapping("/obtain-location-report")
     public SecureMessage getLocationClient(@RequestBody SecureMessage secureRequest) throws Exception {
         // decipher and verify request
-        ObtainLocationRequest request = _serverApp.decipherAndVerifyReportRequest(secureRequest, false);
+        ObtainLocationRequest request = _serverApp.decipherAndVerifyReportRequest(secureRequest);
 
         // broadcast Read operation
         DBLocationReport dbLocationReport = _serverApp.broadcastRead(request);
@@ -48,40 +48,8 @@ public class ServerController {
 
         // encrypt using same secret key and client/HA public key, sign using server private key
         byte[] bytes = ObjectMapperHandler.writeValueAsBytes(report);
-        return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), bytes, false);
+        return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), bytes);
     }
-
-
-    /* ========================================================== */
-    /* ====[               Handle Secret Keys               ]==== */
-    /* ========================================================== */
-
-    @PostMapping("/secret-key")
-    public SecureMessage newClientSecretKey(@RequestBody SecureMessage secureMessage) throws Exception {
-        // decipher and verify message
-        SecretKey newSecretKey = _serverApp.decipherAndVerifyKey(secureMessage, false);
-
-        // save new key
-        _serverApp.saveClientSecretKey(secureMessage.get_senderId(), newSecretKey);
-
-        // Send secure response
-        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(OK);
-        return _serverApp.cipherAndSignMessage(secureMessage.get_senderId(), bytes, false);
-    }
-
-    @PostMapping("/secret-key-server")
-    public SecureMessage newServerSecretKey(@RequestBody SecureMessage secureMessage) throws Exception {
-        // decipher and verify message
-        SecretKey newSecretKey = _serverApp.decipherAndVerifyKey(secureMessage, true);
-
-        // save new key
-        _serverApp.saveServerSecretKey(secureMessage.get_senderId(), newSecretKey);
-
-        // Send secure response
-        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(OK);
-        return _serverApp.cipherAndSignMessage(secureMessage.get_senderId(), bytes, true);
-    }
-
 
     /* ========================================================== */
     /* ====[                      Users                     ]==== */
@@ -90,7 +58,7 @@ public class ServerController {
     @PostMapping("/submit-location-report")
     public SecureMessage reportLocation(@RequestBody SecureMessage secureMessage) throws Exception {
         // Decipher and check report
-        DBLocationReport locationReport = _serverApp.decipherAndVerifyReport(secureMessage, false);
+        DBLocationReport locationReport = _serverApp.decipherAndVerifyReport(secureMessage);
 
         // Check if already exists a report with the same userId and epoch
         int userId = locationReport.get_userId();
@@ -103,13 +71,13 @@ public class ServerController {
 
         // Send secure response
         byte[] bytes = ObjectMapperHandler.writeValueAsBytes(OK);
-        return _serverApp.cipherAndSignMessage(secureMessage.get_senderId(), bytes, false);
+        return _serverApp.cipherAndSignMessage(secureMessage.get_senderId(), bytes);
     }
 
     @PostMapping("/request-proofs")
     public SecureMessage getWitnessProofs(@RequestBody SecureMessage secureRequest) throws Exception {
         // decipher and verify request
-        WitnessProofsRequest request = _serverApp.decipherAndVerifyProofsRequest(secureRequest, false);
+        WitnessProofsRequest request = _serverApp.decipherAndVerifyProofsRequest(secureRequest);
         int witnessId = request.get_userId();
         Set<Integer> epochs = request.get_epochs();
 
@@ -133,7 +101,7 @@ public class ServerController {
 
         // encrypt and send response
         byte[] bytes = ObjectMapperHandler.writeValueAsBytes(locationProofs);
-        return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), bytes, false);
+        return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), bytes);
 
     }
 
@@ -145,7 +113,7 @@ public class ServerController {
     @PostMapping("/users") // FIXME regular operation? ou pode ser atomic? perguntar
     public SecureMessage getUsers(@RequestBody SecureMessage secureRequest) throws Exception {
         // decipher and verify request
-        ObtainUsersRequest request = _serverApp.decipherAndVerifyUsersRequest(secureRequest, false);
+        ObtainUsersRequest request = _serverApp.decipherAndVerifyUsersRequest(secureRequest);
         int ep = request.get_epoch();
         Location loc = request.get_location();
 
@@ -164,7 +132,7 @@ public class ServerController {
         // encrypt and send response
         UsersAtLocation response = new UsersAtLocation(loc, ep, reports);
         byte[] bytes = ObjectMapperHandler.writeValueAsBytes(response);
-        return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), bytes, false);
+        return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), bytes);
     }
 
     /* ========================================================== */
@@ -176,7 +144,7 @@ public class ServerController {
         System.out.println("Received Write broadcast");
 
         // Decipher and check report
-        DBLocationReport locationReport = _serverApp.decipherAndVerifyDBReport(secureMessage, true);
+        DBLocationReport locationReport = _serverApp.decipherAndVerifyServerWrite(secureMessage);
         int senderId = secureMessage.get_senderId();
         if (senderId != _serverApp.getId()) _serverApp.serverSecretKeyUsed(senderId);
 
@@ -197,7 +165,7 @@ public class ServerController {
 
         // Encrypt and send response
         byte[] bytes = ObjectMapperHandler.writeValueAsBytes(timestamp);
-        return _serverApp.cipherAndSignMessage(senderId, bytes, true);
+        return _serverApp.cipherAndSignMessage(senderId, bytes);
     }
 
     @PostMapping("/broadcast-read")
@@ -205,7 +173,7 @@ public class ServerController {
         System.out.println("Received Read broadcast");
 
         // decipher and verify request TODO use different ids for servers, check sender is server
-        ObtainLocationRequest request = _serverApp.decipherAndVerifyReportRequest(secureRequest, true);
+        ObtainLocationRequest request = _serverApp.decipherAndVerifyReportRequest(secureRequest);
         int senderId = secureRequest.get_senderId();
         if (senderId != _serverApp.getId()) _serverApp.serverSecretKeyUsed(senderId);
 
@@ -214,8 +182,25 @@ public class ServerController {
 
         // encrypt using same secret key and client/HA public key, sign using server private key
         byte[] bytes = ObjectMapperHandler.writeValueAsBytes(report);
-        return _serverApp.cipherAndSignMessage(senderId, bytes, true);
+        return _serverApp.cipherAndSignMessage(senderId, bytes);
     }
 
+
+    /* ========================================================== */
+    /* ====[               Handle Secret Keys               ]==== */
+    /* ========================================================== */
+
+    @PostMapping("/secret-key")
+    public SecureMessage newSecretKey(@RequestBody SecureMessage secureMessage) throws Exception {
+        // decipher and verify message
+        SecretKey newSecretKey = _serverApp.decipherAndVerifyKey(secureMessage);
+
+        // save new key
+        _serverApp.saveSecretKey(secureMessage.get_senderId(), newSecretKey);
+
+        // Send secure response
+        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(OK);
+        return _serverApp.cipherAndSignMessage(secureMessage.get_senderId(), bytes);
+    }
 
 }
