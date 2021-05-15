@@ -220,7 +220,7 @@ public class ServerApplication {
 
     public boolean serverSecretKeyValid(int id) {
         assert id >= 1000;
-        return _secretKeys.get(id) != null && _secretKeysUsages.get(id) <= 2;
+        return _secretKeys.get(id) != null && _secretKeysUsages.get(id) <= SECRET_KEY_DURATION;
     }
 
     private byte[] sendSecretKey(int serverId, SecretKey keyToSend) throws Exception {

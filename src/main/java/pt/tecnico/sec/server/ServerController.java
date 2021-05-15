@@ -172,7 +172,6 @@ public class ServerController {
     public SecureMessage broadcastRead(@RequestBody SecureMessage secureRequest) throws Exception {
         System.out.println("Received Read broadcast");
 
-        // decipher and verify request TODO use different ids for servers, check sender is server
         ObtainLocationRequest request = _serverApp.decipherAndVerifyReportRequest(secureRequest);
         int senderId = secureRequest.get_senderId();
         if (senderId != _serverApp.getId()) _serverApp.serverSecretKeyUsed(senderId);
