@@ -72,6 +72,11 @@ public final class ObjectMapperHandler {
         return objectMapper.writeValueAsBytes(proofsRequest);
     }
 
+    public static byte[] writeValueAsBytes(SecureMessage message) throws JsonProcessingException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        return objectMapper.writeValueAsBytes(message);
+    }
+
 
     /* ========================================================== */
     /* ====[                Get from Bytes                  ]==== */
@@ -90,6 +95,11 @@ public final class ObjectMapperHandler {
     public static List<LocationProof> getLocationProofListFromBytes(byte[] bytes) throws IOException {
         ObjectMapper objectMapper = new ObjectMapper();
         return objectMapper.readValue(bytes, new TypeReference<>(){});
+    }
+
+    public static SecureMessage getSecureMessageFromBytes(byte[] bytes) throws IOException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        return objectMapper.readValue(bytes, SecureMessage.class);
     }
 
 }

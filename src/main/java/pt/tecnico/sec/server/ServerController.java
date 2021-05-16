@@ -67,7 +67,7 @@ public class ServerController {
             throw new RecordAlreadyExistsException("Report for userId " + userId + " and epoch " + epoch + " already exists.");
 
         // Broadcast write operation to other servers
-        _serverApp.broadcastWrite(locationReport);
+        _serverApp.doubleEchoBroadcastWrite(locationReport);
 
         // Send secure response
         byte[] bytes = ObjectMapperHandler.writeValueAsBytes(OK);
@@ -200,6 +200,72 @@ public class ServerController {
         // Send secure response
         byte[] bytes = ObjectMapperHandler.writeValueAsBytes(OK);
         return _serverApp.cipherAndSignMessage(secureMessage.get_senderId(), bytes);
+    }
+
+    /* ========================================================== */
+    /* ====[              Double Echo Broadcast             ]==== */
+    /* ========================================================== */
+
+    @PostMapping("/doubleEchoBroadcast-send")
+    public void doubleEchoBroadcastSend(@RequestBody SecureMessage originalMessage) throws Exception {
+        // FIXME verify message?
+        int senderId = originalMessage.get_senderId();
+        if (senderId != _serverApp.getId()) _serverApp.serverSecretKeyUsed(senderId);
+        _serverApp.doubleEchoBroadcastSendDeliver(originalMessage);
+    }
+
+    @PostMapping("/doubleEchoBroadcast-echo")
+    public void doubleEchoBroadcastEcho(@RequestBody SecureMessage secureMessage) throws Exception {
+        int senderId = secureMessage.get_senderId();
+        if (senderId != _serverApp.getId()) _serverApp.serverSecretKeyUsed(senderId);
+        SecureMessage originalMessage = _serverApp.decipherAndVerifyServerEcho(secureMessage);
+        _serverApp.doubleEchoBroadcastEchoDeliver(secureMessage.get_senderId()-1000, originalMessage);
+    }
+
+    @PostMapping("/doubleEchoBroadcast-ready")
+    public void doubleEchoBroadcastReady(@RequestBody SecureMessage secureMessage) throws Exception {
+        int senderId = secureMessage.get_senderId();
+        if (senderId != _serverApp.getId()) _serverApp.serverSecretKeyUsed(senderId);
+        SecureMessage originalMessage = _serverApp.decipherAndVerifyServerEcho(secureMessage);
+        boolean delivered = _serverApp.doubleEchoBroadcastReadyDeliver(secureMessage.get_senderId()-1000, originalMessage);
+        if (delivered) writeLocationReport(secureMessage);
+
+    }
+
+    public void writeLocationReport(SecureMessage secureMessage) throws Exception {
+        System.out.println("Received Write broadcast");
+
+        // Decipher and check report
+        DBLocationReport locationReport = _serverApp.decipherAndVerifyServerWrite(secureMessage);
+        int senderId = secureMessage.get_senderId();
+        if (senderId != _serverApp.getId()) _serverApp.serverSecretKeyUsed(senderId);
+
+        int epoch = locationReport.get_epoch();
+        int userId = locationReport.get_userId();
+        int timestamp = locationReport.get_timestamp();
+        int mytimestamp = 0;
+
+        // Update database
+        DBLocationReport mylocationReport = _reportRepository.findReportByEpochAndUser(userId, epoch);
+        if (mylocationReport != null)
+            mytimestamp = mylocationReport.get_timestamp();
+
+        if (timestamp > mytimestamp){
+            if (mylocationReport != null) _reportRepository.delete(mylocationReport);
+            _reportRepository.save(locationReport);
+        }
+
+        // Encrypt and send response
+        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(timestamp);
+        _serverApp.postToServer(senderId, bytes, "/doubleEchoBroadcast-deliver");
+    }
+
+    @PostMapping("/doubleEchoBroadcast-deliver")
+    public void doubleEchoBroadcastDeliver(@RequestBody SecureMessage secureMessage) throws Exception {
+        int senderId = secureMessage.get_senderId();
+        if (senderId != _serverApp.getId()) _serverApp.serverSecretKeyUsed(senderId);
+        int timestamp = _serverApp.decipherAndVerifyServerDeliver(secureMessage);
+        _serverApp.doubleEchoBroadcastDeliver(secureMessage.get_senderId()-1000, timestamp);
     }
 
 }

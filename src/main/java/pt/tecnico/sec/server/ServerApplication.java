@@ -124,7 +124,7 @@ public class ServerApplication {
     /* ====[                Atomic Registers                ]==== */
     /* ========================================================== */
 
-    private SecureMessage postToServer(int serverId, byte[] messageBytes, String endpoint) throws Exception {
+    public SecureMessage postToServer(int serverId, byte[] messageBytes, String endpoint) throws Exception {
         updateServerSecretKey(serverId+1000);
         SecureMessage secureRequest = cipherAndSignMessage(serverId+1000, messageBytes);
         HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
@@ -367,4 +367,144 @@ public class ServerApplication {
             throw new ReportNotAcceptableException("Not enough proofs to constitute an acceptable Location Report");
     }
 
+    /* ========================================================== */
+    /* ====[              Double Echo Broadcast             ]==== */
+    /* ========================================================== */
+
+    private void postToServers(byte[] m, String endpoint) throws Exception {
+        for (int serverId = 0; serverId < _serverCount; serverId++) {
+            postToServer(serverId, m, endpoint);
+        }
+    }
+
+    boolean _broadcasting = false;
+    boolean _sentEcho = false;
+    boolean _sentReady = false;
+    boolean _delivered = false;
+    SecureMessage[] _echos = new SecureMessage[_serverCount];
+    SecureMessage[] _readys = new SecureMessage[_serverCount];
+    Integer[] _delivers = new Integer[_serverCount];
+
+
+    public void setup_broadcast() {
+        _broadcasting = true;
+        _sentEcho = false;
+        _sentReady = false;
+        _delivered = false;
+        _echos = new SecureMessage[_serverCount];
+        _readys = new SecureMessage[_serverCount];
+    }
+
+    // Argument: Location report
+    public void doubleEchoBroadcastWrite(DBLocationReport locationReport) throws Exception { //FIXME for write
+        // setup broadcast
+        int acks = 0;
+        _delivers = new Integer[_serverCount];
+        setup_broadcast();
+
+        int my_ts = locationReport.get_timestamp() + 1;
+        locationReport.set_timestamp(my_ts);
+        byte[] m = ObjectMapperHandler.writeValueAsBytes(locationReport);
+
+        System.out.println("Broadcasting write...");
+        postToServers(m, "/doubleEchoBroadcast-send");
+        while (acks <= (_serverCount + FAULTS) / 2) {
+            acks = 0;
+            for (Integer timestamp : _delivers)
+                if (timestamp != null && timestamp == my_ts) acks++;
+        }
+    }
+
+    // Argument: original SecureMessage
+    public void doubleEchoBroadcastSendDeliver(SecureMessage originalMessage) throws Exception {
+        if (!_broadcasting) setup_broadcast();
+        if (!_sentEcho) {
+            byte[] m = ObjectMapperHandler.writeValueAsBytes(originalMessage);
+            _sentEcho = true;
+            // will propagate a secureMessage containing another (the original) in bytes
+            postToServers(m, "/doubleEchoBroadcast-echo");
+        }
+    }
+
+    // Argument: original SecureMessage
+    public SecureMessage searchForMajorityMessage(SecureMessage[] messages, int quorum) {
+        // count the times a message appears
+        Map<SecureMessage, Integer> counter = new HashMap<>();
+        for (SecureMessage m : messages) {
+            if (m == null) continue;
+            Integer count = counter.get(m);
+            if (count == null) counter.put(m, 1);
+            else counter.replace(m, count+1);
+        }
+        // search for message that appears more than <quorum> times
+        for (SecureMessage m : counter.keySet()) {
+            if (counter.get(m) > quorum) return m;
+        }
+        return null;
+    }
+
+    public void doubleEchoBroadcastEchoDeliver(int senderId, SecureMessage originalMessage) throws Exception {
+        if (!_broadcasting) setup_broadcast();
+        if (_echos[senderId] == null) _echos[senderId] = originalMessage;
+
+        if (!_sentReady) {
+            SecureMessage message = searchForMajorityMessage(_echos, (_serverCount+FAULTS)/2);
+            if (message != null) {
+                _sentReady = true;
+                byte[] m = ObjectMapperHandler.writeValueAsBytes(message);
+                postToServers(m, "/doubleEchoBroadcast-ready");
+            }
+        }
+    }
+
+    public boolean doubleEchoBroadcastReadyDeliver(int senderId, SecureMessage originalMessage) throws Exception { //FIXME can it receive only this message? careful with _broadcasting
+        if (_readys[senderId] == null) _readys[senderId] = originalMessage;
+
+        if (!_sentReady) {
+            SecureMessage message = searchForMajorityMessage(_readys, FAULTS); // FIXME f is faults or byzantines?
+            if (message != null) {
+                _sentReady = true;
+                byte[] m = ObjectMapperHandler.writeValueAsBytes(message);
+                postToServers(m, "/doubleEchoBroadcast-ready");
+            }
+            else return false; // for efficiency
+        }
+
+        if (!_delivered) {
+            SecureMessage message = searchForMajorityMessage(_readys, 2*FAULTS); // FIXME f is faults or byzantines?
+            if (message != null) {
+                _delivered = true;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public void doubleEchoBroadcastDeliver(int senderId, int timestamp) {
+        if (_delivers[senderId] == null) _delivers[senderId] = timestamp;
+        _broadcasting = false;
+    }
+
+
+    public SecureMessage decipherAndVerifyServerEcho(SecureMessage secureMessage) throws Exception {
+        byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
+        SecureMessage originalMessage = ObjectMapperHandler.getSecureMessageFromBytes(messageBytes);
+
+        // check sender
+        if (!fromServer(secureMessage.get_senderId()))
+            throw new ReportNotAcceptableException("Can only accept echos from servers.");
+
+        return originalMessage;
+    }
+
+    public int decipherAndVerifyServerDeliver(SecureMessage secureMessage) throws Exception {
+        byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
+        int timestamp = ObjectMapperHandler.getIntFromBytes(messageBytes);
+
+        // check sender
+        if (!fromServer(secureMessage.get_senderId()))
+            throw new ReportNotAcceptableException("Can only accept delivers from servers.");
+
+        return timestamp;
+    }
 }

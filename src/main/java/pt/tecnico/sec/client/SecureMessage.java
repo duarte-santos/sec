@@ -7,6 +7,7 @@ import pt.tecnico.sec.RSAKeyGenerator;
 import javax.crypto.SecretKey;
 import java.security.PrivateKey;
 import java.security.PublicKey;
+import java.util.Objects;
 
 @SuppressWarnings("unused")
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -79,6 +80,19 @@ public class SecureMessage {
                 ", _cipheredMessage='" + _cipheredMessage + '\'' +
                 ", _signature='" + _signature + '\'' +
                 '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        SecureMessage that = (SecureMessage) o;
+        return _senderId == that._senderId && Objects.equals(_cipheredMessage, that._cipheredMessage) && Objects.equals(_signature, that._signature);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(_senderId, _cipheredMessage, _signature);
     }
 
     /* ========================================================== */
