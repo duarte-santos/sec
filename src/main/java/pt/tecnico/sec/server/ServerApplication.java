@@ -28,8 +28,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
+import static javax.xml.bind.DatatypeConverter.printHexBinary;
 import static pt.tecnico.sec.Constants.*;
 
 @SpringBootApplication
@@ -42,8 +44,8 @@ public class ServerApplication {
 
     public final RestTemplate _restTemplate = new RestTemplate();
 
-    private static final Map<Integer, SecretKey> _secretKeys = new HashMap<>();
-    private static final Map<Integer, Integer> _secretKeysUsages = new HashMap<>();
+    private static final Map<Integer, SecretKey> _secretKeys = new ConcurrentHashMap<>();
+    private static final Map<Integer, Integer> _secretKeysUsages = new ConcurrentHashMap<>();
 
     public static void main(String[] args) {
         try {
@@ -54,17 +56,6 @@ public class ServerApplication {
 
             if (_serverId >= _serverCount)
                 throw new NumberFormatException("Server ID must be lower than the number of servers");
-
-            // FIXME : hack!
-            FileInputStream fis = new FileInputStream(KEYS_PATH + "secret.key");
-            byte[] secretEncoded = new byte[fis.available()];
-            fis.read(secretEncoded);
-            fis.close();
-            SecretKey sk = AESKeyGenerator.fromEncoded(secretEncoded);
-            for (int serverId = 0; serverId < _serverCount; serverId++) {
-                _secretKeysUsages.put(serverId+1000, 0);
-                _secretKeys.put(serverId+1000, sk);
-            }
 
             // set database information
             int serverPort = SERVER_BASE_PORT + _serverId;
@@ -142,7 +133,7 @@ public class ServerApplication {
     /* ========================================================== */
 
     public SecureMessage postToServer(int serverId, byte[] messageBytes, String endpoint) throws Exception {
-        //updateServerSecretKey(serverId+1000);
+        updateServerSecretKey(serverId+1000);
         SecureMessage secureRequest = cipherAndSignMessage(serverId+1000, messageBytes);
         HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
         SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + endpoint, request, SecureMessage.class);
@@ -241,13 +232,15 @@ public class ServerApplication {
     }
 
     private byte[] sendSecretKey(int serverId, SecretKey keyToSend) throws Exception {
+        System.out.println("SENDING KEY...");
         PublicKey serverKey = RSAKeyGenerator.readServerPublicKey(serverId);
         SecureMessage secureRequest = new SecureMessage(_serverId+1000, keyToSend, serverKey, _keyPair.getPrivate());
 
         HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
         SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + "/secret-key", request, SecureMessage.class);
 
-        // Check response's signature and decipher TODO freshness
+        // Check response's signature and decipher
+        // TODO : freshness
         assert secureResponse != null;
         return secureResponse.decipherAndVerify( keyToSend, serverKey);
     }
@@ -278,6 +271,8 @@ public class ServerApplication {
     public byte[] decipherAndVerifyMessage(SecureMessage secureMessage) throws Exception {
         int senderId = secureMessage.get_senderId();
         PublicKey verifyKey = getVerifyKey(senderId);
+        System.out.println("[*] decipherAndVerifyMessage");
+        printKey(senderId);
         return secureMessage.decipherAndVerify( _secretKeys.get(senderId), verifyKey );
     }
 
@@ -386,17 +381,23 @@ public class ServerApplication {
     /* ====[              Double Echo Broadcast             ]==== */
     /* ========================================================== */
 
+    public void printKey(int receiverId) {
+        System.out.print("Key:");
+        System.out.println(printHexBinary(_secretKeys.get(receiverId).getEncoded()));
+        System.out.print("Usage:");
+        System.out.println(_secretKeysUsages.get(receiverId));
+    }
+
     public void voidPostToServer(int serverId, byte[] messageBytes, String endpoint) throws Exception {
-        //updateServerSecretKey(serverId+1000);
         SecureMessage secureRequest = cipherAndSignMessage(serverId+1000, messageBytes);
         HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
+        System.out.println("Sending request to " + serverId + " (endpoint: " + endpoint + ")");
+        printKey(serverId+1000);
         _restTemplate.postForObject(getServerURL(serverId) + endpoint, request, SecureMessage.class);
-        serverSecretKeyUsed(serverId+1000);
     }
 
     private void postToServers(byte[] m, String endpoint) throws Exception {
         for (int serverId = 0; serverId < _serverCount; serverId++) {
-            //voidPostToServer(serverId, m, endpoint);
             AsyncPost thread = new AsyncPost(serverId, m, endpoint);
             thread.start();
         }
@@ -420,8 +421,34 @@ public class ServerApplication {
         _readys = new BroadcastWrite[_serverCount];
     }
 
+    private void sendRefreshSecretKeys(int serverId) throws Exception {
+        _restTemplate.getForObject(getServerURL(serverId) + "/refresh-secret-keys", void.class);
+    }
+
+    public void refreshServerSecretKeys() throws Exception {
+        for (int serverId = 0; serverId < _serverCount; serverId++) {
+            if (_secretKeysUsages.get(serverId+1000) != null && _secretKeysUsages.get(serverId+1000) == 0) continue;
+
+            // Generate secret key
+            SecretKey newSecretKey = AESKeyGenerator.makeAESKey();
+
+            // Send key
+            byte[] responseBytes = sendSecretKey(serverId, newSecretKey);
+
+            // Check response
+            if (responseBytes == null || !ObjectMapperHandler.getStringFromBytes(responseBytes).equals("OK"))
+                throw new IllegalArgumentException("Error exchanging new secret key");
+
+            // Success! Update key
+            saveSecretKey(serverId+1000, newSecretKey);
+
+            // Tell other servers to refresh keys
+            sendRefreshSecretKeys(serverId);
+        }
+    }
+
     // Argument: Location report
-    public void doubleEchoBroadcastWrite(DBLocationReport locationReport) throws Exception { //FIXME for write
+    public void doubleEchoBroadcastWrite(DBLocationReport locationReport) throws Exception { // TODO : implement read
         // setup broadcast
         int acks = 0;
         _delivers = new Integer[_serverCount];
@@ -432,21 +459,20 @@ public class ServerApplication {
         BroadcastWrite bw = new BroadcastWrite(_serverId + 1000, locationReport);
         byte[] m = ObjectMapperHandler.writeValueAsBytes(bw);
 
+        refreshServerSecretKeys();
+
         System.out.println("Broadcasting write...");
         postToServers(m, "/doubleEchoBroadcast-send");
+        // FIXME : ignore exceptions that are not IllegalArgument
         while (acks <= (_serverCount + FAULTS) / 2) {
             acks = 0;
             for (Integer timestamp : _delivers)
                 if (timestamp != null && timestamp == my_ts) acks++;
-            //System.out.println("[*] Delivers: " + Arrays.toString(_delivers)); // FIXME : [null, ...]
         }
     }
 
     public void doubleEchoBroadcastSendDeliver(BroadcastWrite bw) throws Exception {
-        System.out.println("[SendDeliver] Broadcasting: " + _broadcasting + ", SentEcho: " + _sentEcho);
-        System.out.println("zz time! ");
-        TimeUnit.SECONDS.sleep(1);
-        System.out.println("howdy! :)");
+        TimeUnit.SECONDS.sleep(1); // FIXME : no zz for you, right now, sorry :(
         if (!_broadcasting) setup_broadcast();
         if (!_sentEcho) {
             byte[] m = ObjectMapperHandler.writeValueAsBytes(bw);
@@ -474,7 +500,6 @@ public class ServerApplication {
     }
 
     public void doubleEchoBroadcastEchoDeliver(int senderId, BroadcastWrite bw) throws Exception {
-        System.out.println("\n[EchoDeliver]\nBroadcasting: " + _broadcasting + ",\nEchos: " + _echos.length + ",\nSentReady: " + _sentReady + "\n");
         if (!_broadcasting) setup_broadcast();
         if (_echos[senderId] == null) _echos[senderId] = bw;
 
@@ -488,13 +513,12 @@ public class ServerApplication {
         }
     }
 
-    public boolean doubleEchoBroadcastReadyDeliver(int senderId, BroadcastWrite bw) throws Exception { //FIXME can it receive only this message? careful with _broadcasting
-        System.out.println("\n[ReadyDeliver]\nReadys: " + _readys.length + ",\nDelivered: " + _delivered + ",\nSentReady: " + _sentReady + "\n");
-
+    // FIXME : can it receive only this message? careful with _broadcasting
+    public boolean doubleEchoBroadcastReadyDeliver(int senderId, BroadcastWrite bw) throws Exception {
         if (_readys[senderId] == null) _readys[senderId] = bw;
 
         if (!_sentReady) {
-            BroadcastWrite message = searchForMajorityMessage(_readys, FAULTS); // FIXME f is faults or byzantines?
+            BroadcastWrite message = searchForMajorityMessage(_readys, FAULTS); // FIXME : f is faults or byzantines?
             if (message != null) {
                 _sentReady = true;
                 byte[] m = ObjectMapperHandler.writeValueAsBytes(message);
@@ -504,7 +528,7 @@ public class ServerApplication {
         }
 
         if (!_delivered) {
-            BroadcastWrite message = searchForMajorityMessage(_readys, 2*FAULTS); // FIXME f is faults or byzantines?
+            BroadcastWrite message = searchForMajorityMessage(_readys, 2*FAULTS); // FIXME : f is faults or byzantines?
             if (message != null) {
                 _delivered = true;
                 return true;
@@ -514,8 +538,6 @@ public class ServerApplication {
     }
 
     public void doubleEchoBroadcastDeliver(int senderId, int timestamp) {
-        System.out.println("\n[Deliver]\nDelivers: " + Arrays.toString(_delivers) + "\n");
-
         if (_delivers[senderId] == null) _delivers[senderId] = timestamp;
         _broadcasting = false;
     }
@@ -558,9 +580,9 @@ public class ServerApplication {
 
     class AsyncPost extends Thread {
 
-        private int _serverId;
-        private byte[] _messageBytes;
-        private String _endpoint;
+        private final int _serverId;
+        private final byte[] _messageBytes;
+        private final String _endpoint;
 
         public AsyncPost(int serverId, byte[] messageBytes, String endpoint) {
             _serverId = serverId;

@@ -1,7 +1,7 @@
 package pt.tecnico.sec.server;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.scheduling.annotation.Async;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -111,7 +111,7 @@ public class ServerController {
     /* ========================================================== */
 
     @SuppressWarnings("EqualsBetweenInconvertibleTypes")
-    @PostMapping("/users") // FIXME regular operation? ou pode ser atomic? perguntar
+    @PostMapping("/users") // FIXME : regular operation? ou pode ser atomic? perguntar
     public SecureMessage getUsers(@RequestBody SecureMessage secureRequest) throws Exception {
         // decipher and verify request
         ObtainUsersRequest request = _serverApp.decipherAndVerifyUsersRequest(secureRequest);
@@ -142,7 +142,7 @@ public class ServerController {
 
     @PostMapping("/broadcast-write")
     public SecureMessage broadcastWrite(@RequestBody SecureMessage secureMessage) throws Exception {
-        System.out.println("Received Write broadcast");
+        System.out.println("[*] Received Write Broadcast");
 
         // Decipher and check report
         DBLocationReport locationReport = _serverApp.decipherAndVerifyServerWrite(secureMessage);
@@ -171,7 +171,7 @@ public class ServerController {
 
     @PostMapping("/broadcast-read")
     public SecureMessage broadcastRead(@RequestBody SecureMessage secureRequest) throws Exception {
-        System.out.println("Received Read broadcast");
+        System.out.println("[*] Received Read Broadcast");
 
         ObtainLocationRequest request = _serverApp.decipherAndVerifyReportRequest(secureRequest);
         int senderId = secureRequest.get_senderId();
@@ -203,51 +203,44 @@ public class ServerController {
         return _serverApp.cipherAndSignMessage(secureMessage.get_senderId(), bytes);
     }
 
+    @GetMapping("/refresh-secret-keys")
+    public void refreshSecretKeys() throws Exception {
+        // send refresh request to other servers
+        _serverApp.refreshServerSecretKeys();
+    }
+
+
     /* ========================================================== */
     /* ====[              Double Echo Broadcast             ]==== */
     /* ========================================================== */
 
-    @Async
     @PostMapping("/doubleEchoBroadcast-send")
     public void doubleEchoBroadcastSend(@RequestBody SecureMessage message) throws Exception {
-        System.out.println("OMG A PARTY INVITE?!");
         int senderId = message.get_senderId();
-        System.out.println("Received a SEND request from " + senderId);
+        System.out.println("[*] Received a @SEND Request from " + senderId);
         BroadcastWrite bw = _serverApp.decipherAndVerifyBroadcastWrite(message);
-        // FIXME verify message?
-        if (senderId != _serverApp.getId()) _serverApp.serverSecretKeyUsed(senderId);
         _serverApp.doubleEchoBroadcastSendDeliver(bw);
     }
 
-    @Async
     @PostMapping("/doubleEchoBroadcast-echo")
     public void doubleEchoBroadcastEcho(@RequestBody SecureMessage secureMessage) throws Exception {
         int senderId = secureMessage.get_senderId();
-        System.out.println("Received a ECHO request from " + senderId);
-        System.out.println("party?");
+        System.out.println("[*] Received an @ECHO Request from " + senderId);
         BroadcastWrite bw = _serverApp.decipherAndVerifyBroadcastWrite(secureMessage);
-        System.out.println("party!");
-        if (senderId != _serverApp.getId()) _serverApp.serverSecretKeyUsed(senderId);
-        System.out.println("party.");
         _serverApp.doubleEchoBroadcastEchoDeliver(secureMessage.get_senderId()-1000, bw);
-        System.out.println("party...");
     }
 
-    @Async
     @PostMapping("/doubleEchoBroadcast-ready")
     public void doubleEchoBroadcastReady(@RequestBody SecureMessage secureMessage) throws Exception {
         int senderId = secureMessage.get_senderId();
-        System.out.println("Received a READY request from " + senderId);
+        System.out.println("[*] Received a @READY Request from " + senderId);
         BroadcastWrite bw = _serverApp.decipherAndVerifyBroadcastWrite(secureMessage);
-        if (senderId != _serverApp.getId()) _serverApp.serverSecretKeyUsed(senderId);
         boolean delivered = _serverApp.doubleEchoBroadcastReadyDeliver(secureMessage.get_senderId()-1000, bw);
         if (delivered) writeLocationReport(bw);
 
     }
 
     public void writeLocationReport(BroadcastWrite bw) throws Exception {
-        System.out.println("Received Write broadcast");
-
         // Decipher and check report
         DBLocationReport locationReport = _serverApp.verifyBroadcastWrite(bw);
 
@@ -268,14 +261,11 @@ public class ServerController {
 
         // Encrypt and send response
         byte[] bytes = ObjectMapperHandler.writeValueAsBytes(timestamp);
-        _serverApp.postToServer(bw.get_originalId()-1000, bytes, "/doubleEchoBroadcast-deliver");
+        _serverApp.voidPostToServer(bw.get_originalId()-1000, bytes, "/doubleEchoBroadcast-deliver");
     }
 
-    @Async
     @PostMapping("/doubleEchoBroadcast-deliver")
     public void doubleEchoBroadcastDeliver(@RequestBody SecureMessage secureMessage) throws Exception {
-        int senderId = secureMessage.get_senderId();
-        if (senderId != _serverApp.getId()) _serverApp.serverSecretKeyUsed(senderId);
         int timestamp = _serverApp.decipherAndVerifyServerDeliver(secureMessage);
         _serverApp.doubleEchoBroadcastDeliver(secureMessage.get_senderId()-1000, timestamp);
     }
