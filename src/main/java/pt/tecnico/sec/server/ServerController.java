@@ -41,7 +41,7 @@ public class ServerController {
         ObtainLocationRequest request = _serverApp.decipherAndVerifyReportRequest(secureRequest);
 
         // broadcast Read operation
-        DBLocationReport dbLocationReport = _serverApp.broadcastRead(request);
+        DBLocationReport dbLocationReport = _serverApp.doubleEchoBroadcastRead(request);
         if (dbLocationReport == null)
             return null;
 
@@ -90,7 +90,7 @@ public class ServerController {
             if (id == witnessId) continue; // user will never be a witness of itself
             for (int ep : epochs) {
                 ObtainLocationRequest userReportRequest = new ObtainLocationRequest(id, ep);
-                DBLocationReport dbLocationReport = _serverApp.broadcastRead(userReportRequest);
+                DBLocationReport dbLocationReport = _serverApp.doubleEchoBroadcastRead(userReportRequest);
 
                 // filter requested reports
                 if (dbLocationReport == null) continue;
@@ -124,7 +124,7 @@ public class ServerController {
         int userCount = _serverApp.getUserCount();
         for (int id = 0; id < userCount; id++) {
             ObtainLocationRequest userReportRequest = new ObtainLocationRequest(id, ep);
-            DBLocationReport dbLocationReport = _serverApp.broadcastRead(userReportRequest);
+            DBLocationReport dbLocationReport = _serverApp.doubleEchoBroadcastRead(userReportRequest);
             // filter requested reports
             if (dbLocationReport != null && dbLocationReport.get_location().equals(loc))
                 reports.add(new SignedLocationReport(dbLocationReport));
@@ -214,6 +214,9 @@ public class ServerController {
     /* ====[              Double Echo Broadcast             ]==== */
     /* ========================================================== */
 
+    /* ====[                   W R I T E                    ]==== */
+
+
     @PostMapping("/doubleEchoBroadcast-send")
     public void doubleEchoBroadcastSend(@RequestBody SecureMessage message) throws Exception {
         int senderId = message.get_senderId();
@@ -266,8 +269,80 @@ public class ServerController {
 
     @PostMapping("/doubleEchoBroadcast-deliver")
     public void doubleEchoBroadcastDeliver(@RequestBody SecureMessage secureMessage) throws Exception {
+        System.out.println("[*] Received a @DELIVER Request from " + secureMessage.get_senderId());
         int timestamp = _serverApp.decipherAndVerifyServerDeliver(secureMessage);
         _serverApp.doubleEchoBroadcastDeliver(secureMessage.get_senderId()-1000, timestamp);
+    }
+
+
+    /* ====[                    R E A D                     ]==== */
+
+    @PostMapping("/doubleEchoBroadcast-send-read")
+    public void doubleEchoBroadcastSend_read(@RequestBody SecureMessage message) throws Exception {
+        int senderId = message.get_senderId();
+        System.out.println("[*] Received a @SEND Request from " + senderId);
+        BroadcastRead br = _serverApp.decipherAndVerifyBroadcastRead(message);
+        _serverApp.doubleEchoBroadcastSendDeliver_read(br);
+    }
+
+    @PostMapping("/doubleEchoBroadcast-echo-read")
+    public void doubleEchoBroadcastEcho_read(@RequestBody SecureMessage secureMessage) throws Exception {
+        int senderId = secureMessage.get_senderId();
+        System.out.println("[*] Received an @ECHO Request from " + senderId);
+        BroadcastRead br = _serverApp.decipherAndVerifyBroadcastRead(secureMessage);
+        _serverApp.doubleEchoBroadcastEchoDeliver_read(secureMessage.get_senderId()-1000, br);
+    }
+
+    @PostMapping("/doubleEchoBroadcast-ready-read")
+    public void doubleEchoBroadcastReady_read(@RequestBody SecureMessage secureMessage) throws Exception {
+        int senderId = secureMessage.get_senderId();
+        System.out.println("[*] Received a @READY Request from " + senderId);
+        BroadcastRead br = _serverApp.decipherAndVerifyBroadcastRead(secureMessage);
+        boolean delivered = _serverApp.doubleEchoBroadcastReadyDeliver_read(secureMessage.get_senderId()-1000, br);
+        if (delivered) readLocationReport(br);
+
+    }
+
+    /*
+    @PostMapping("/broadcast-read")
+    public SecureMessage broadcastRead(@RequestBody SecureMessage secureRequest) throws Exception {
+        System.out.println("[*] Received Read Broadcast");
+
+        ObtainLocationRequest request = _serverApp.decipherAndVerifyReportRequest(secureRequest);
+        int senderId = secureRequest.get_senderId();
+        if (senderId != _serverApp.getId()) _serverApp.serverSecretKeyUsed(senderId);
+
+        // find requested report
+        DBLocationReport report = _reportRepository.findReportByEpochAndUser(request.get_userId(), request.get_epoch());
+
+        // encrypt using same secret key and client/HA public key, sign using server private key
+        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(report);
+        return _serverApp.cipherAndSignMessage(senderId, bytes);
+    }
+    */
+
+    public void readLocationReport(BroadcastRead br) throws Exception {
+        System.out.println("[*] Received Read Broadcast");
+
+        // Decipher and check request
+        ObtainLocationRequest locationRequest = _serverApp.verifyBroadcastRead(br);
+
+        int epoch = locationRequest.get_epoch();
+        int userId = locationRequest.get_userId();
+
+        // Find requested report
+        DBLocationReport report = _reportRepository.findReportByEpochAndUser(userId, epoch);
+
+        // Encrypt and send response
+        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(report);
+        _serverApp.voidPostToServer(br.get_originalId()-1000, bytes, "/doubleEchoBroadcast-deliver-read");
+    }
+
+    @PostMapping("/doubleEchoBroadcast-deliver-read")
+    public void doubleEchoBroadcastDeliver_read(@RequestBody SecureMessage secureMessage) throws Exception {
+        System.out.println("[*] Received a @DELIVER Request from " + secureMessage.get_senderId());
+        DBLocationReport report = _serverApp.decipherAndVerifyServerDeliver_read(secureMessage);
+        _serverApp.doubleEchoBroadcastDeliver_read(secureMessage.get_senderId()-1000, report);
     }
 
 }

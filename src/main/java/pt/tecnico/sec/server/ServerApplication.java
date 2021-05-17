@@ -271,8 +271,7 @@ public class ServerApplication {
     public byte[] decipherAndVerifyMessage(SecureMessage secureMessage) throws Exception {
         int senderId = secureMessage.get_senderId();
         PublicKey verifyKey = getVerifyKey(senderId);
-        System.out.println("[*] decipherAndVerifyMessage");
-        printKey(senderId);
+        // printKey(senderId);
         return secureMessage.decipherAndVerify( _secretKeys.get(senderId), verifyKey );
     }
 
@@ -392,7 +391,7 @@ public class ServerApplication {
         SecureMessage secureRequest = cipherAndSignMessage(serverId+1000, messageBytes);
         HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
         System.out.println("Sending request to " + serverId + " (endpoint: " + endpoint + ")");
-        printKey(serverId+1000);
+        // printKey(serverId+1000);
         _restTemplate.postForObject(getServerURL(serverId) + endpoint, request, SecureMessage.class);
     }
 
@@ -401,24 +400,6 @@ public class ServerApplication {
             AsyncPost thread = new AsyncPost(serverId, m, endpoint);
             thread.start();
         }
-    }
-
-    boolean _broadcasting = false;
-    boolean _sentEcho = false;
-    boolean _sentReady = false;
-    boolean _delivered = false;
-    BroadcastWrite[] _echos = new BroadcastWrite[_serverCount];
-    BroadcastWrite[] _readys = new BroadcastWrite[_serverCount];
-    Integer[] _delivers = new Integer[_serverCount];
-
-
-    public void setup_broadcast() {
-        _broadcasting = true;
-        _sentEcho = false;
-        _sentReady = false;
-        _delivered = false;
-        _echos = new BroadcastWrite[_serverCount];
-        _readys = new BroadcastWrite[_serverCount];
     }
 
     private void sendRefreshSecretKeys(int serverId) throws Exception {
@@ -446,6 +427,57 @@ public class ServerApplication {
             sendRefreshSecretKeys(serverId);
         }
     }
+
+
+    /* ====[                   W R I T E                    ]==== */
+
+    boolean _broadcasting = false;
+    boolean _sentEcho = false;
+    boolean _sentReady = false;
+    boolean _delivered = false;
+    BroadcastWrite[] _echos = new BroadcastWrite[_serverCount];
+    BroadcastWrite[] _readys = new BroadcastWrite[_serverCount];
+    Integer[] _delivers = new Integer[_serverCount];
+
+
+    public void setup_broadcast() {
+        _broadcasting = true;
+        _sentEcho = false;
+        _sentReady = false;
+        _delivered = false;
+        _echos = new BroadcastWrite[_serverCount];
+        _readys = new BroadcastWrite[_serverCount];
+    }
+
+    /*
+        public void broadcastWrite(DBLocationReport locationReport) throws Exception {
+            // setup broadcast
+            int acks = 0;
+            int my_ts = locationReport.get_timestamp() + 1;
+            locationReport.set_timestamp(my_ts);
+
+            byte[] bytes = ObjectMapperHandler.writeValueAsBytes(locationReport);
+
+            System.out.println("Broadcasting write...");
+            for (int serverId = 0; serverId < _serverCount; serverId++) {
+                try {
+                    // send report
+                    SecureMessage secureResponse = postToServer(serverId, bytes, "/broadcast-write");
+                    byte[] responseBytes = decipherAndVerifyMessage(secureResponse);
+                    if (responseBytes != null && ObjectMapperHandler.getIntFromBytes(responseBytes) == my_ts) acks += 1;
+
+                } catch(IllegalArgumentException e) {
+                    throw e;
+                } catch(Exception e) {
+                    System.out.println(e.getMessage());
+                } // we don't care if some servers fail, we only need (N+f)/2 to succeed
+            }
+
+            if (acks <= (_serverCount + FAULTS) / 2 )
+                throw new Exception("Write operation broadcast was unsuccessful");
+            // FIXME : Dar rebroadcast?
+        }
+     */
 
     // Argument: Location report
     public void doubleEchoBroadcastWrite(DBLocationReport locationReport) throws Exception { // TODO : implement read
@@ -577,6 +609,233 @@ public class ServerApplication {
 
         return dbLocationReport;
     }
+
+
+    /* ====[                    R E A D                     ]==== */
+
+    boolean _broadcasting_read = false;
+    boolean _sentEcho_read = false;
+    boolean _sentReady_read = false;
+    boolean _delivered_read = false;
+    BroadcastRead[] _echos_read = new BroadcastRead[_serverCount];
+    BroadcastRead[] _readys_read = new BroadcastRead[_serverCount];
+    DBLocationReport[] _readlist = new DBLocationReport[_serverCount];
+
+
+    public void setup_broadcast_read() {
+        _broadcasting_read = true;
+        _sentEcho_read = false;
+        _sentReady_read = false;
+        _delivered_read = false;
+        _echos_read = new BroadcastRead[_serverCount];
+        _readys_read = new BroadcastRead[_serverCount];
+    }
+
+    /*
+    public DBLocationReport broadcastRead(ObtainLocationRequest request) throws Exception {
+        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(request);
+
+        ArrayList<DBLocationReport> readList = new ArrayList<>();
+
+        // get reports
+        System.out.println("Broadcasting read...");
+        for (int serverId = 0; serverId < _serverCount; serverId++) {
+            try{
+                // send request
+                SecureMessage secureResponse = postToServer(serverId, bytes, "/broadcast-read");
+                DBLocationReport locationReport = decipherAndVerifyServerWrite(secureResponse);
+                checkObtainDBReportResponse(request, locationReport);
+                readList.add(locationReport);
+
+                if (readList.size() > (_serverCount+FAULTS)/2) break;
+
+            } catch(IllegalArgumentException e) {
+                throw e;
+            } catch(Exception e) {
+                System.out.println(e.getMessage());
+            }
+        }
+
+        if (readList.size() <= (_serverCount + FAULTS) / 2)
+            throw new Exception("Read operation broadcast was unsuccessful");
+        // FIXME : Dar rebroadcast?
+
+        // Choose the report with the largest timestamp
+        DBLocationReport finalLocationReport = readList.get(0);
+        for (DBLocationReport locationReport : readList) {
+            if (locationReport == null) continue;
+            if (finalLocationReport == null || locationReport.get_timestamp() > finalLocationReport.get_timestamp())
+                finalLocationReport = locationReport;
+        }
+
+        // Atomic Register: Write-back phase after Read
+        if (finalLocationReport != null)
+            broadcastWrite(finalLocationReport);
+
+        return finalLocationReport;
+
+    }
+    */
+
+    public static <T> int getLength(T[] array){
+        int count = 0;
+        for (T entry : array) {
+            if (entry != null) ++count;
+        }
+        return count;
+    }
+
+    // Argument: ObtainLocationRequest
+    public DBLocationReport doubleEchoBroadcastRead(ObtainLocationRequest locationRequest) throws Exception {
+        // setup broadcast
+        int acks = 0;
+        _readlist = new DBLocationReport[_serverCount];
+        setup_broadcast();
+
+        BroadcastRead br = new BroadcastRead(_serverId + 1000, locationRequest);
+        byte[] m = ObjectMapperHandler.writeValueAsBytes(br);
+
+        refreshServerSecretKeys();
+
+        System.out.println("Broadcasting read...");
+        postToServers(m, "/doubleEchoBroadcast-send-read");
+
+        // FIXME : ignore exceptions that are not IllegalArgument
+        // FIXME : obtain non existent value -> infinite loop
+        while (getLength(_readlist) <= (_serverCount + FAULTS) / 2) {
+           // empty
+        }
+
+        // Choose the report with the largest timestamp
+        DBLocationReport finalLocationReport = _readlist[0];
+        for (DBLocationReport locationReport : _readlist) {
+            if (locationReport == null) continue;
+            if (finalLocationReport == null || locationReport.get_timestamp() > finalLocationReport.get_timestamp())
+                finalLocationReport = locationReport;
+        }
+
+        // Atomic Register: Write-back phase after Read
+        if (finalLocationReport != null)
+            doubleEchoBroadcastWrite(finalLocationReport); // FIXME : only sender or all?
+
+        return finalLocationReport; // FIXME : convert to regular LocationReport ?
+    }
+
+    public void doubleEchoBroadcastSendDeliver_read(BroadcastRead br) throws Exception {
+        TimeUnit.SECONDS.sleep(1); // FIXME : no zz for you, right now, sorry :(
+        if (!_broadcasting_read) setup_broadcast();
+        if (!_sentEcho_read) {
+            byte[] m = ObjectMapperHandler.writeValueAsBytes(br);
+            _sentEcho_read = true;
+            postToServers(m, "/doubleEchoBroadcast-echo-read");
+        }
+    }
+
+    // Argument: original SecureMessage
+    public BroadcastRead searchForMajorityMessage_read(BroadcastRead[] messages, int quorum) {
+        // count the times a message appears
+        Map<BroadcastRead, Integer> counter = new HashMap<>();
+        for (BroadcastRead m : messages) {
+            if (m == null) continue;
+            Integer count = counter.get(m);
+            if (count == null)
+                counter.put(m, 1);
+            else
+                counter.replace(m, count+1);
+        }
+
+        // search for message that appears more than <quorum> times
+        for (BroadcastRead m : counter.keySet()) {
+            System.out.println("> Counter[i]: " + counter.get(m) + " / " + quorum);
+            if (counter.get(m) > quorum) return m;
+        }
+        return null;
+    }
+
+    public void doubleEchoBroadcastEchoDeliver_read(int senderId, BroadcastRead br) throws Exception {
+        System.out.println("[*] doubleEchoBroadcastEchoDeliver_read");
+        System.out.println( "    Broadcasting? " + _broadcasting_read + ",\n" +
+                            "    SentReady? " + _sentReady_read + ",\n" +
+                            "    #Echos: " + getLength(_echos_read) + ",\n");
+
+        if (!_broadcasting_read) setup_broadcast();
+        if (_echos_read[senderId] == null) _echos_read[senderId] = br;
+
+        if (!_sentReady_read) {
+            BroadcastRead message = searchForMajorityMessage_read(_echos_read, (_serverCount+FAULTS)/2);
+            System.out.println("> Majority Message: " + message);
+            if (message != null) {
+                _sentReady_read = true;
+                byte[] m = ObjectMapperHandler.writeValueAsBytes(message);
+                postToServers(m, "/doubleEchoBroadcast-ready-read");
+            }
+        }
+    }
+
+    // FIXME : can it receive only this message? careful with _broadcasting
+    public boolean doubleEchoBroadcastReadyDeliver_read(int senderId, BroadcastRead br) throws Exception {
+        if (_readys_read[senderId] == null) _readys_read[senderId] = br;
+
+        if (!_sentReady_read) {
+            BroadcastRead message = searchForMajorityMessage_read(_readys_read, FAULTS); // FIXME : f is faults or byzantines?
+            if (message != null) {
+                _sentReady_read = true;
+                byte[] m = ObjectMapperHandler.writeValueAsBytes(message);
+                postToServers(m, "/doubleEchoBroadcast-ready-read");
+            }
+            else
+                return false; // for efficiency
+        }
+
+        if (!_delivered_read) {
+            BroadcastRead message = searchForMajorityMessage_read(_readys_read, 2*FAULTS); // FIXME : f is faults or byzantines?
+            if (message != null) {
+                _delivered_read = true;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public void doubleEchoBroadcastDeliver_read(int senderId, DBLocationReport report) {
+        if (_readlist[senderId] == null) _readlist[senderId] = report;
+        _broadcasting_read = false;
+    }
+
+    public BroadcastRead decipherAndVerifyBroadcastRead(SecureMessage secureMessage) throws Exception {
+        byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
+        BroadcastRead br = ObjectMapperHandler.getBroadcastReadFromBytes(messageBytes);
+
+        // check sender
+        if (!fromServer(secureMessage.get_senderId()))
+            throw new ReportNotAcceptableException("Can only accept echos from servers.");
+
+        return br;
+    }
+
+    public ObtainLocationRequest verifyBroadcastRead(BroadcastRead br) throws Exception {
+        ObtainLocationRequest locationRequest = br.get_locationRequest();
+
+        // check sender
+        if (!fromServer(br.get_originalId()))
+            throw new ReportNotAcceptableException("Can only accept register writes from servers.");
+
+        return locationRequest;
+    }
+
+    public DBLocationReport decipherAndVerifyServerDeliver_read(SecureMessage secureMessage) throws Exception {
+        byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
+        DBLocationReport report = ObjectMapperHandler.getDBLocationReportFromBytes(messageBytes);
+
+        // check sender
+        if (!fromServer(secureMessage.get_senderId()))
+            throw new ReportNotAcceptableException("Can only accept delivers from servers.");
+
+        return report;
+    }
+
+
+    /* ====[                   A S Y N C                    ]==== */
 
     class AsyncPost extends Thread {
 

@@ -16,7 +16,7 @@ public final class Constants {
 
     // General
     public static final int DETECTION_RANGE = 2;
-    public static final int SECRET_KEY_DURATION = 2;
+    public static final int SECRET_KEY_DURATION = -1;
     public static final int BYZANTINE_USERS  = 1;
     public static final int FAULTS = 0; //FIXME
     public static final String SUCCESS = "success";
@@ -29,7 +29,7 @@ public final class Constants {
 
     // Client
     public static final int CLIENT_BASE_PORT = 8000;
-    public static final String CLIENT_USAGE = "Usage: ./mvnw spring-boot:run -Dstart-class=pt.tecnico.sec.client.ClientApplication -Dspring-boot.run.arguments=\"[userId serverCount]\"";
+    public static final String CLIENT_USAGE = "Usage: ./mvnw spring-boot:run -Dstart-class=pt.tecnico.sec.client.ClientApplication -Dspring-boot.run.arguments=\"[userId] [serverCount]\"";
     public static final String EXCEPTION_STR = "Caught exception with description: ";
     public static final String EXIT_CMD = "exit";
     public static final String HELP_CMD = "help";

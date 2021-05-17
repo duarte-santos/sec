@@ -3,6 +3,7 @@ package pt.tecnico.sec.client;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
+import java.util.Objects;
 
 @SuppressWarnings("unused")
 public class ObtainLocationRequest {
@@ -44,5 +45,18 @@ public class ObtainLocationRequest {
                 "_userId=" + _userId +
                 ", _epoch=" + _epoch +
                 '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        ObtainLocationRequest that = (ObtainLocationRequest) o;
+        return _userId == that._userId && _epoch == that._epoch;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(_userId, _epoch);
     }
 }
