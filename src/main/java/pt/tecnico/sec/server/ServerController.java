@@ -1,5 +1,6 @@
 package pt.tecnico.sec.server;
 
+import org.apache.tomcat.jni.Time;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,6 +16,7 @@ import javax.crypto.SecretKey;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import static pt.tecnico.sec.Constants.OK;
 
@@ -41,6 +43,7 @@ public class ServerController {
         ObtainLocationRequest request = _serverApp.decipherAndVerifyReportRequest(secureRequest);
 
         // broadcast Read operation
+        _serverApp.refreshServerSecretKeys();
         DBLocationReport dbLocationReport = _serverApp.doubleEchoBroadcastRead(request);
         if (dbLocationReport == null)
             return null;
@@ -68,6 +71,7 @@ public class ServerController {
             throw new RecordAlreadyExistsException("Report for userId " + userId + " and epoch " + epoch + " already exists.");
 
         // Broadcast write operation to other servers
+        _serverApp.refreshServerSecretKeys();
         _serverApp.doubleEchoBroadcastWrite(locationReport);
 
         // Send secure response
@@ -90,6 +94,7 @@ public class ServerController {
             if (id == witnessId) continue; // user will never be a witness of itself
             for (int ep : epochs) {
                 ObtainLocationRequest userReportRequest = new ObtainLocationRequest(id, ep);
+                _serverApp.refreshServerSecretKeys();
                 DBLocationReport dbLocationReport = _serverApp.doubleEchoBroadcastRead(userReportRequest);
 
                 // filter requested reports
@@ -124,6 +129,7 @@ public class ServerController {
         int userCount = _serverApp.getUserCount();
         for (int id = 0; id < userCount; id++) {
             ObtainLocationRequest userReportRequest = new ObtainLocationRequest(id, ep);
+            _serverApp.refreshServerSecretKeys();
             DBLocationReport dbLocationReport = _serverApp.doubleEchoBroadcastRead(userReportRequest);
             // filter requested reports
             if (dbLocationReport != null && dbLocationReport.get_location().equals(loc))
@@ -134,55 +140,6 @@ public class ServerController {
         UsersAtLocation response = new UsersAtLocation(loc, ep, reports);
         byte[] bytes = ObjectMapperHandler.writeValueAsBytes(response);
         return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), bytes);
-    }
-
-    /* ========================================================== */
-    /* ====[                Atomic Registers                ]==== */
-    /* ========================================================== */
-
-    @PostMapping("/broadcast-write")
-    public SecureMessage broadcastWrite(@RequestBody SecureMessage secureMessage) throws Exception {
-        System.out.println("[*] Received Write Broadcast");
-
-        // Decipher and check report
-        DBLocationReport locationReport = _serverApp.decipherAndVerifyServerWrite(secureMessage);
-        int senderId = secureMessage.get_senderId();
-        if (senderId != _serverApp.getId()) _serverApp.serverSecretKeyUsed(senderId);
-
-        int epoch = locationReport.get_epoch();
-        int userId = locationReport.get_userId();
-        int timestamp = locationReport.get_timestamp();
-        int mytimestamp = 0;
-
-        // Update database
-        DBLocationReport mylocationReport = _reportRepository.findReportByEpochAndUser(userId, epoch);
-        if (mylocationReport != null)
-            mytimestamp = mylocationReport.get_timestamp();
-
-        if (timestamp > mytimestamp){
-            if (mylocationReport != null) _reportRepository.delete(mylocationReport);
-            _reportRepository.save(locationReport);
-        }
-
-        // Encrypt and send response
-        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(timestamp);
-        return _serverApp.cipherAndSignMessage(senderId, bytes);
-    }
-
-    @PostMapping("/broadcast-read")
-    public SecureMessage broadcastRead(@RequestBody SecureMessage secureRequest) throws Exception {
-        System.out.println("[*] Received Read Broadcast");
-
-        ObtainLocationRequest request = _serverApp.decipherAndVerifyReportRequest(secureRequest);
-        int senderId = secureRequest.get_senderId();
-        if (senderId != _serverApp.getId()) _serverApp.serverSecretKeyUsed(senderId);
-
-        // find requested report
-        DBLocationReport report = _reportRepository.findReportByEpochAndUser(request.get_userId(), request.get_epoch());
-
-        // encrypt using same secret key and client/HA public key, sign using server private key
-        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(report);
-        return _serverApp.cipherAndSignMessage(senderId, bytes);
     }
 
 
@@ -302,24 +259,6 @@ public class ServerController {
         if (delivered) readLocationReport(br);
 
     }
-
-    /*
-    @PostMapping("/broadcast-read")
-    public SecureMessage broadcastRead(@RequestBody SecureMessage secureRequest) throws Exception {
-        System.out.println("[*] Received Read Broadcast");
-
-        ObtainLocationRequest request = _serverApp.decipherAndVerifyReportRequest(secureRequest);
-        int senderId = secureRequest.get_senderId();
-        if (senderId != _serverApp.getId()) _serverApp.serverSecretKeyUsed(senderId);
-
-        // find requested report
-        DBLocationReport report = _reportRepository.findReportByEpochAndUser(request.get_userId(), request.get_epoch());
-
-        // encrypt using same secret key and client/HA public key, sign using server private key
-        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(report);
-        return _serverApp.cipherAndSignMessage(senderId, bytes);
-    }
-    */
 
     public void readLocationReport(BroadcastRead br) throws Exception {
         System.out.println("[*] Received Read Broadcast");

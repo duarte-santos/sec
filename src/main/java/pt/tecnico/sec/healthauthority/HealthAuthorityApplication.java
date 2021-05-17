@@ -126,17 +126,14 @@ public class HealthAuthorityApplication {
     @SuppressWarnings("SameReturnValue")
     private static String getHelpString() {
         return """
-                  ============================= Available Commands =============================
-                  step                       - Increase current epoch
-                  submit, [epoch]            - Send the user's DBLocation report of the given
-                                                epoch to the server
-                  obtain, [epoch]            - Ask the server for the user's DBLocation report
-                                                at the given epoch
-                  proofs, [ep1], [ep2], ...  - Ask the server for the proofs that the user
-                                                generated as witness
-                  exit                       - Quit Client App
-                  ==============================================================================
-
+                ======================== Available Commands ========================
+                obtainLocationReport, [userId], [ep]
+                > returns the position of "userId" at the epoch "ep"
+                obtainUsersAtLocation, [x], [y], [ep]
+                > returns a list of users that were at position (x,y) at epoch "ep"
+                exit
+                > exits the Health Authority application
+                ====================================================================
                 """;
     }
 
