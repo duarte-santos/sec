@@ -1,6 +1,7 @@
 package pt.tecnico.sec.server;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -206,39 +207,49 @@ public class ServerController {
     /* ====[              Double Echo Broadcast             ]==== */
     /* ========================================================== */
 
+    @Async
     @PostMapping("/doubleEchoBroadcast-send")
-    public void doubleEchoBroadcastSend(@RequestBody SecureMessage originalMessage) throws Exception {
+    public void doubleEchoBroadcastSend(@RequestBody SecureMessage message) throws Exception {
+        System.out.println("OMG A PARTY INVITE?!");
+        int senderId = message.get_senderId();
+        System.out.println("Received a SEND request from " + senderId);
+        BroadcastWrite bw = _serverApp.decipherAndVerifyBroadcastWrite(message);
         // FIXME verify message?
-        int senderId = originalMessage.get_senderId();
         if (senderId != _serverApp.getId()) _serverApp.serverSecretKeyUsed(senderId);
-        _serverApp.doubleEchoBroadcastSendDeliver(originalMessage);
+        _serverApp.doubleEchoBroadcastSendDeliver(bw);
     }
 
+    @Async
     @PostMapping("/doubleEchoBroadcast-echo")
     public void doubleEchoBroadcastEcho(@RequestBody SecureMessage secureMessage) throws Exception {
         int senderId = secureMessage.get_senderId();
+        System.out.println("Received a ECHO request from " + senderId);
+        System.out.println("party?");
+        BroadcastWrite bw = _serverApp.decipherAndVerifyBroadcastWrite(secureMessage);
+        System.out.println("party!");
         if (senderId != _serverApp.getId()) _serverApp.serverSecretKeyUsed(senderId);
-        SecureMessage originalMessage = _serverApp.decipherAndVerifyServerEcho(secureMessage);
-        _serverApp.doubleEchoBroadcastEchoDeliver(secureMessage.get_senderId()-1000, originalMessage);
+        System.out.println("party.");
+        _serverApp.doubleEchoBroadcastEchoDeliver(secureMessage.get_senderId()-1000, bw);
+        System.out.println("party...");
     }
 
+    @Async
     @PostMapping("/doubleEchoBroadcast-ready")
     public void doubleEchoBroadcastReady(@RequestBody SecureMessage secureMessage) throws Exception {
         int senderId = secureMessage.get_senderId();
+        System.out.println("Received a READY request from " + senderId);
+        BroadcastWrite bw = _serverApp.decipherAndVerifyBroadcastWrite(secureMessage);
         if (senderId != _serverApp.getId()) _serverApp.serverSecretKeyUsed(senderId);
-        SecureMessage originalMessage = _serverApp.decipherAndVerifyServerEcho(secureMessage);
-        boolean delivered = _serverApp.doubleEchoBroadcastReadyDeliver(secureMessage.get_senderId()-1000, originalMessage);
-        if (delivered) writeLocationReport(secureMessage);
+        boolean delivered = _serverApp.doubleEchoBroadcastReadyDeliver(secureMessage.get_senderId()-1000, bw);
+        if (delivered) writeLocationReport(bw);
 
     }
 
-    public void writeLocationReport(SecureMessage secureMessage) throws Exception {
+    public void writeLocationReport(BroadcastWrite bw) throws Exception {
         System.out.println("Received Write broadcast");
 
         // Decipher and check report
-        DBLocationReport locationReport = _serverApp.decipherAndVerifyServerWrite(secureMessage);
-        int senderId = secureMessage.get_senderId();
-        if (senderId != _serverApp.getId()) _serverApp.serverSecretKeyUsed(senderId);
+        DBLocationReport locationReport = _serverApp.verifyBroadcastWrite(bw);
 
         int epoch = locationReport.get_epoch();
         int userId = locationReport.get_userId();
@@ -257,9 +268,10 @@ public class ServerController {
 
         // Encrypt and send response
         byte[] bytes = ObjectMapperHandler.writeValueAsBytes(timestamp);
-        _serverApp.postToServer(senderId, bytes, "/doubleEchoBroadcast-deliver");
+        _serverApp.postToServer(bw.get_originalId()-1000, bytes, "/doubleEchoBroadcast-deliver");
     }
 
+    @Async
     @PostMapping("/doubleEchoBroadcast-deliver")
     public void doubleEchoBroadcastDeliver(@RequestBody SecureMessage secureMessage) throws Exception {
         int senderId = secureMessage.get_senderId();

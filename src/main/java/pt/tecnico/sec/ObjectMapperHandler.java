@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import pt.tecnico.sec.client.*;
 import pt.tecnico.sec.healthauthority.ObtainUsersRequest;
 import pt.tecnico.sec.healthauthority.UsersAtLocation;
+import pt.tecnico.sec.server.BroadcastWrite;
 import pt.tecnico.sec.server.DBLocationReport;
 
 import java.io.IOException;
@@ -77,6 +78,11 @@ public final class ObjectMapperHandler {
         return objectMapper.writeValueAsBytes(message);
     }
 
+    public static byte[] writeValueAsBytes(BroadcastWrite bw) throws JsonProcessingException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        return objectMapper.writeValueAsBytes(bw);
+    }
+
 
     /* ========================================================== */
     /* ====[                Get from Bytes                  ]==== */
@@ -100,6 +106,11 @@ public final class ObjectMapperHandler {
     public static SecureMessage getSecureMessageFromBytes(byte[] bytes) throws IOException {
         ObjectMapper objectMapper = new ObjectMapper();
         return objectMapper.readValue(bytes, SecureMessage.class);
+    }
+
+    public static BroadcastWrite getBroadcastWriteFromBytes(byte[] bytes) throws IOException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        return objectMapper.readValue(bytes, BroadcastWrite.class);
     }
 
 }

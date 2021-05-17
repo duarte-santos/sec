@@ -9,6 +9,7 @@ import javax.persistence.*;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 @SuppressWarnings("unused")
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -135,5 +136,18 @@ public class DBLocationReport {
                 ", _DB_proofs=" + _DB_proofs +
                 ", _signature='" + _signature + '\'' +
                 '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        DBLocationReport that = (DBLocationReport) o;
+        return _userId == that._userId && _epoch == that._epoch && _timestamp == that._timestamp && Objects.equals(id, that.id) && Objects.equals(_DB_location, that._DB_location) && Objects.equals(_DB_proofs, that._DB_proofs) && Objects.equals(_signature, that._signature);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id, _userId, _epoch, _timestamp, _DB_location, _DB_proofs, _signature);
     }
 }

@@ -3,8 +3,10 @@ package pt.tecnico.sec.server;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.http.HttpEntity;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.web.client.RestTemplate;
 import pt.tecnico.sec.AESKeyGenerator;
+import pt.tecnico.sec.Constants;
 import pt.tecnico.sec.ObjectMapperHandler;
 import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.client.LocationReport;
@@ -15,14 +17,18 @@ import pt.tecnico.sec.healthauthority.ObtainUsersRequest;
 import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
 import javax.crypto.SecretKey;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import static pt.tecnico.sec.Constants.*;
 
@@ -48,6 +54,17 @@ public class ServerApplication {
 
             if (_serverId >= _serverCount)
                 throw new NumberFormatException("Server ID must be lower than the number of servers");
+
+            // FIXME : hack!
+            FileInputStream fis = new FileInputStream(KEYS_PATH + "secret.key");
+            byte[] secretEncoded = new byte[fis.available()];
+            fis.read(secretEncoded);
+            fis.close();
+            SecretKey sk = AESKeyGenerator.fromEncoded(secretEncoded);
+            for (int serverId = 0; serverId < _serverCount; serverId++) {
+                _secretKeysUsages.put(serverId+1000, 0);
+                _secretKeys.put(serverId+1000, sk);
+            }
 
             // set database information
             int serverPort = SERVER_BASE_PORT + _serverId;
@@ -125,7 +142,7 @@ public class ServerApplication {
     /* ========================================================== */
 
     public SecureMessage postToServer(int serverId, byte[] messageBytes, String endpoint) throws Exception {
-        updateServerSecretKey(serverId+1000);
+        //updateServerSecretKey(serverId+1000);
         SecureMessage secureRequest = cipherAndSignMessage(serverId+1000, messageBytes);
         HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
         SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + endpoint, request, SecureMessage.class);
@@ -225,13 +242,11 @@ public class ServerApplication {
 
     private byte[] sendSecretKey(int serverId, SecretKey keyToSend) throws Exception {
         PublicKey serverKey = RSAKeyGenerator.readServerPublicKey(serverId);
-        System.out.println("oi key0A " + serverId);
         SecureMessage secureRequest = new SecureMessage(_serverId+1000, keyToSend, serverKey, _keyPair.getPrivate());
 
         HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
         SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + "/secret-key", request, SecureMessage.class);
 
-        System.out.println("oi key0B " + serverId);
         // Check response's signature and decipher TODO freshness
         assert secureResponse != null;
         return secureResponse.decipherAndVerify( keyToSend, serverKey);
@@ -371,9 +386,19 @@ public class ServerApplication {
     /* ====[              Double Echo Broadcast             ]==== */
     /* ========================================================== */
 
+    public void voidPostToServer(int serverId, byte[] messageBytes, String endpoint) throws Exception {
+        //updateServerSecretKey(serverId+1000);
+        SecureMessage secureRequest = cipherAndSignMessage(serverId+1000, messageBytes);
+        HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
+        _restTemplate.postForObject(getServerURL(serverId) + endpoint, request, SecureMessage.class);
+        serverSecretKeyUsed(serverId+1000);
+    }
+
     private void postToServers(byte[] m, String endpoint) throws Exception {
         for (int serverId = 0; serverId < _serverCount; serverId++) {
-            postToServer(serverId, m, endpoint);
+            //voidPostToServer(serverId, m, endpoint);
+            AsyncPost thread = new AsyncPost(serverId, m, endpoint);
+            thread.start();
         }
     }
 
@@ -381,8 +406,8 @@ public class ServerApplication {
     boolean _sentEcho = false;
     boolean _sentReady = false;
     boolean _delivered = false;
-    SecureMessage[] _echos = new SecureMessage[_serverCount];
-    SecureMessage[] _readys = new SecureMessage[_serverCount];
+    BroadcastWrite[] _echos = new BroadcastWrite[_serverCount];
+    BroadcastWrite[] _readys = new BroadcastWrite[_serverCount];
     Integer[] _delivers = new Integer[_serverCount];
 
 
@@ -391,8 +416,8 @@ public class ServerApplication {
         _sentEcho = false;
         _sentReady = false;
         _delivered = false;
-        _echos = new SecureMessage[_serverCount];
-        _readys = new SecureMessage[_serverCount];
+        _echos = new BroadcastWrite[_serverCount];
+        _readys = new BroadcastWrite[_serverCount];
     }
 
     // Argument: Location report
@@ -404,7 +429,8 @@ public class ServerApplication {
 
         int my_ts = locationReport.get_timestamp() + 1;
         locationReport.set_timestamp(my_ts);
-        byte[] m = ObjectMapperHandler.writeValueAsBytes(locationReport);
+        BroadcastWrite bw = new BroadcastWrite(_serverId + 1000, locationReport);
+        byte[] m = ObjectMapperHandler.writeValueAsBytes(bw);
 
         System.out.println("Broadcasting write...");
         postToServers(m, "/doubleEchoBroadcast-send");
@@ -412,43 +438,48 @@ public class ServerApplication {
             acks = 0;
             for (Integer timestamp : _delivers)
                 if (timestamp != null && timestamp == my_ts) acks++;
+            //System.out.println("[*] Delivers: " + Arrays.toString(_delivers)); // FIXME : [null, ...]
         }
     }
 
-    // Argument: original SecureMessage
-    public void doubleEchoBroadcastSendDeliver(SecureMessage originalMessage) throws Exception {
+    public void doubleEchoBroadcastSendDeliver(BroadcastWrite bw) throws Exception {
+        System.out.println("[SendDeliver] Broadcasting: " + _broadcasting + ", SentEcho: " + _sentEcho);
+        System.out.println("zz time! ");
+        TimeUnit.SECONDS.sleep(1);
+        System.out.println("howdy! :)");
         if (!_broadcasting) setup_broadcast();
         if (!_sentEcho) {
-            byte[] m = ObjectMapperHandler.writeValueAsBytes(originalMessage);
+            byte[] m = ObjectMapperHandler.writeValueAsBytes(bw);
             _sentEcho = true;
-            // will propagate a secureMessage containing another (the original) in bytes
             postToServers(m, "/doubleEchoBroadcast-echo");
         }
     }
 
     // Argument: original SecureMessage
-    public SecureMessage searchForMajorityMessage(SecureMessage[] messages, int quorum) {
+    public BroadcastWrite searchForMajorityMessage(BroadcastWrite[] messages, int quorum) {
         // count the times a message appears
-        Map<SecureMessage, Integer> counter = new HashMap<>();
-        for (SecureMessage m : messages) {
+        Map<BroadcastWrite, Integer> counter = new HashMap<>();
+        for (BroadcastWrite m : messages) {
             if (m == null) continue;
             Integer count = counter.get(m);
             if (count == null) counter.put(m, 1);
             else counter.replace(m, count+1);
         }
+
         // search for message that appears more than <quorum> times
-        for (SecureMessage m : counter.keySet()) {
+        for (BroadcastWrite m : counter.keySet()) {
             if (counter.get(m) > quorum) return m;
         }
         return null;
     }
 
-    public void doubleEchoBroadcastEchoDeliver(int senderId, SecureMessage originalMessage) throws Exception {
+    public void doubleEchoBroadcastEchoDeliver(int senderId, BroadcastWrite bw) throws Exception {
+        System.out.println("\n[EchoDeliver]\nBroadcasting: " + _broadcasting + ",\nEchos: " + _echos.length + ",\nSentReady: " + _sentReady + "\n");
         if (!_broadcasting) setup_broadcast();
-        if (_echos[senderId] == null) _echos[senderId] = originalMessage;
+        if (_echos[senderId] == null) _echos[senderId] = bw;
 
         if (!_sentReady) {
-            SecureMessage message = searchForMajorityMessage(_echos, (_serverCount+FAULTS)/2);
+            BroadcastWrite message = searchForMajorityMessage(_echos, (_serverCount+FAULTS)/2);
             if (message != null) {
                 _sentReady = true;
                 byte[] m = ObjectMapperHandler.writeValueAsBytes(message);
@@ -457,11 +488,13 @@ public class ServerApplication {
         }
     }
 
-    public boolean doubleEchoBroadcastReadyDeliver(int senderId, SecureMessage originalMessage) throws Exception { //FIXME can it receive only this message? careful with _broadcasting
-        if (_readys[senderId] == null) _readys[senderId] = originalMessage;
+    public boolean doubleEchoBroadcastReadyDeliver(int senderId, BroadcastWrite bw) throws Exception { //FIXME can it receive only this message? careful with _broadcasting
+        System.out.println("\n[ReadyDeliver]\nReadys: " + _readys.length + ",\nDelivered: " + _delivered + ",\nSentReady: " + _sentReady + "\n");
+
+        if (_readys[senderId] == null) _readys[senderId] = bw;
 
         if (!_sentReady) {
-            SecureMessage message = searchForMajorityMessage(_readys, FAULTS); // FIXME f is faults or byzantines?
+            BroadcastWrite message = searchForMajorityMessage(_readys, FAULTS); // FIXME f is faults or byzantines?
             if (message != null) {
                 _sentReady = true;
                 byte[] m = ObjectMapperHandler.writeValueAsBytes(message);
@@ -471,7 +504,7 @@ public class ServerApplication {
         }
 
         if (!_delivered) {
-            SecureMessage message = searchForMajorityMessage(_readys, 2*FAULTS); // FIXME f is faults or byzantines?
+            BroadcastWrite message = searchForMajorityMessage(_readys, 2*FAULTS); // FIXME f is faults or byzantines?
             if (message != null) {
                 _delivered = true;
                 return true;
@@ -481,20 +514,21 @@ public class ServerApplication {
     }
 
     public void doubleEchoBroadcastDeliver(int senderId, int timestamp) {
+        System.out.println("\n[Deliver]\nDelivers: " + Arrays.toString(_delivers) + "\n");
+
         if (_delivers[senderId] == null) _delivers[senderId] = timestamp;
         _broadcasting = false;
     }
 
-
-    public SecureMessage decipherAndVerifyServerEcho(SecureMessage secureMessage) throws Exception {
+    public BroadcastWrite decipherAndVerifyBroadcastWrite(SecureMessage secureMessage) throws Exception {
         byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
-        SecureMessage originalMessage = ObjectMapperHandler.getSecureMessageFromBytes(messageBytes);
+        BroadcastWrite bw = ObjectMapperHandler.getBroadcastWriteFromBytes(messageBytes);
 
         // check sender
         if (!fromServer(secureMessage.get_senderId()))
             throw new ReportNotAcceptableException("Can only accept echos from servers.");
 
-        return originalMessage;
+        return bw;
     }
 
     public int decipherAndVerifyServerDeliver(SecureMessage secureMessage) throws Exception {
@@ -507,4 +541,41 @@ public class ServerApplication {
 
         return timestamp;
     }
+
+    public DBLocationReport verifyBroadcastWrite(BroadcastWrite bw) throws Exception {
+        DBLocationReport dbLocationReport = bw.get_report();
+        if (dbLocationReport == null) return null;
+
+        // check sender
+        if (!fromServer(bw.get_originalId()))
+            throw new ReportNotAcceptableException("Can only accept register writes from servers.");
+
+        // check corresponding report proofs signatures
+        checkReportSignatures(new LocationReport(dbLocationReport));
+
+        return dbLocationReport;
+    }
+
+    class AsyncPost extends Thread {
+
+        private int _serverId;
+        private byte[] _messageBytes;
+        private String _endpoint;
+
+        public AsyncPost(int serverId, byte[] messageBytes, String endpoint) {
+            _serverId = serverId;
+            _messageBytes = messageBytes;
+            _endpoint = endpoint;
+        }
+
+        public void run() {
+            try {
+                ServerApplication.this.voidPostToServer(_serverId, _messageBytes, _endpoint);
+            } catch (Exception e) {
+                System.out.println(e.getMessage());
+            }
+        }
+
+    }
+
 }
