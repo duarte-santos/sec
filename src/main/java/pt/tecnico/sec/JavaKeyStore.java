@@ -11,6 +11,7 @@ import java.security.cert.CertificateException;
 import java.util.Enumeration;
 
 import static pt.tecnico.sec.Constants.KEYSTORE_DIRECTORY;
+import static pt.tecnico.sec.Constants.KEYSTORE_EXTENSION;
 
 /**
  * This class was adapted from:

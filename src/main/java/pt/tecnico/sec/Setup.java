@@ -1,26 +1,16 @@
 package pt.tecnico.sec;
 
-
 import org.apache.tomcat.util.http.fileupload.FileUtils;
-import sun.security.util.KnownOIDs;
-import sun.security.util.ObjectIdentifier;
-import sun.security.x509.AlgorithmId;
-import sun.security.x509.CertificateAlgorithmId;
-import sun.security.x509.CertificateSerialNumber;
-import sun.security.x509.CertificateValidity;
-import sun.security.x509.CertificateVersion;
-import sun.security.x509.CertificateX509Key;
-import sun.security.x509.SubjectAlternativeNameExtension;
-import sun.security.x509.X500Name;
-import sun.security.x509.X509CertImpl;
-import sun.security.x509.X509CertInfo;
-import sun.security.x509.CertificateExtensions;
-import sun.security.x509.GeneralNames;
-import sun.security.x509.GeneralName;
-import sun.security.x509.GeneralNameInterface;
-import sun.security.x509.DNSName;
-import sun.security.x509.IPAddressName;
-import sun.security.util.DerOutputStream;
+import org.bouncycastle.asn1.ASN1ObjectIdentifier;
+import org.bouncycastle.asn1.x500.X500Name;
+import org.bouncycastle.asn1.x509.BasicConstraints;
+import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
+import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.operator.ContentSigner;
+import org.bouncycastle.operator.DefaultAlgorithmNameFinder;
+import org.bouncycastle.operator.OperatorCreationException;
+import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 
 import java.io.File;
 import java.io.IOException;
@@ -33,17 +23,12 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Date;
 
 import static pt.tecnico.sec.Constants.*;
 
 public class Setup {
-
-    // Constants
-    private static final String USAGE = "./mvnw spring-boot:run -Dstart-class=pt.tecnico.sec.Setup -Dspring-boot.run.arguments=\"[nX] [nY] [epochCount] [userCount] [serverCount]\"";
-    private static final String DN_NAME = "CN=test, OU=test, O=test, L=test, ST=test, C=CY";
-    private static final String SHA256witchRSA = "SHA256withRSA";
-
 
     public static void main(String[] args) throws Exception {
 
@@ -65,19 +50,15 @@ public class Setup {
             System.out.println("\n[CREATE ENVIRONMENT]");
             EnvironmentGenerator.main(Arrays.copyOfRange(args, 0, 4+1));
 
-            // FIXME : exchange with keystore
-            System.out.println("\n[CREATE KEY_PAIRS]");
-            RSAKeyGenerator.main(Arrays.copyOfRange(args, 3, 4+1));
-
-            System.out.println("\n[CREATE KEY_PAIRS]");
+            System.out.println("\n[CREATE KEY_STORES]");
             createKeyStores(userCount, serverCount, 1);
 
-            System.out.println("\nDone!");
+            System.out.println("\nDone!\n");
 
         }
         catch (NumberFormatException e) {
             System.out.println("All arguments must be positive integers.");
-            System.out.println("USAGE: " + USAGE);
+            System.out.println("USAGE: ./mvnw spring-boot:run -Dstart-class=pt.tecnico.sec.Setup -Dspring-boot.run.arguments=\"[nX] [nY] [epochCount] [userCount] [serverCount]\"");
         }
         catch (IOException e) {
             System.out.println(e.getMessage());
@@ -148,7 +129,7 @@ public class Setup {
     /* ====[                    KeyStore                    ]==== */
     /* ========================================================== */
 
-    private static void createKeyStores(int userCount, int serverCount, int haCount) throws NoSuchAlgorithmException, CertificateException, KeyStoreException, IOException, SignatureException, NoSuchProviderException, InvalidKeyException {
+    private static void createKeyStores(int userCount, int serverCount, int haCount) throws NoSuchAlgorithmException, CertificateException, KeyStoreException, IOException, OperatorCreationException {
 
         // Create a KeyStore directory if it doesnt already exist
         File directory = new File(KEYSTORE_DIRECTORY);
@@ -183,7 +164,7 @@ public class Setup {
     } // void createKeyStores
 
 
-    private static void generateAndStoreKeyPairs(String name, String password) throws KeyStoreException, CertificateException, NoSuchAlgorithmException, IOException, NoSuchProviderException, InvalidKeyException, SignatureException {
+    private static void generateAndStoreKeyPairs(String name, String password) throws KeyStoreException, CertificateException, NoSuchAlgorithmException, IOException, OperatorCreationException {
         // Crate a KeyStore instance
         JavaKeyStore keyStore = new JavaKeyStore("PKCS12", name, password);
         keyStore.createEmptyKeyStore();
@@ -210,61 +191,37 @@ public class Setup {
 
     /**
      * This function was adapted from:
-     * @author https://www.baeldung.com/java-keystore
+     * @author https://stackoverflow.com/a/43918337
      */
-    private static X509Certificate generateSelfSignedCertificate(KeyPair keyPair) throws CertificateException, IOException, NoSuchProviderException, NoSuchAlgorithmException, InvalidKeyException, SignatureException {
-        X509CertInfo certInfo = new X509CertInfo();
-        // Serial number and version
-        certInfo.set(X509CertInfo.SERIAL_NUMBER, new CertificateSerialNumber(new BigInteger(64, new SecureRandom())));
-        certInfo.set(X509CertInfo.VERSION, new CertificateVersion(CertificateVersion.V3));
+    public static X509Certificate generateSelfSignedCertificate(KeyPair keyPair) throws OperatorCreationException, CertificateException, IOException {
+        Provider bcProvider = new BouncyCastleProvider();
+        Security.addProvider(bcProvider);
 
-        // Subject & Issuer
-        X500Name owner = new X500Name(DN_NAME);
-        certInfo.set(X509CertInfo.SUBJECT, owner);
-        certInfo.set(X509CertInfo.ISSUER, owner);
+        long now = System.currentTimeMillis();
+        Date startDate = new Date(now);
 
-        // Key and algorithm
-        certInfo.set(X509CertInfo.KEY, new CertificateX509Key(keyPair.getPublic()));
-        AlgorithmId algorithm = new AlgorithmId(ObjectIdentifier.of(KnownOIDs.SHA256withRSA));
-        certInfo.set(X509CertInfo.ALGORITHM_ID, new CertificateAlgorithmId(algorithm));
+        X500Name dnName = new X500Name("CN=test, OU=test, O=test, L=test, ST=test, C=CY");
 
-        // Validity
-        Date validFrom = new Date();
-        Date validTo = new Date(validFrom.getTime() + 50L * 365L * 24L * 60L * 60L * 1000L); //50 years
-        CertificateValidity validity = new CertificateValidity(validFrom, validTo);
-        certInfo.set(X509CertInfo.VALIDITY, validity);
+        BigInteger certSerialNumber = new BigInteger(Long.toString(now)); // Using the current timestamp as the certificate serial number
 
-        GeneralNameInterface dnsName = new DNSName("baeldung.com");
-        DerOutputStream dnsNameOutputStream = new DerOutputStream();
-        dnsName.encode(dnsNameOutputStream);
+        Calendar calendar = Calendar.getInstance();
+        calendar.setTime(startDate);
+        calendar.add(Calendar.YEAR, 1); // Valid for 1 year
+        Date endDate = calendar.getTime();
 
-        GeneralNameInterface ipAddress = new IPAddressName("127.0.0.1");
-        DerOutputStream ipAddressOutputStream = new DerOutputStream();
-        ipAddress.encode(ipAddressOutputStream);
+        String signatureAlgorithm = "SHA256WithRSA"; // Use appropriate signature algorithm based on your KeyPair algorithm
+        ContentSigner contentSigner = new JcaContentSignerBuilder(signatureAlgorithm).build(keyPair.getPrivate());
 
-        GeneralNames generalNames = new GeneralNames();
-        generalNames.add(new GeneralName(dnsName));
-        generalNames.add(new GeneralName(ipAddress));
+        JcaX509v3CertificateBuilder certBuilder = new JcaX509v3CertificateBuilder(dnName, certSerialNumber, startDate, endDate, dnName, keyPair.getPublic());
 
-        CertificateExtensions ext = new CertificateExtensions();
-        ext.set(SubjectAlternativeNameExtension.NAME, new SubjectAlternativeNameExtension(generalNames));
+        // Extensions: Basic Constraints
+        BasicConstraints basicConstraints = new BasicConstraints(true); // true for CA, false for EndEntity
+        ASN1ObjectIdentifier oid = org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers.sha256WithRSAEncryption;
+        certBuilder.addExtension(oid, true, basicConstraints); // Basic Constraints is usually marked as critical
 
-        certInfo.set(X509CertInfo.EXTENSIONS, ext);
+        return new JcaX509CertificateConverter().setProvider(bcProvider).getCertificate(certBuilder.build(contentSigner));
 
-        // Create certificate and sign it
-        X509CertImpl cert = new X509CertImpl(certInfo);
-        cert.sign(keyPair.getPrivate(), SHA256witchRSA);
-
-        // Since the SHA1withRSA provider may have a different algorithm ID to what we think it should be,
-        // we need to reset the algorithm ID, and resign the certificate
-        AlgorithmId actualAlgorithm = (AlgorithmId) cert.get(X509CertImpl.SIG_ALG);
-        certInfo.set(CertificateAlgorithmId.NAME + "." + CertificateAlgorithmId.ALGORITHM, actualAlgorithm);
-        X509CertImpl newCert = new X509CertImpl(certInfo);
-        newCert.sign(keyPair.getPrivate(), SHA256witchRSA);
-
-        return newCert;
-
-    } // X509Certificate generateSelfSignedCertificate
+    } // X509Certificate generateSelfSignedCertificate;
 
 
 } // class Setup

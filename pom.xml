@@ -53,6 +53,19 @@
 			<version>4.5.13</version>
 		</dependency>
 
+		<!-- https://mvnrepository.com/artifact/org.bouncycastle/bcprov-jdk15on -->
+		<dependency>
+			<groupId>org.bouncycastle</groupId>
+			<artifactId>bcprov-jdk15on</artifactId>
+			<version>1.68</version>
+		</dependency>
+
+		<!-- https://mvnrepository.com/artifact/org.bouncycastle/bcpkix-jdk15on -->
+		<dependency>
+			<groupId>org.bouncycastle</groupId>
+			<artifactId>bcpkix-jdk15on</artifactId>
+			<version>1.68</version>
+		</dependency>
 
 	</dependencies>
 
@@ -68,10 +81,6 @@
 				<configuration>
 					<source>15</source>
 					<target>15</target>
-					<compilerArgs>
-						<arg>--add-exports</arg><arg>java.base/sun.security.x509=ALL-UNNAMED</arg>
-						<arg>--add-exports</arg><arg>java.base/sun.security.util=ALL-UNNAMED</arg>
-					</compilerArgs>
 				</configuration>
 			</plugin>
 		</plugins>

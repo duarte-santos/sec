@@ -35,3 +35,4 @@ build/
 ### Environment ###
 /src/main/resources/environment.json
 /src/main/resources/keys/*
+/src/main/resources/keystore/*
