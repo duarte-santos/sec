@@ -16,7 +16,7 @@ public final class Constants {
 
     // General
     public static final int DETECTION_RANGE = 2;
-    public static final int SECRET_KEY_DURATION = 2;
+    public static final int SECRET_KEY_DURATION = -1;
     public static final int BYZANTINE_USERS  = 1;
     public static final int FAULTS = 0; //FIXME
     public static final String SUCCESS = "success";
@@ -41,5 +41,5 @@ public final class Constants {
     // Server
     public static final int SERVER_BASE_PORT = 9000;
     public static final String SERVER_USAGE = "Usage: ./mvnw spring-boot:run -Dstart-class=pt.tecnico.sec.server.ServerApplication -Dspring-boot.run.arguments=\"[serverId] [serverCount] [userCount]\"";
-    public static final int BROADCAST_SERVICES_MAX = 2;
+    public static final int BROADCAST_SERVICES_MAX = 6;
 }

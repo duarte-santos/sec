@@ -8,24 +8,28 @@ import java.util.Objects;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class BroadcastRead {
 
-    private int _originalId;
+    private BroadcastId _broadcastId;
     private ObtainLocationRequest _locationRequest;
-
-    public BroadcastRead(int _originalId, ObtainLocationRequest _locationRequest) {
-        this._originalId = _originalId;
-        this._locationRequest = _locationRequest;
-    }
 
     public BroadcastRead() {
         // empty
     }
 
-    public int get_originalId() {
-        return _originalId;
+    public BroadcastRead(BroadcastId _broadcastId, ObtainLocationRequest _locationRequest) {
+        this._broadcastId = _broadcastId;
+        this._locationRequest = _locationRequest;
     }
 
-    public void set_originalId(int _originalId) {
-        this._originalId = _originalId;
+    public int get_originalId() {
+        return _broadcastId.get_senderId();
+    }
+
+    public BroadcastId get_broadcastId() {
+        return _broadcastId;
+    }
+
+    public void set_broadcastId(BroadcastId _broadcastId) {
+        this._broadcastId = _broadcastId;
     }
 
     public ObtainLocationRequest get_locationRequest() {
@@ -39,7 +43,7 @@ public class BroadcastRead {
     @Override
     public String toString() {
         return "BroadcastRead{" +
-                "_originalId=" + _originalId +
+                "_broadcastId=" + _broadcastId +
                 ", _locationRequest=" + _locationRequest +
                 '}';
     }
@@ -49,12 +53,11 @@ public class BroadcastRead {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         BroadcastRead that = (BroadcastRead) o;
-        return _originalId == that._originalId && Objects.equals(_locationRequest, that._locationRequest);
+        return Objects.equals(_broadcastId, that._broadcastId) && Objects.equals(_locationRequest, that._locationRequest);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(_originalId, _locationRequest);
+        return Objects.hash(_broadcastId, _locationRequest);
     }
-
 }

@@ -20,12 +20,8 @@ import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.PrivateKey;
 import java.security.PublicKey;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 
 import static pt.tecnico.sec.Constants.*;
 
@@ -127,6 +123,188 @@ public class ServerApplication {
         return _serverCount;
     }
 
+
+    /* ========================================================== */
+    /* ====[               Handle Secret Keys               ]==== */
+    /* ========================================================== */
+
+    private byte[] sendSecretKey(int serverId, SecretKey keyToSend) throws Exception {
+        System.out.println("SENDING KEY...");
+        PublicKey serverKey = RSAKeyGenerator.readServerPublicKey(serverId);
+        SecureMessage secureRequest = new SecureMessage(_serverId+1000, keyToSend, serverKey, _keyPair.getPrivate());
+
+        HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
+        SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + "/secret-key", request, SecureMessage.class);
+
+        // Check response's signature and decipher
+        // TODO : freshness
+        assert secureResponse != null;
+        return secureResponse.decipherAndVerify( keyToSend, serverKey);
+    }
+
+    private void sendRefreshSecretKeys(int serverId) throws Exception {
+        _restTemplate.getForObject(getServerURL(serverId) + "/refresh-secret-keys", void.class);
+    }
+
+    public void refreshServerSecretKeys() throws Exception {
+        for (int serverId = 0; serverId < _serverCount; serverId++) {
+            if (_secretKeysUsages.get(serverId+1000) != null && _secretKeysUsages.get(serverId+1000) == 0) continue;
+
+            // Generate secret key
+            SecretKey newSecretKey = AESKeyGenerator.makeAESKey();
+
+            // Send key
+            byte[] responseBytes = sendSecretKey(serverId, newSecretKey);
+
+            // Check response
+            if (responseBytes == null || !ObjectMapperHandler.getStringFromBytes(responseBytes).equals("OK"))
+                throw new IllegalArgumentException("Error exchanging new secret key");
+
+            // Success! Update key
+            saveSecretKey(serverId+1000, newSecretKey);
+
+            // Tell other servers to refresh keys
+            sendRefreshSecretKeys(serverId);
+        }
+    }
+
+
+    /* ========================================================== */
+    /* ====[              Double Echo Broadcast             ]==== */
+    /* ========================================================== */
+
+    private int _broadcastId = 0;
+
+    public void postToServer(int serverId, byte[] messageBytes, String endpoint) throws Exception {
+        SecureMessage secureRequest = cipherAndSignMessage(serverId+1000, messageBytes);
+        HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
+        System.out.println("Sending request to " + serverId + " (endpoint: " + endpoint + ")");
+        _restTemplate.postForObject(getServerURL(serverId) + endpoint, request, SecureMessage.class);
+    }
+
+    public void postToServers(byte[] m, String endpoint) {
+        for (int serverId = 0; serverId < _serverCount; serverId++) {
+            AsyncPost thread = new AsyncPost(serverId, m, endpoint);
+            thread.start();
+        }
+    }
+
+    /* ====[                   W R I T E                    ]==== */
+
+    private final Map<BroadcastId, BroadcastServiceW> _broadcastServicesW = new LinkedHashMap<>();
+    private BroadcastServiceW _myBroadcastW = null;
+
+    public BroadcastServiceW newBroadcastW(BroadcastId id) {
+        BroadcastServiceW b = new BroadcastServiceW(this, id);
+        _broadcastServicesW.put(id, b);
+        if (_broadcastServicesW.size() > BROADCAST_SERVICES_MAX) cleanBroadcastServicesW();
+        return b;
+    }
+
+    public BroadcastServiceW getBroadcastServiceW(BroadcastId id) {
+        BroadcastServiceW b = _broadcastServicesW.get(id);
+        if (b == null) // create new
+            b = newBroadcastW(id);
+        return b;
+    }
+
+    public void cleanBroadcastServicesW() {
+        List<BroadcastId> toRemove = new ArrayList<>();
+        Iterator<Map.Entry<BroadcastId, BroadcastServiceW>> iterator = _broadcastServicesW.entrySet().iterator();
+        for (int i = 0; i < BROADCAST_SERVICES_MAX/2; i++) { // clean half of them, if they are delivered
+            BroadcastId key = iterator.next().getKey();
+            if (_broadcastServicesW.get(key).is_delivered())
+                toRemove.add(key);
+        }
+        for (BroadcastId key : toRemove) _broadcastServicesW.remove(key);
+    }
+
+    public void broadcastW(DBLocationReport locationReport) throws Exception {
+        _myBroadcastW = new BroadcastServiceW(this, new BroadcastId(_serverId+1000, _broadcastId));
+        _myBroadcastW.broadcastSend(locationReport);
+        _broadcastId++;
+        _myBroadcastW = null;
+    }
+
+    public void broadcastDeliverW(int senderId, int timestamp) {
+        // FIXME response should have the broadcast id as well?
+        if (_myBroadcastW == null || !_myBroadcastW.validResponse(timestamp)) return; // drop if response was not asked for
+        _myBroadcastW.broadcastDeliver(senderId, timestamp);
+    }
+
+
+    /* ====[                    R E A D                     ]==== */
+
+    private final Map<BroadcastId, BroadcastServiceR> _broadcastServicesR = new LinkedHashMap<>();
+    private BroadcastServiceR _myBroadcastR = null;
+
+    public BroadcastServiceR newBroadcastR(BroadcastId id) {
+        BroadcastServiceR b = new BroadcastServiceR(this, id);
+        _broadcastServicesR.put(id, b);
+        if (_broadcastServicesR.size() > BROADCAST_SERVICES_MAX) cleanBroadcastServicesR();
+        return b;
+    }
+
+    public BroadcastServiceR getBroadcastServiceR(BroadcastId id) {
+        BroadcastServiceR b = _broadcastServicesR.get(id);
+        if (b == null) // create new
+            b = newBroadcastR(id);
+        return b;
+    }
+
+    public void cleanBroadcastServicesR() {
+        List<BroadcastId> toRemove = new ArrayList<>();
+        Iterator<Map.Entry<BroadcastId, BroadcastServiceR>> iterator = _broadcastServicesR.entrySet().iterator();
+        for (int i = 0; i < BROADCAST_SERVICES_MAX/2; i++) { // clean half of them, if they are delivered
+            BroadcastId key = iterator.next().getKey();
+            if (_broadcastServicesR.get(key).is_delivered())
+                toRemove.add(key);
+        }
+        for (BroadcastId key : toRemove) _broadcastServicesR.remove(key);
+    }
+
+    public DBLocationReport broadcastR(ObtainLocationRequest locationRequest) throws Exception {
+        _myBroadcastR = new BroadcastServiceR(this, new BroadcastId(_serverId+1000, _broadcastId));
+        DBLocationReport locationReport = _myBroadcastR.broadcastSend(locationRequest);
+        _broadcastId++;
+        _myBroadcastR = null;
+
+        // Atomic Register: Write-back phase after Read
+        if (locationReport != null) broadcastW(locationReport); // FIXME : only sender or all?
+
+        return locationReport;
+    }
+
+    public void broadcastDeliverR(int senderId, DBLocationReport report) {
+        // FIXME response should have the broadcast id as well?
+        if (_myBroadcastR == null || !_myBroadcastR.validResponse(report)) return; // drop if response was not asked for
+        _myBroadcastR.broadcastDeliver(senderId, report);
+    }
+
+    /* ====[                   A S Y N C                    ]==== */
+
+    class AsyncPost extends Thread {
+
+        private final int _serverId;
+        private final byte[] _messageBytes;
+        private final String _endpoint;
+
+        public AsyncPost(int serverId, byte[] messageBytes, String endpoint) {
+            _serverId = serverId;
+            _messageBytes = messageBytes;
+            _endpoint = endpoint;
+        }
+
+        public void run() {
+            try {
+                ServerApplication.this.postToServer(_serverId, _messageBytes, _endpoint);
+            } catch (Exception e) { // FIXME : ignore exceptions that are not IllegalArgument
+                System.out.println(e.getMessage());
+            }
+        }
+
+    }
+
     /* ========================================================== */
     /* ====[          Decipher and Verify Requests          ]==== */
     /* ========================================================== */
@@ -186,21 +364,6 @@ public class ServerApplication {
         return request;
     }
 
-    public DBLocationReport decipherAndVerifyServerWrite(SecureMessage secureMessage) throws Exception {
-        byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
-        DBLocationReport dbLocationReport = DBLocationReport.getFromBytes(messageBytes);
-        if (dbLocationReport == null) return null;
-
-        // check sender
-        if (!fromServer(secureMessage.get_senderId()))
-            throw new ReportNotAcceptableException("Can only accept register writes from servers.");
-
-        // check corresponding report proofs signatures
-        checkReportSignatures(new LocationReport(dbLocationReport));
-
-        return dbLocationReport;
-    }
-
     public SecretKey decipherAndVerifyKey(SecureMessage secureMessage) throws Exception {
         int senderId = secureMessage.get_senderId();
         PublicKey verifyKey = getVerifyKey(senderId);
@@ -209,6 +372,74 @@ public class ServerApplication {
 
     public static SecureMessage cipherAndSignMessage(int receiverId, byte[] messageBytes) throws Exception {
         return new SecureMessage(_serverId + 1000, messageBytes, _secretKeys.get(receiverId), getPrivateKey());
+    }
+
+    public BroadcastWrite decipherAndVerifyBroadcastWrite(SecureMessage secureMessage) throws Exception {
+        byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
+        BroadcastWrite bw = ObjectMapperHandler.getBroadcastWriteFromBytes(messageBytes);
+
+        // check sender
+        if (!fromServer(secureMessage.get_senderId()))
+            throw new ReportNotAcceptableException("Can only accept echos from servers.");
+
+        return bw;
+    }
+
+    public DBLocationReport verifyBroadcastRequestW(BroadcastWrite bw) throws Exception {
+        DBLocationReport dbLocationReport = bw.get_report();
+        if (dbLocationReport == null) return null;
+
+        // check sender
+        if (!fromServer(bw.get_originalId()))
+            throw new ReportNotAcceptableException("Can only accept register writes from servers.");
+
+        // check corresponding report proofs signatures
+        checkReportSignatures(new LocationReport(dbLocationReport));
+
+        return dbLocationReport;
+    }
+
+    public int decipherAndVerifyDeliverW(SecureMessage secureMessage) throws Exception {
+        byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
+        int timestamp = ObjectMapperHandler.getIntFromBytes(messageBytes);
+
+        // check sender
+        if (!fromServer(secureMessage.get_senderId()))
+            throw new ReportNotAcceptableException("Can only accept delivers from servers.");
+
+        return timestamp;
+    }
+
+    public BroadcastRead decipherAndVerifyBroadcastRead(SecureMessage secureMessage) throws Exception {
+        byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
+        BroadcastRead br = ObjectMapperHandler.getBroadcastReadFromBytes(messageBytes);
+
+        // check sender
+        if (!fromServer(secureMessage.get_senderId()))
+            throw new ReportNotAcceptableException("Can only accept echos from servers.");
+
+        return br;
+    }
+
+    public ObtainLocationRequest verifyBroadcastRequestR(BroadcastRead br) {
+        ObtainLocationRequest locationRequest = br.get_locationRequest();
+
+        // check sender
+        if (!fromServer(br.get_originalId()))
+            throw new ReportNotAcceptableException("Can only accept register reads from servers.");
+
+        return locationRequest;
+    }
+
+    public DBLocationReport decipherAndVerifyDeliverR(SecureMessage secureMessage) throws Exception {
+        byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
+        DBLocationReport report = ObjectMapperHandler.getDBLocationReportFromBytes(messageBytes);
+
+        // check sender
+        if (!fromServer(secureMessage.get_senderId()))
+            throw new ReportNotAcceptableException("Can only accept delivers from servers.");
+
+        return report;
     }
 
     /* ===========[   Auxiliary   ]=========== */
@@ -237,334 +468,6 @@ public class ServerApplication {
         int validProofCount = report.verifyProofs();
         if (validProofCount <= BYZANTINE_USERS)
             throw new ReportNotAcceptableException("Not enough proofs to constitute an acceptable Location Report");
-    }
-
-
-    /* ========================================================== */
-    /* ====[               Handle Secret Keys               ]==== */
-    /* ========================================================== */
-
-    private byte[] sendSecretKey(int serverId, SecretKey keyToSend) throws Exception {
-        System.out.println("SENDING KEY...");
-        PublicKey serverKey = RSAKeyGenerator.readServerPublicKey(serverId);
-        SecureMessage secureRequest = new SecureMessage(_serverId+1000, keyToSend, serverKey, _keyPair.getPrivate());
-
-        HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
-        SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + "/secret-key", request, SecureMessage.class);
-
-        // Check response's signature and decipher
-        // TODO : freshness
-        assert secureResponse != null;
-        return secureResponse.decipherAndVerify( keyToSend, serverKey);
-    }
-
-    private void sendRefreshSecretKeys(int serverId) throws Exception {
-        _restTemplate.getForObject(getServerURL(serverId) + "/refresh-secret-keys", void.class);
-    }
-
-    public void refreshServerSecretKeys() throws Exception {
-        for (int serverId = 0; serverId < _serverCount; serverId++) {
-            if (_secretKeysUsages.get(serverId+1000) != null && _secretKeysUsages.get(serverId+1000) == 0) continue;
-
-            // Generate secret key
-            SecretKey newSecretKey = AESKeyGenerator.makeAESKey();
-
-            // Send key
-            byte[] responseBytes = sendSecretKey(serverId, newSecretKey);
-
-            // Check response
-            if (responseBytes == null || !ObjectMapperHandler.getStringFromBytes(responseBytes).equals("OK"))
-                throw new IllegalArgumentException("Error exchanging new secret key");
-
-            // Success! Update key
-            saveSecretKey(serverId+1000, newSecretKey);
-
-            // Tell other servers to refresh keys
-            sendRefreshSecretKeys(serverId);
-        }
-    }
-
-
-    /* ========================================================== */
-    /* ====[              Double Echo Broadcast             ]==== */
-    /* ========================================================== */
-
-    public void postToServer(int serverId, byte[] messageBytes, String endpoint) throws Exception {
-        SecureMessage secureRequest = cipherAndSignMessage(serverId+1000, messageBytes);
-        HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
-        System.out.println("Sending request to " + serverId + " (endpoint: " + endpoint + ")");
-        _restTemplate.postForObject(getServerURL(serverId) + endpoint, request, SecureMessage.class);
-    }
-
-    public void postToServers(byte[] m, String endpoint) {
-        for (int serverId = 0; serverId < _serverCount; serverId++) {
-            AsyncPost thread = new AsyncPost(serverId, m, endpoint);
-            thread.start();
-        }
-    }
-
-    /* ====[                   W R I T E                    ]==== */
-
-    private Map<BroadcastId, BroadcastService> _broadcastServices = new LinkedHashMap<>();
-    private int _broadcastId = 0;
-    private BroadcastService _myBroadcast = null;
-
-    public BroadcastService newBroadcast(BroadcastId id) {
-        BroadcastService b = new BroadcastService(this, id);
-        _broadcastServices.put(id, b);
-        if (_broadcastServices.size() > BROADCAST_SERVICES_MAX) cleanBroadcastServices();
-        return b;
-    }
-
-    public BroadcastService getBroadcastService(BroadcastId id) {
-        BroadcastService b = _broadcastServices.get(id);
-        if (b == null) // create new
-            b = newBroadcast(id);
-        return b;
-    }
-
-    public void cleanBroadcastServices() {
-        Iterator<Map.Entry<BroadcastId, BroadcastService>> iterator = _broadcastServices.entrySet().iterator();
-        for (int i = 0; i < BROADCAST_SERVICES_MAX/2; i++) { // clean half of them, if they are delivered
-            BroadcastId key = iterator.next().getKey();
-            if (_broadcastServices.get(key).is_delivered())
-                _broadcastServices.remove(key);
-        }
-    }
-
-    public void broadcastWrite(DBLocationReport locationReport) throws Exception {
-        _myBroadcast = new BroadcastService(this, new BroadcastId(_serverId+1000, _broadcastId));
-        _myBroadcast.broadcastSend(locationReport);
-        _broadcastId++;
-        _myBroadcast = null;
-    }
-
-    public void broadcastDeliver(int senderId, int timestamp) {
-        // FIXME response should have the broadcast id as well?
-        if (_myBroadcast == null || !_myBroadcast.validResponse(timestamp)) return; // drop if response was not asked for
-        _myBroadcast.broadcastDeliver(senderId, timestamp);
-    }
-
-    public BroadcastWrite decipherAndVerifyBroadcastWrite(SecureMessage secureMessage) throws Exception {
-        byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
-        BroadcastWrite bw = ObjectMapperHandler.getBroadcastWriteFromBytes(messageBytes);
-
-        // check sender
-        if (!fromServer(secureMessage.get_senderId()))
-            throw new ReportNotAcceptableException("Can only accept echos from servers.");
-
-        return bw;
-    }
-
-    public int decipherAndVerifyServerDeliver(SecureMessage secureMessage) throws Exception {
-        byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
-        int timestamp = ObjectMapperHandler.getIntFromBytes(messageBytes);
-
-        // check sender
-        if (!fromServer(secureMessage.get_senderId()))
-            throw new ReportNotAcceptableException("Can only accept delivers from servers.");
-
-        return timestamp;
-    }
-
-    public DBLocationReport verifyBroadcastWrite(BroadcastWrite bw) throws Exception {
-        DBLocationReport dbLocationReport = bw.get_report();
-        if (dbLocationReport == null) return null;
-
-        // check sender
-        if (!fromServer(bw.get_originalId()))
-            throw new ReportNotAcceptableException("Can only accept register writes from servers.");
-
-        // check corresponding report proofs signatures
-        checkReportSignatures(new LocationReport(dbLocationReport));
-
-        return dbLocationReport;
-    }
-
-
-    /* ====[                    R E A D                     ]==== */
-
-    boolean _broadcasting_read = false;
-    boolean _sentEcho_read = false;
-    boolean _sentReady_read = false;
-    boolean _delivered_read = false;
-    BroadcastRead[] _echos_read = new BroadcastRead[_serverCount];
-    BroadcastRead[] _readys_read = new BroadcastRead[_serverCount];
-    Map<Integer, DBLocationReport> _readlist = new HashMap<>(_serverCount);
-
-
-    public void setup_broadcast_read() {
-        _broadcasting_read = true;
-        _sentEcho_read = false;
-        _sentReady_read = false;
-        _delivered_read = false;
-        _echos_read = new BroadcastRead[_serverCount];
-        _readys_read = new BroadcastRead[_serverCount];
-    }
-
-    // Argument: ObtainLocationRequest
-    public DBLocationReport doubleEchoBroadcastRead(ObtainLocationRequest locationRequest) throws Exception {
-        // setup broadcast
-        _readlist = new HashMap<>(_serverCount);
-        setup_broadcast_read();
-
-        BroadcastRead br = new BroadcastRead(_serverId + 1000, locationRequest);
-        byte[] m = ObjectMapperHandler.writeValueAsBytes(br);
-
-        System.out.println("Broadcasting read...");
-        postToServers(m, "/doubleEchoBroadcast-send-read");
-
-        // FIXME : ignore exceptions that are not IllegalArgument
-        while (_readlist.size() <= (_serverCount + FAULTS) / 2) {
-           // empty
-        }
-        System.out.println("> IḾ OUT, TIME TO PARTY!!!");
-
-        // Choose the report with the largest timestamp
-        DBLocationReport finalLocationReport = null;
-        for (DBLocationReport locationReport : _readlist.values()) {
-            if (locationReport == null) continue;
-            if (finalLocationReport == null || locationReport.get_timestamp() > finalLocationReport.get_timestamp())
-                finalLocationReport = locationReport;
-        }
-
-        // Atomic Register: Write-back phase after Read
-        if (finalLocationReport != null)
-            broadcastWrite(finalLocationReport); // FIXME : only sender or all?
-
-        return finalLocationReport;
-    }
-
-    public void doubleEchoBroadcastSendDeliver_read(BroadcastRead br) throws Exception {
-        System.out.println("> Broadcasting: " + _broadcasting_read + "\n> SentEcho: " + _sentEcho_read);
-        TimeUnit.SECONDS.sleep(1); // FIXME : no zz for you, right now, sorry :(
-        if (!_broadcasting_read) setup_broadcast_read();
-        if (!_sentEcho_read) {
-            byte[] m = ObjectMapperHandler.writeValueAsBytes(br);
-            _sentEcho_read = true;
-            postToServers(m, "/doubleEchoBroadcast-echo-read");
-        }
-    }
-
-    // Argument: original SecureMessage
-    public BroadcastRead searchForMajorityMessage_read(BroadcastRead[] messages, int quorum) {
-        // count the times a message appears
-        Map<BroadcastRead, Integer> counter = new HashMap<>();
-        for (BroadcastRead m : messages) {
-            if (m == null) continue;
-            Integer count = counter.get(m);
-            if (count == null)
-                counter.put(m, 1);
-            else
-                counter.replace(m, count+1);
-        }
-
-        // search for message that appears more than <quorum> times
-        for (BroadcastRead m : counter.keySet()) {
-            if (counter.get(m) > quorum) return m;
-        }
-        return null;
-    }
-
-    public void doubleEchoBroadcastEchoDeliver_read(int senderId, BroadcastRead br) throws Exception {
-        if (!_broadcasting_read) setup_broadcast_read();
-        if (_echos_read[senderId] == null) _echos_read[senderId] = br;
-
-        if (!_sentReady_read) {
-            BroadcastRead message = searchForMajorityMessage_read(_echos_read, (_serverCount+FAULTS)/2);
-            if (message != null) {
-                _sentReady_read = true;
-                byte[] m = ObjectMapperHandler.writeValueAsBytes(message);
-                postToServers(m, "/doubleEchoBroadcast-ready-read");
-            }
-        }
-    }
-
-    // FIXME : can it receive only this message? careful with _broadcasting
-    public boolean doubleEchoBroadcastReadyDeliver_read(int senderId, BroadcastRead br) throws Exception {
-        if (_readys_read[senderId] == null) _readys_read[senderId] = br;
-
-        if (!_sentReady_read) {
-            BroadcastRead message = searchForMajorityMessage_read(_readys_read, FAULTS); // FIXME : f is faults or byzantines?
-            if (message != null) {
-                _sentReady_read = true;
-                byte[] m = ObjectMapperHandler.writeValueAsBytes(message);
-                postToServers(m, "/doubleEchoBroadcast-ready-read");
-            }
-            else
-                return false; // for efficiency
-        }
-
-        if (!_delivered_read) {
-            BroadcastRead message = searchForMajorityMessage_read(_readys_read, 2*FAULTS); // FIXME : f is faults or byzantines?
-            if (message != null) {
-                _delivered_read = true;
-                _broadcasting_read = false;
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public void doubleEchoBroadcastDeliver_read(int senderId, DBLocationReport report) {
-        if (!_readlist.containsKey(senderId)) _readlist.put(senderId, report);
-    }
-
-    public BroadcastRead decipherAndVerifyBroadcastRead(SecureMessage secureMessage) throws Exception {
-        byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
-        BroadcastRead br = ObjectMapperHandler.getBroadcastReadFromBytes(messageBytes);
-
-        // check sender
-        if (!fromServer(secureMessage.get_senderId()))
-            throw new ReportNotAcceptableException("Can only accept echos from servers.");
-
-        return br;
-    }
-
-    public ObtainLocationRequest verifyBroadcastRead(BroadcastRead br) throws Exception {
-        ObtainLocationRequest locationRequest = br.get_locationRequest();
-
-        // check sender
-        if (!fromServer(br.get_originalId()))
-            throw new ReportNotAcceptableException("Can only accept register writes from servers.");
-
-        return locationRequest;
-    }
-
-    public DBLocationReport decipherAndVerifyServerDeliver_read(SecureMessage secureMessage) throws Exception {
-        byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
-        DBLocationReport report = ObjectMapperHandler.getDBLocationReportFromBytes(messageBytes);
-
-        // check sender
-        if (!fromServer(secureMessage.get_senderId()))
-            throw new ReportNotAcceptableException("Can only accept delivers from servers.");
-
-        return report;
-    }
-
-
-    /* ====[                   A S Y N C                    ]==== */
-
-    class AsyncPost extends Thread {
-
-        private final int _serverId;
-        private final byte[] _messageBytes;
-        private final String _endpoint;
-
-        public AsyncPost(int serverId, byte[] messageBytes, String endpoint) {
-            _serverId = serverId;
-            _messageBytes = messageBytes;
-            _endpoint = endpoint;
-        }
-
-        public void run() {
-            try {
-                ServerApplication.this.postToServer(_serverId, _messageBytes, _endpoint);
-            } catch (Exception e) { // FIXME : ignore exceptions that are not IllegalArgument
-                System.out.println(e.getMessage());
-            }
-        }
-
     }
 
 }

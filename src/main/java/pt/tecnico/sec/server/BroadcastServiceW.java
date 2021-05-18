@@ -7,7 +7,7 @@ import java.util.Map;
 
 import static pt.tecnico.sec.Constants.FAULTS;
 
-public class BroadcastService {
+public class BroadcastServiceW {
     private final ServerApplication _serverApp;
     private final BroadcastId _broadcastId;
     private final int _serverCount;
@@ -21,7 +21,7 @@ public class BroadcastService {
     Integer[] _delivers;
     int _my_ts;
 
-    BroadcastService(ServerApplication serverApp, BroadcastId broadcastId) {
+    BroadcastServiceW(ServerApplication serverApp, BroadcastId broadcastId) {
         _serverApp = serverApp;
         _broadcastId = broadcastId;
         _serverCount = _serverApp.getServerCount();
@@ -77,8 +77,9 @@ public class BroadcastService {
         BroadcastWrite bw = new BroadcastWrite(_broadcastId, report);
         byte[] m = ObjectMapperHandler.writeValueAsBytes(bw);
 
+        // Start threads to broadcast
         System.out.println("Broadcasting write...");
-        _serverApp.postToServers(m, "/doubleEchoBroadcast-send");
+        _serverApp.postToServers(m, "/broadcast-send-w");
         while (countAcks() <= (_serverCount + FAULTS) / 2) {
             // empty
         }
@@ -89,7 +90,7 @@ public class BroadcastService {
         if (!_sentEcho) {
             byte[] m = ObjectMapperHandler.writeValueAsBytes(bw);
             _sentEcho = true;
-            _serverApp.postToServers(m, "/doubleEchoBroadcast-echo");
+            _serverApp.postToServers(m, "/broadcast-echo-w");
         }
     }
 
@@ -102,7 +103,7 @@ public class BroadcastService {
             if (message != null) {
                 _sentReady = true;
                 byte[] m = ObjectMapperHandler.writeValueAsBytes(message);
-                _serverApp.postToServers(m, "/doubleEchoBroadcast-ready");
+                _serverApp.postToServers(m, "/broadcast-ready-w");
             }
         }
     }
@@ -115,7 +116,7 @@ public class BroadcastService {
             if (message != null) {
                 _sentReady = true;
                 byte[] m = ObjectMapperHandler.writeValueAsBytes(message);
-                _serverApp.postToServers(m, "/doubleEchoBroadcast-ready");
+                _serverApp.postToServers(m, "/broadcast-ready-w");
             }
             else return false; // for efficiency
         }
@@ -136,7 +137,7 @@ public class BroadcastService {
 
     @Override
     public String toString() {
-        return "BroadcastService{" +
+        return "BroadcastServiceW{" +
                 "_broadcastId=" + _broadcastId +
                 ", _delivered=" + _delivered +
                 '}';
