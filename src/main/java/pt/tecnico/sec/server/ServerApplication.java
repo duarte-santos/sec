@@ -36,7 +36,7 @@ public class ServerApplication {
     public final RestTemplate _restTemplate = new RestTemplate();
 
     private static final Map<Integer, SecretKey> _secretKeys = new ConcurrentHashMap<>();
-    private static final Map<Integer, Integer> _secretKeysUsages = new ConcurrentHashMap<>();
+    private static final Map<Integer, Boolean> _secretKeysUsed = new ConcurrentHashMap<>();
 
     public static void main(String[] args) {
         try {
@@ -94,8 +94,9 @@ public class ServerApplication {
     }
 
     public void saveSecretKey(int id, SecretKey secretKey) {
+        System.out.println("Changed key for " + id);
         _secretKeys.put(id, secretKey);
-        if (id >= 1000) _secretKeysUsages.put(id, 0); // keep usage count for server keys
+        if (id >= 1000) _secretKeysUsed.put(id, false); // keep usage count for server keys
     }
 
 
@@ -116,7 +117,7 @@ public class ServerApplication {
 
     public void serverSecretKeyUsed(int id) {
         assert id >= 1000;
-        _secretKeysUsages.put(id, _secretKeysUsages.get(id)+1); // update secret key usages
+        _secretKeysUsed.put(id, true); // mark key as used
     }
 
     public int getServerCount() {
@@ -129,7 +130,6 @@ public class ServerApplication {
     /* ========================================================== */
 
     private byte[] sendSecretKey(int serverId, SecretKey keyToSend) throws Exception {
-        System.out.println("SENDING KEY...");
         PublicKey serverKey = RSAKeyGenerator.readServerPublicKey(serverId);
         SecureMessage secureRequest = new SecureMessage(_serverId+1000, keyToSend, serverKey, _keyPair.getPrivate());
 
@@ -148,10 +148,16 @@ public class ServerApplication {
 
     public void refreshServerSecretKeys() throws Exception {
         for (int serverId = 0; serverId < _serverCount; serverId++) {
-            if (_secretKeysUsages.get(serverId+1000) != null && _secretKeysUsages.get(serverId+1000) == 0) continue;
+            if (_secretKeys.get(serverId+1000) != null && !_secretKeysUsed.get(serverId+1000)) continue; // there is a fresh key
 
             // Generate secret key
             SecretKey newSecretKey = AESKeyGenerator.makeAESKey();
+
+            // No need to send key for myself
+            if (serverId == _serverId) {
+                saveSecretKey(serverId+1000, newSecretKey);
+                continue;
+            }
 
             // Send key
             byte[] responseBytes = sendSecretKey(serverId, newSecretKey);
@@ -177,8 +183,8 @@ public class ServerApplication {
 
     public void postToServer(int serverId, byte[] messageBytes, String endpoint) throws Exception {
         SecureMessage secureRequest = cipherAndSignMessage(serverId+1000, messageBytes);
+        serverSecretKeyUsed(serverId+1000);
         HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
-        System.out.println("Sending request to " + serverId + " (endpoint: " + endpoint + ")");
         _restTemplate.postForObject(getServerURL(serverId) + endpoint, request, SecureMessage.class);
     }
 
@@ -312,7 +318,6 @@ public class ServerApplication {
     public byte[] decipherAndVerifyMessage(SecureMessage secureMessage) throws Exception {
         int senderId = secureMessage.get_senderId();
         PublicKey verifyKey = getVerifyKey(senderId);
-        // printKey(senderId);
         return secureMessage.decipherAndVerify( _secretKeys.get(senderId), verifyKey );
     }
 

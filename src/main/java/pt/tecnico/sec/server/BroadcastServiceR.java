@@ -76,7 +76,7 @@ public class BroadcastServiceR {
 
         // Start threads to broadcast
         System.out.println("Broadcasting read...");
-        _serverApp.postToServers(m, "/broadcast-send-r"); //TODO change endpointnames
+        _serverApp.postToServers(m, "/broadcast-send-r");
         while (_delivers.size() <= (_serverCount + FAULTS) / 2) {
             // empty
         }

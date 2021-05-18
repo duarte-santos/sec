@@ -264,8 +264,6 @@ public class ServerController {
     }
 
     public void readLocationReport(BroadcastRead br) throws Exception {
-        System.out.println("[*] Received Read Broadcast");
-
         // Decipher and check request
         ObtainLocationRequest locationRequest = _serverApp.verifyBroadcastRequestR(br);
 
