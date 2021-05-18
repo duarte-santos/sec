@@ -7,24 +7,28 @@ import java.util.Objects;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class BroadcastWrite {
 
-    private int _originalId;
+    private BroadcastId _broadcastId;
     private DBLocationReport _report;
-
-    public BroadcastWrite(int _originalId, DBLocationReport _report) {
-        this._originalId = _originalId;
-        this._report = _report;
-    }
 
     public BroadcastWrite() {
         // empty
     }
 
-    public int get_originalId() {
-        return _originalId;
+    public BroadcastWrite(BroadcastId _broadcastId, DBLocationReport _report) {
+        this._broadcastId = _broadcastId;
+        this._report = _report;
     }
 
-    public void set_originalId(int _originalId) {
-        this._originalId = _originalId;
+    public int get_originalId() {
+        return _broadcastId.get_senderId();
+    }
+
+    public BroadcastId get_broadcastId() {
+        return _broadcastId;
+    }
+
+    public void set_broadcastId(BroadcastId _broadcastId) {
+        this._broadcastId = _broadcastId;
     }
 
     public DBLocationReport get_report() {
@@ -38,7 +42,7 @@ public class BroadcastWrite {
     @Override
     public String toString() {
         return "BroadcastWrite{" +
-                "_originalId=" + _originalId +
+                "_broadcastId=" + _broadcastId +
                 ", _report=" + _report +
                 '}';
     }
@@ -48,12 +52,11 @@ public class BroadcastWrite {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         BroadcastWrite that = (BroadcastWrite) o;
-        return _originalId == that._originalId && Objects.equals(_report, that._report);
+        return Objects.equals(_broadcastId, that._broadcastId) && Objects.equals(_report, that._report);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(_originalId, _report);
+        return Objects.hash(_broadcastId, _report);
     }
-
 }

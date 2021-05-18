@@ -1,6 +1,5 @@
 package pt.tecnico.sec.server;
 
-import org.apache.tomcat.jni.Time;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -16,7 +15,6 @@ import javax.crypto.SecretKey;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 
 import static pt.tecnico.sec.Constants.OK;
 
@@ -72,7 +70,7 @@ public class ServerController {
 
         // Broadcast write operation to other servers
         _serverApp.refreshServerSecretKeys();
-        _serverApp.doubleEchoBroadcastWrite(locationReport);
+        _serverApp.broadcastWrite(locationReport);
 
         // Send secure response
         byte[] bytes = ObjectMapperHandler.writeValueAsBytes(OK);
@@ -179,7 +177,8 @@ public class ServerController {
         int senderId = message.get_senderId();
         System.out.println("[*] Received a @SEND Request from " + senderId);
         BroadcastWrite bw = _serverApp.decipherAndVerifyBroadcastWrite(message);
-        _serverApp.doubleEchoBroadcastSendDeliver(bw);
+        BroadcastService b = _serverApp.getBroadcastService(bw.get_broadcastId());
+        b.broadcastSENDDeliver(bw);
     }
 
     @PostMapping("/doubleEchoBroadcast-echo")
@@ -187,7 +186,8 @@ public class ServerController {
         int senderId = secureMessage.get_senderId();
         System.out.println("[*] Received an @ECHO Request from " + senderId);
         BroadcastWrite bw = _serverApp.decipherAndVerifyBroadcastWrite(secureMessage);
-        _serverApp.doubleEchoBroadcastEchoDeliver(secureMessage.get_senderId()-1000, bw);
+        BroadcastService b = _serverApp.getBroadcastService(bw.get_broadcastId());
+        b.broadcastECHODeliver(secureMessage.get_senderId()-1000, bw);
     }
 
     @PostMapping("/doubleEchoBroadcast-ready")
@@ -195,7 +195,8 @@ public class ServerController {
         int senderId = secureMessage.get_senderId();
         System.out.println("[*] Received a @READY Request from " + senderId);
         BroadcastWrite bw = _serverApp.decipherAndVerifyBroadcastWrite(secureMessage);
-        boolean delivered = _serverApp.doubleEchoBroadcastReadyDeliver(secureMessage.get_senderId()-1000, bw);
+        BroadcastService b = _serverApp.getBroadcastService(bw.get_broadcastId());
+        boolean delivered = b.broadcastREADYDeliver(secureMessage.get_senderId()-1000, bw);
         if (delivered) writeLocationReport(bw);
 
     }
@@ -221,14 +222,14 @@ public class ServerController {
 
         // Encrypt and send response
         byte[] bytes = ObjectMapperHandler.writeValueAsBytes(timestamp);
-        _serverApp.voidPostToServer(bw.get_originalId()-1000, bytes, "/doubleEchoBroadcast-deliver");
+        _serverApp.postToServer(bw.get_originalId()-1000, bytes, "/doubleEchoBroadcast-deliver");
     }
 
     @PostMapping("/doubleEchoBroadcast-deliver")
     public void doubleEchoBroadcastDeliver(@RequestBody SecureMessage secureMessage) throws Exception {
         System.out.println("[*] Received a @DELIVER Request from " + secureMessage.get_senderId());
         int timestamp = _serverApp.decipherAndVerifyServerDeliver(secureMessage);
-        _serverApp.doubleEchoBroadcastDeliver(secureMessage.get_senderId()-1000, timestamp);
+        _serverApp.broadcastDeliver(secureMessage.get_senderId()-1000, timestamp);
     }
 
 
@@ -274,7 +275,7 @@ public class ServerController {
 
         // Encrypt and send response
         byte[] bytes = ObjectMapperHandler.writeValueAsBytes(report);
-        _serverApp.voidPostToServer(br.get_originalId()-1000, bytes, "/doubleEchoBroadcast-deliver-read");
+        _serverApp.postToServer(br.get_originalId()-1000, bytes, "/doubleEchoBroadcast-deliver-read");
     }
 
     @PostMapping("/doubleEchoBroadcast-deliver-read")

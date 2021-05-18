@@ -3,10 +3,8 @@ package pt.tecnico.sec.server;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.http.HttpEntity;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.web.client.RestTemplate;
 import pt.tecnico.sec.AESKeyGenerator;
-import pt.tecnico.sec.Constants;
 import pt.tecnico.sec.ObjectMapperHandler;
 import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.client.LocationReport;
@@ -17,21 +15,18 @@ import pt.tecnico.sec.healthauthority.ObtainUsersRequest;
 import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
 import javax.crypto.SecretKey;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.PrivateKey;
 import java.security.PublicKey;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
-import static javax.xml.bind.DatatypeConverter.printHexBinary;
 import static pt.tecnico.sec.Constants.*;
 
 @SpringBootApplication
@@ -128,29 +123,9 @@ public class ServerApplication {
         _secretKeysUsages.put(id, _secretKeysUsages.get(id)+1); // update secret key usages
     }
 
-    /* ========================================================== */
-    /* ====[               Handle Secret Keys               ]==== */
-    /* ========================================================== */
-
-    public boolean serverSecretKeyValid(int id) {
-        assert id >= 1000;
-        return _secretKeys.get(id) != null && _secretKeysUsages.get(id) <= SECRET_KEY_DURATION;
+    public int getServerCount() {
+        return _serverCount;
     }
-
-    private byte[] sendSecretKey(int serverId, SecretKey keyToSend) throws Exception {
-        System.out.println("SENDING KEY...");
-        PublicKey serverKey = RSAKeyGenerator.readServerPublicKey(serverId);
-        SecureMessage secureRequest = new SecureMessage(_serverId+1000, keyToSend, serverKey, _keyPair.getPrivate());
-
-        HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
-        SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + "/secret-key", request, SecureMessage.class);
-
-        // Check response's signature and decipher
-        // TODO : freshness
-        assert secureResponse != null;
-        return secureResponse.decipherAndVerify( keyToSend, serverKey);
-    }
-
 
     /* ========================================================== */
     /* ====[          Decipher and Verify Requests          ]==== */
@@ -232,7 +207,7 @@ public class ServerApplication {
         return secureMessage.decipherAndVerifyKey( getPrivateKey(), verifyKey );
     }
 
-    public SecureMessage cipherAndSignMessage(int receiverId, byte[] messageBytes) throws Exception {
+    public static SecureMessage cipherAndSignMessage(int receiverId, byte[] messageBytes) throws Exception {
         return new SecureMessage(_serverId + 1000, messageBytes, _secretKeys.get(receiverId), getPrivateKey());
     }
 
@@ -266,22 +241,21 @@ public class ServerApplication {
 
 
     /* ========================================================== */
-    /* ====[              Double Echo Broadcast             ]==== */
+    /* ====[               Handle Secret Keys               ]==== */
     /* ========================================================== */
 
-    public void voidPostToServer(int serverId, byte[] messageBytes, String endpoint) throws Exception {
-        SecureMessage secureRequest = cipherAndSignMessage(serverId+1000, messageBytes);
-        HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
-        System.out.println("Sending request to " + serverId + " (endpoint: " + endpoint + ")");
-        // printKey(serverId+1000);
-        _restTemplate.postForObject(getServerURL(serverId) + endpoint, request, SecureMessage.class);
-    }
+    private byte[] sendSecretKey(int serverId, SecretKey keyToSend) throws Exception {
+        System.out.println("SENDING KEY...");
+        PublicKey serverKey = RSAKeyGenerator.readServerPublicKey(serverId);
+        SecureMessage secureRequest = new SecureMessage(_serverId+1000, keyToSend, serverKey, _keyPair.getPrivate());
 
-    private void postToServers(byte[] m, String endpoint) throws Exception {
-        for (int serverId = 0; serverId < _serverCount; serverId++) {
-            AsyncPost thread = new AsyncPost(serverId, m, endpoint);
-            thread.start();
-        }
+        HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
+        SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + "/secret-key", request, SecureMessage.class);
+
+        // Check response's signature and decipher
+        // TODO : freshness
+        assert secureResponse != null;
+        return secureResponse.decipherAndVerify( keyToSend, serverKey);
     }
 
     private void sendRefreshSecretKeys(int serverId) throws Exception {
@@ -311,117 +285,64 @@ public class ServerApplication {
     }
 
 
+    /* ========================================================== */
+    /* ====[              Double Echo Broadcast             ]==== */
+    /* ========================================================== */
+
+    public void postToServer(int serverId, byte[] messageBytes, String endpoint) throws Exception {
+        SecureMessage secureRequest = cipherAndSignMessage(serverId+1000, messageBytes);
+        HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
+        System.out.println("Sending request to " + serverId + " (endpoint: " + endpoint + ")");
+        _restTemplate.postForObject(getServerURL(serverId) + endpoint, request, SecureMessage.class);
+    }
+
+    public void postToServers(byte[] m, String endpoint) {
+        for (int serverId = 0; serverId < _serverCount; serverId++) {
+            AsyncPost thread = new AsyncPost(serverId, m, endpoint);
+            thread.start();
+        }
+    }
+
     /* ====[                   W R I T E                    ]==== */
 
-    boolean _broadcasting = false;
-    boolean _sentEcho = false;
-    boolean _sentReady = false;
-    boolean _delivered = false;
-    BroadcastWrite[] _echos = new BroadcastWrite[_serverCount];
-    BroadcastWrite[] _readys = new BroadcastWrite[_serverCount];
-    Integer[] _delivers = new Integer[_serverCount];
+    private Map<BroadcastId, BroadcastService> _broadcastServices = new LinkedHashMap<>();
+    private int _broadcastId = 0;
+    private BroadcastService _myBroadcast = null;
 
-
-    public void setup_broadcast() {
-        _broadcasting = true;
-        _sentEcho = false;
-        _sentReady = false;
-        _delivered = false;
-        _echos = new BroadcastWrite[_serverCount];
-        _readys = new BroadcastWrite[_serverCount];
+    public BroadcastService newBroadcast(BroadcastId id) {
+        BroadcastService b = new BroadcastService(this, id);
+        _broadcastServices.put(id, b);
+        if (_broadcastServices.size() > BROADCAST_SERVICES_MAX) cleanBroadcastServices();
+        return b;
     }
 
-    // Argument: Location report
-    public void doubleEchoBroadcastWrite(DBLocationReport locationReport) throws Exception { // TODO : implement read
-        // setup broadcast
-        int acks = 0;
-        _delivers = new Integer[_serverCount];
-        setup_broadcast();
+    public BroadcastService getBroadcastService(BroadcastId id) {
+        BroadcastService b = _broadcastServices.get(id);
+        if (b == null) // create new
+            b = newBroadcast(id);
+        return b;
+    }
 
-        int my_ts = locationReport.get_timestamp() + 1;
-        locationReport.set_timestamp(my_ts);
-        BroadcastWrite bw = new BroadcastWrite(_serverId + 1000, locationReport);
-        byte[] m = ObjectMapperHandler.writeValueAsBytes(bw);
-
-        System.out.println("Broadcasting write...");
-        postToServers(m, "/doubleEchoBroadcast-send");
-        // FIXME : ignore exceptions that are not IllegalArgument
-        while (acks <= (_serverCount + FAULTS) / 2) {
-            acks = 0;
-            for (Integer timestamp : _delivers)
-                if (timestamp != null && timestamp == my_ts) acks++;
+    public void cleanBroadcastServices() {
+        Iterator<Map.Entry<BroadcastId, BroadcastService>> iterator = _broadcastServices.entrySet().iterator();
+        for (int i = 0; i < BROADCAST_SERVICES_MAX/2; i++) { // clean half of them, if they are delivered
+            BroadcastId key = iterator.next().getKey();
+            if (_broadcastServices.get(key).is_delivered())
+                _broadcastServices.remove(key);
         }
     }
 
-    public void doubleEchoBroadcastSendDeliver(BroadcastWrite bw) throws Exception {
-        TimeUnit.SECONDS.sleep(1); // FIXME : no zz for you, right now, sorry :(
-        if (!_broadcasting) setup_broadcast();
-        if (!_sentEcho) {
-            byte[] m = ObjectMapperHandler.writeValueAsBytes(bw);
-            _sentEcho = true;
-            postToServers(m, "/doubleEchoBroadcast-echo");
-        }
+    public void broadcastWrite(DBLocationReport locationReport) throws Exception {
+        _myBroadcast = new BroadcastService(this, new BroadcastId(_serverId+1000, _broadcastId));
+        _myBroadcast.broadcastSend(locationReport);
+        _broadcastId++;
+        _myBroadcast = null;
     }
 
-    // Argument: original SecureMessage
-    public BroadcastWrite searchForMajorityMessage(BroadcastWrite[] messages, int quorum) {
-        // count the times a message appears
-        Map<BroadcastWrite, Integer> counter = new HashMap<>();
-        for (BroadcastWrite m : messages) {
-            if (m == null) continue;
-            Integer count = counter.get(m);
-            if (count == null) counter.put(m, 1);
-            else counter.replace(m, count+1);
-        }
-
-        // search for message that appears more than <quorum> times
-        for (BroadcastWrite m : counter.keySet()) {
-            if (counter.get(m) > quorum) return m;
-        }
-        return null;
-    }
-
-    public void doubleEchoBroadcastEchoDeliver(int senderId, BroadcastWrite bw) throws Exception {
-        if (!_broadcasting) setup_broadcast();
-        if (_echos[senderId] == null) _echos[senderId] = bw;
-
-        if (!_sentReady) {
-            BroadcastWrite message = searchForMajorityMessage(_echos, (_serverCount+FAULTS)/2);
-            if (message != null) {
-                _sentReady = true;
-                byte[] m = ObjectMapperHandler.writeValueAsBytes(message);
-                postToServers(m, "/doubleEchoBroadcast-ready");
-            }
-        }
-    }
-
-    // FIXME : can it receive only this message? careful with _broadcasting
-    public boolean doubleEchoBroadcastReadyDeliver(int senderId, BroadcastWrite bw) throws Exception {
-        if (_readys[senderId] == null) _readys[senderId] = bw;
-
-        if (!_sentReady) {
-            BroadcastWrite message = searchForMajorityMessage(_readys, FAULTS); // FIXME : f is faults or byzantines?
-            if (message != null) {
-                _sentReady = true;
-                byte[] m = ObjectMapperHandler.writeValueAsBytes(message);
-                postToServers(m, "/doubleEchoBroadcast-ready");
-            }
-            else return false; // for efficiency
-        }
-
-        if (!_delivered) {
-            BroadcastWrite message = searchForMajorityMessage(_readys, 2*FAULTS); // FIXME : f is faults or byzantines?
-            if (message != null) {
-                _delivered = true;
-                _broadcasting = false;
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public void doubleEchoBroadcastDeliver(int senderId, int timestamp) {
-        if (_delivers[senderId] == null) _delivers[senderId] = timestamp;
+    public void broadcastDeliver(int senderId, int timestamp) {
+        // FIXME response should have the broadcast id as well?
+        if (_myBroadcast == null || !_myBroadcast.validResponse(timestamp)) return; // drop if response was not asked for
+        _myBroadcast.broadcastDeliver(senderId, timestamp);
     }
 
     public BroadcastWrite decipherAndVerifyBroadcastWrite(SecureMessage secureMessage) throws Exception {
@@ -481,14 +402,6 @@ public class ServerApplication {
         _readys_read = new BroadcastRead[_serverCount];
     }
 
-    public static <T> int getLength(T[] array) { // FIXME TODO : max sad
-        int count = 0;
-        for (T entry : array) {
-            if (entry != null) ++count;
-        }
-        return count;
-    }
-
     // Argument: ObtainLocationRequest
     public DBLocationReport doubleEchoBroadcastRead(ObtainLocationRequest locationRequest) throws Exception {
         // setup broadcast
@@ -517,7 +430,7 @@ public class ServerApplication {
 
         // Atomic Register: Write-back phase after Read
         if (finalLocationReport != null)
-            doubleEchoBroadcastWrite(finalLocationReport); // FIXME : only sender or all?
+            broadcastWrite(finalLocationReport); // FIXME : only sender or all?
 
         return finalLocationReport;
     }
@@ -646,8 +559,8 @@ public class ServerApplication {
 
         public void run() {
             try {
-                ServerApplication.this.voidPostToServer(_serverId, _messageBytes, _endpoint);
-            } catch (Exception e) {
+                ServerApplication.this.postToServer(_serverId, _messageBytes, _endpoint);
+            } catch (Exception e) { // FIXME : ignore exceptions that are not IllegalArgument
                 System.out.println(e.getMessage());
             }
         }

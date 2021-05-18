@@ -41,5 +41,5 @@ public final class Constants {
     // Server
     public static final int SERVER_BASE_PORT = 9000;
     public static final String SERVER_USAGE = "Usage: ./mvnw spring-boot:run -Dstart-class=pt.tecnico.sec.server.ServerApplication -Dspring-boot.run.arguments=\"[serverId] [serverCount] [userCount]\"";
-
+    public static final int BROADCAST_SERVICES_MAX = 2;
 }
