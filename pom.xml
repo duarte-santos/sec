@@ -68,6 +68,10 @@
 				<configuration>
 					<source>15</source>
 					<target>15</target>
+					<compilerArgs>
+						<arg>--add-exports</arg><arg>java.base/sun.security.x509=ALL-UNNAMED</arg>
+						<arg>--add-exports</arg><arg>java.base/sun.security.util=ALL-UNNAMED</arg>
+					</compilerArgs>
 				</configuration>
 			</plugin>
 		</plugins>

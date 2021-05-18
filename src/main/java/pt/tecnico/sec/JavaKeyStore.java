@@ -10,7 +10,10 @@ import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.util.Enumeration;
 
+import static pt.tecnico.sec.Constants.KEYSTORE_DIRECTORY;
+
 /**
+ * This class was adapted from:
  * @author https://www.baeldung.com/java-keystore
  */
 public class JavaKeyStore {
@@ -22,7 +25,7 @@ public class JavaKeyStore {
     private final String _password;
 
     public JavaKeyStore(String keyStoreType, String keyStorePassword, String keyStoreName) {
-        _name = keyStoreName;
+        _name = KEYSTORE_DIRECTORY + keyStoreName;
         _type = keyStoreType;
         _password = keyStorePassword;
     }

@@ -4,6 +4,7 @@ public final class Constants {
     // Environment
     public static final String ENVIRONMENT_PATH = "src/main/resources/environment.json";
     public static final String KEYS_PATH = "src/main/resources/keys/";
+    public static final String KEYSTORE_DIRECTORY = "src/main/resources/keystore/";
 
     // JDBC driver name and database URL
     public static final String JDBC_DRIVER = "com.mysql.cj.jdbc.Driver";
