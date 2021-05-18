@@ -8,7 +8,6 @@ import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.operator.ContentSigner;
-import org.bouncycastle.operator.DefaultAlgorithmNameFinder;
 import org.bouncycastle.operator.OperatorCreationException;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 
@@ -42,16 +41,20 @@ public class Setup {
             if (nX <= 0 || nY <= 0 || epochCount <= 0 || userCount <= 0 || serverCount <= 0)
                 throw new NumberFormatException();
 
+            // Add BouncyCastle provider
+            BouncyCastleProvider bcProvider = new BouncyCastleProvider();
+            Security.addProvider(bcProvider);
+
+            // Setup necessary assets
+
             System.out.println("\n[CREATE DATABASES]");
-            for (int serverId = 0; serverId < serverCount; serverId++) {
-                createDatabase(serverId);
-            }
+            createDatabases(serverCount);
 
             System.out.println("\n[CREATE ENVIRONMENT]");
             EnvironmentGenerator.main(Arrays.copyOfRange(args, 0, 4+1));
 
             System.out.println("\n[CREATE KEY_STORES]");
-            createKeyStores(userCount, serverCount, 1);
+            createKeyStores(userCount, serverCount, 1, bcProvider);
 
             System.out.println("\nDone!\n");
 
@@ -70,6 +73,12 @@ public class Setup {
     /* ========================================================== */
     /* ====[                    Database                    ]==== */
     /* ========================================================== */
+
+    private static void createDatabases(int serverCount) {
+        for (int serverId = 0; serverId < serverCount; serverId++) {
+            createDatabase(serverId);
+        }
+    }
 
     private static void createDatabase(int serverId) {
 
@@ -129,54 +138,59 @@ public class Setup {
     /* ====[                    KeyStore                    ]==== */
     /* ========================================================== */
 
-    private static void createKeyStores(int userCount, int serverCount, int haCount) throws NoSuchAlgorithmException, CertificateException, KeyStoreException, IOException, OperatorCreationException {
-
-        // Create a KeyStore directory if it doesnt already exist
-        File directory = new File(KEYSTORE_DIRECTORY);
+    private static void createCleanDirectory(String path) throws IOException {
+        // Create directory if it doesnt already exist
+        File directory = new File(path);
         if (!directory.exists()) {
             directory.mkdir();
         }
-
-        // Clean the directory before generating new KeyStores
+        // Clean the directory
         FileUtils.cleanDirectory(directory);
+    }
+
+
+    private static void createKeyStores(int userCount, int serverCount, int haCount, BouncyCastleProvider bcProvider) throws NoSuchAlgorithmException, CertificateException, KeyStoreException, IOException, OperatorCreationException, NoSuchProviderException {
+        createCleanDirectory(KEYSTORE_DIRECTORY);
 
         // Generate and store a KeyPair for each User
         for (int userId = 0; userId < userCount; userId++) {
             String name = "user" + userId;
             String password = "user" + userId;
-            generateAndStoreKeyPairs(name, password);
+            generateAndStoreKeyPairs(name, password, bcProvider);
         }
 
         // Generate and store a KeyPair for each Server
         for (int serverId = 0; serverId < serverCount; serverId++) {
             String name = "server" + serverId;
             String password = "server" + serverId;
-            generateAndStoreKeyPairs(name, password);
+            generateAndStoreKeyPairs(name, password, bcProvider);
         }
 
         // Generate and store a KeyPair for each HealthAuthority
         for (int haId = 0; haId < haCount; haId++) {
             String name = "ha" + haId;
             String password = "ha" + haId;
-            generateAndStoreKeyPairs(name, password);
+            generateAndStoreKeyPairs(name, password, bcProvider);
         }
+
+        // FIXME : exchange certificates // ideia: criar array list com size clientCount + serverCount + haCount, devolver certificado no generateAndStoreKeyPairs e dar append
 
     } // void createKeyStores
 
 
-    private static void generateAndStoreKeyPairs(String name, String password) throws KeyStoreException, CertificateException, NoSuchAlgorithmException, IOException, OperatorCreationException {
-        // Crate a KeyStore instance
-        JavaKeyStore keyStore = new JavaKeyStore("PKCS12", name, password);
+    private static void generateAndStoreKeyPairs(String name, String password, BouncyCastleProvider bcProvider) throws KeyStoreException, CertificateException, NoSuchAlgorithmException, IOException, OperatorCreationException, NoSuchProviderException {
+        // Create a KeyStore instance
+        JavaKeyStore keyStore = new JavaKeyStore("PKCS12", password, name + KEYSTORE_EXTENSION);
         keyStore.createEmptyKeyStore();
         keyStore.loadKeyStore();
 
         // Generate the key pair
-        KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
+        KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA", bcProvider);
         keyPairGenerator.initialize(1024);
         KeyPair keyPair = keyPairGenerator.generateKeyPair();
 
         // Generate a self signed certificate
-        X509Certificate certificate = generateSelfSignedCertificate(keyPair);
+        X509Certificate certificate = generateSelfSignedCertificate(keyPair, bcProvider);
 
         // Store the certificate (public key)
         keyStore.setCertificateEntry("Certificate", certificate);
@@ -193,10 +207,7 @@ public class Setup {
      * This function was adapted from:
      * @author https://stackoverflow.com/a/43918337
      */
-    public static X509Certificate generateSelfSignedCertificate(KeyPair keyPair) throws OperatorCreationException, CertificateException, IOException {
-        Provider bcProvider = new BouncyCastleProvider();
-        Security.addProvider(bcProvider);
-
+    public static X509Certificate generateSelfSignedCertificate(KeyPair keyPair, BouncyCastleProvider bcProvider) throws OperatorCreationException, CertificateException, IOException {
         long now = System.currentTimeMillis();
         Date startDate = new Date(now);
 

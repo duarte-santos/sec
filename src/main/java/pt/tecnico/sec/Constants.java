@@ -5,7 +5,7 @@ public final class Constants {
     public static final String ENVIRONMENT_PATH = "src/main/resources/environment.json";
     public static final String KEYS_PATH = "src/main/resources/keys/";
     public static final String KEYSTORE_DIRECTORY = "src/main/resources/keystore/";
-    public static final String KEYSTORE_EXTENSION = ".pfx";
+    public static final String KEYSTORE_EXTENSION = ".pfx"; // .pfx or .p12 for "PKCS#12" // .jks for "JKS"
 
     // JDBC driver name and database URL
     public static final String JDBC_DRIVER = "com.mysql.cj.jdbc.Driver";
