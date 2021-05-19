@@ -37,7 +37,7 @@ public class ServerController {
     @PostMapping("/obtain-location-report")
     public SecureMessage getLocationClient(@RequestBody SecureMessage secureRequest) throws Exception {
         // decipher and verify request
-        ObtainLocationRequest request = _serverApp.decipherAndVerifyReportRequest(secureRequest);
+        ObtainLocationRequest request = _serverApp.decipherAndVerifyReportRequest(secureRequest, true);
 
         // broadcast Read operation
         DBLocationReport dbLocationReport = _serverApp.broadcastRead(request);
@@ -172,7 +172,7 @@ public class ServerController {
     public SecureMessage broadcastRead(@RequestBody SecureMessage secureRequest) throws Exception {
         System.out.println("Received Read broadcast");
 
-        ObtainLocationRequest request = _serverApp.decipherAndVerifyReportRequest(secureRequest);
+        ObtainLocationRequest request = _serverApp.decipherAndVerifyReportRequest(secureRequest, false);
         int senderId = secureRequest.get_senderId();
         if (senderId != _serverApp.getId()) _serverApp.serverSecretKeyUsed(senderId);
 

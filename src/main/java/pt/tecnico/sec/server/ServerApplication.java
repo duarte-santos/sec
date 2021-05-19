@@ -16,11 +16,9 @@ import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
 import javax.crypto.SecretKey;
 import java.io.IOException;
-import java.security.GeneralSecurityException;
-import java.security.KeyPair;
-import java.security.PrivateKey;
-import java.security.PublicKey;
+import java.security.*;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -33,6 +31,8 @@ public class ServerApplication {
     private static int _serverId;
     private static int _serverCount;
     private static int _userCount;
+
+    private final int POW_N = 2;
 
     public final RestTemplate _restTemplate = new RestTemplate();
 
@@ -266,8 +266,12 @@ public class ServerApplication {
         return secureMessage.decipherAndVerify( _secretKeys.get(senderId), verifyKey );
     }
 
-    public ObtainLocationRequest decipherAndVerifyReportRequest(SecureMessage secureMessage) throws Exception {
+    public ObtainLocationRequest decipherAndVerifyReportRequest(SecureMessage secureMessage, boolean isClient) throws Exception {
         byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
+
+        // Check Proof of Work
+        if (isClient) messageBytes = checkProofOfWork(messageBytes);
+
         ObtainLocationRequest request = ObtainLocationRequest.getFromBytes(messageBytes);
 
         // check sender
@@ -280,6 +284,10 @@ public class ServerApplication {
 
     public DBLocationReport decipherAndVerifyReport(SecureMessage secureMessage) throws Exception {
         byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
+
+        // Check Proof of Work
+        messageBytes = checkProofOfWork(messageBytes);
+
         LocationReport locationReport = LocationReport.getFromBytes(messageBytes);
 
         // check sender
@@ -294,6 +302,10 @@ public class ServerApplication {
 
     public WitnessProofsRequest decipherAndVerifyProofsRequest(SecureMessage secureMessage) throws Exception {
         byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
+
+        // Check Proof of Work
+        messageBytes = checkProofOfWork(messageBytes);
+
         WitnessProofsRequest request = WitnessProofsRequest.getFromBytes(messageBytes);
 
         // check sender
@@ -337,6 +349,27 @@ public class ServerApplication {
 
     public SecureMessage cipherAndSignMessage(int receiverId, byte[] messageBytes) throws Exception {
         return new SecureMessage(_serverId + 1000, messageBytes, _secretKeys.get(receiverId), getPrivateKey());
+    }
+
+    public byte[] checkProofOfWork(byte[] message) throws Exception {
+
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        byte[] hash = digest.digest(message);
+
+        // Check if the hash has n leading 0s
+        boolean correct = true;
+        for (int k=0; k<POW_N; k++){
+            if (hash[k] != 0){
+                correct = false;
+            }
+        }
+
+        if (correct){
+            // Return message without the nonce
+            System.out.println("Correct Proof of Work");
+            return Arrays.copyOfRange(message, 0, message.length-POW_N+2);
+        } else { throw new Exception("Incorrect Proof of Work"); }
+
     }
 
     /* ===========[   Auxiliary   ]=========== */

@@ -1,5 +1,6 @@
 package pt.tecnico.sec.client;
 
+import org.apache.commons.codec.binary.Hex;
 import org.springframework.http.HttpEntity;
 import org.springframework.web.client.RestTemplate;
 import pt.tecnico.sec.AESKeyGenerator;
@@ -8,7 +9,10 @@ import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
 import javax.crypto.SecretKey;
+import java.nio.ByteBuffer;
 import java.security.KeyPair;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
 import java.util.*;
 
@@ -20,6 +24,8 @@ public class User {
     private final int _id;
     private final KeyPair _keyPair;
     private final PublicKey[] _serverKeys;
+
+    private final int POW_N = 2; // Number of leading 0's in Proof of Work
 
     private Grid _prevGrid = null; // useful for synchronization
     private Grid _grid;
@@ -181,6 +187,9 @@ public class User {
         byte[] bytes = ObjectMapperHandler.writeValueAsBytes(locationReport);
         System.out.println(locationReport);
 
+        // Solve puzzle
+        bytes = solvePuzzle(bytes);
+
         // Send report
         byte[] responseBytes = postToServers(bytes, "/submit-location-report");
 
@@ -199,6 +208,9 @@ public class User {
         // Create request
         ObtainLocationRequest locationRequest = new ObtainLocationRequest(_id, epoch);
         byte[] requestBytes = ObjectMapperHandler.writeValueAsBytes(locationRequest);
+
+        // Solve puzzle
+        requestBytes = solvePuzzle(requestBytes);
 
         // Perform request
         byte[] responseBytes = postToServers(requestBytes, "/obtain-location-report");
@@ -240,6 +252,8 @@ public class User {
         // Create request
         WitnessProofsRequest witnessProofsRequest = new WitnessProofsRequest(_id, epochs);
         byte[] requestBytes = ObjectMapperHandler.writeValueAsBytes(witnessProofsRequest);
+
+        requestBytes = solvePuzzle(requestBytes);
 
         // Perform request
         byte[] responseBytes = postToServers(requestBytes, "/request-proofs");
@@ -328,6 +342,47 @@ public class User {
         }
 
         return _secretKeys.get(serverId);
+    }
+
+    /* ========================================================== */
+    /* ====[                 Proof of Work                  ]==== */
+    /* ========================================================== */
+
+    public byte[] solvePuzzle(byte[] message) throws NoSuchAlgorithmException {
+
+        System.out.println("Generating proof of work...");
+
+        int i;
+        byte[] nonce;
+        byte[] messageWithNonce;
+        byte[] hash;
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+
+        // Try to find the nonce to get n leading zeros
+        for (i=0;; i++){
+
+            nonce = ByteBuffer.allocate(POW_N+2).putInt(i).array();
+            messageWithNonce = new byte[message.length + nonce.length];
+            System.arraycopy(message, 0, messageWithNonce,0, message.length);
+            System.arraycopy(nonce, 0, messageWithNonce, message.length, nonce.length);
+
+            hash = digest.digest(messageWithNonce);
+
+            // Check if it has n leading 0s
+            boolean found = true;
+            for (int k=0; k<POW_N; k++){
+                if (hash[k] != 0){
+                    found = false;
+                }
+            }
+            if (found) break;
+
+        }
+
+        System.out.println("Number of iterations: " + i);
+        System.out.println("Generated nounce: " + Hex.encodeHexString(nonce));
+        System.out.println("Message hash: " + Hex.encodeHexString(hash));
+        return messageWithNonce;
     }
 
 }
