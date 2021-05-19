@@ -10,6 +10,7 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.OperatorCreationException;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
+import org.springframework.data.util.Pair;
 
 import java.io.File;
 import java.io.IOException;
@@ -148,39 +149,77 @@ public class Setup {
         FileUtils.cleanDirectory(directory);
     }
 
+    private static class CertificateEntry {
+        private final String _name;
+        private final String _password;
+        private final X509Certificate _certificate;
+        public CertificateEntry(String name, String password, X509Certificate certificate) {
+            _name = name;
+            _password = password;
+            _certificate = certificate;
+        }
+        public String getName() { return _name; }
+        public String getPassword() { return _password; }
+        public X509Certificate getCertificate() { return _certificate; }
+    }
 
     private static void createKeyStores(int userCount, int serverCount, int haCount, BouncyCastleProvider bcProvider) throws NoSuchAlgorithmException, CertificateException, KeyStoreException, IOException, OperatorCreationException, NoSuchProviderException {
         createCleanDirectory(KEYSTORE_DIRECTORY);
+
+        CertificateEntry[] certificatesArray = new CertificateEntry[userCount + serverCount + haCount];
+        int entry = 0;
 
         // Generate and store a KeyPair for each User
         for (int userId = 0; userId < userCount; userId++) {
             String name = "user" + userId;
             String password = "user" + userId;
-            generateAndStoreKeyPairs(name, password, bcProvider);
+            X509Certificate certificate = generateAndStoreKeyPairs(name, password, bcProvider);
+            certificatesArray[entry++] = new CertificateEntry(name, password, certificate);
         }
 
         // Generate and store a KeyPair for each Server
         for (int serverId = 0; serverId < serverCount; serverId++) {
             String name = "server" + serverId;
             String password = "server" + serverId;
-            generateAndStoreKeyPairs(name, password, bcProvider);
+            X509Certificate certificate = generateAndStoreKeyPairs(name, password, bcProvider);
+            certificatesArray[entry++] = new CertificateEntry(name, password, certificate);
         }
 
         // Generate and store a KeyPair for each HealthAuthority
         for (int haId = 0; haId < haCount; haId++) {
             String name = "ha" + haId;
             String password = "ha" + haId;
-            generateAndStoreKeyPairs(name, password, bcProvider);
+            X509Certificate certificate = generateAndStoreKeyPairs(name, password, bcProvider);
+            certificatesArray[entry++] = new CertificateEntry(name, password, certificate);
         }
 
-        // FIXME : exchange certificates // ideia: criar array list com size clientCount + serverCount + haCount, devolver certificado no generateAndStoreKeyPairs e dar append
+        // Exchange certificates between all entities
+        for (int iEntity = 0; iEntity < certificatesArray.length; iEntity++) {
+            // Load the entity's keystore credentials
+            String keyStoreName = certificatesArray[iEntity].getName();
+            String keyStorePassword = certificatesArray[iEntity].getPassword();
+            // Load the entity's keystore
+            JavaKeyStore keyStore = new JavaKeyStore(KEYSTORE_TYPE, keyStorePassword, keyStoreName + KEYSTORE_EXTENSION);
+            keyStore.loadKeyStore();
+            for (int iCertificate = 0; iCertificate < certificatesArray.length; iCertificate++) {
+                // Skip the certificate of the current entity (user, server or ha)
+                if (iCertificate == iEntity) continue;
+                // Load the certificate information
+                String name = certificatesArray[iCertificate].getName();
+                X509Certificate certificate = certificatesArray[iCertificate].getCertificate();
+                // Add certificate to the entity's keystore
+                keyStore.setCertificateEntry(name, certificate);
+            }
+            // Save the KeyStore state
+            keyStore.storeKeyStore();
+        }
 
     } // void createKeyStores
 
 
-    private static void generateAndStoreKeyPairs(String name, String password, BouncyCastleProvider bcProvider) throws KeyStoreException, CertificateException, NoSuchAlgorithmException, IOException, OperatorCreationException, NoSuchProviderException {
+    private static X509Certificate generateAndStoreKeyPairs(String name, String password, BouncyCastleProvider bcProvider) throws KeyStoreException, CertificateException, NoSuchAlgorithmException, IOException, OperatorCreationException, NoSuchProviderException {
         // Create a KeyStore instance
-        JavaKeyStore keyStore = new JavaKeyStore("PKCS12", password, name + KEYSTORE_EXTENSION);
+        JavaKeyStore keyStore = new JavaKeyStore(KEYSTORE_TYPE, password, name + KEYSTORE_EXTENSION);
         keyStore.createEmptyKeyStore();
         keyStore.loadKeyStore();
 
@@ -193,12 +232,17 @@ public class Setup {
         X509Certificate certificate = generateSelfSignedCertificate(keyPair, bcProvider);
 
         // Store the certificate (public key)
-        keyStore.setCertificateEntry("Certificate", certificate);
+        keyStore.setCertificateEntry(CERTIFICATE, certificate);
 
         // Store the private key
         X509Certificate[] certificateChain = new X509Certificate[1];
         certificateChain[0] = certificate;
-        keyStore.setKeyEntry("PrivateKey", keyPair.getPrivate(), password, certificateChain);
+        keyStore.setKeyEntry(PRIVATE_KEY, keyPair.getPrivate(), password, certificateChain);
+
+        // Save the KeyStore state
+        keyStore.storeKeyStore();
+
+        return certificate;
 
     } // void generateAndStoreKeyPair
 
