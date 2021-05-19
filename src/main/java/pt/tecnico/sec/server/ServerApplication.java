@@ -13,8 +13,12 @@ import pt.tecnico.sec.client.SecureMessage;
 import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
 import javax.crypto.SecretKey;
+import java.io.IOException;
 import java.security.GeneralSecurityException;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
+import java.security.cert.CertificateException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -30,7 +34,6 @@ public class ServerApplication {
 
     public final RestTemplate _restTemplate = new RestTemplate();
 
-    private static final Map<Integer, SecretKey> _secretKeys = new ConcurrentHashMap<>();
     private static final Map<Integer, Boolean> _secretKeysUsed = new ConcurrentHashMap<>();
 
     public static void main(String[] args) {
@@ -77,10 +80,17 @@ public class ServerApplication {
         return _userCount;
     }
 
-    public void saveSecretKey(int id, SecretKey secretKey) {
+    public void saveSecretKey(int id, SecretKey secretKey) throws CertificateException, KeyStoreException, IOException, NoSuchAlgorithmException {
         System.out.println("Changed key for " + id);
-        _secretKeys.put(id, secretKey);
-        if (id >= 1000) _secretKeysUsed.put(id, false); // keep usage count for server keys
+        String alias;
+        if (id >= 1000) {
+            alias = "server" + (id - 1000);
+            _secretKeysUsed.put(id, false); // keep usage count for server keys
+        }
+        else {
+            alias = "user" + id;
+        }
+        _keyStore.setAndStoreSecretKey(alias, secretKey);
     }
 
 
@@ -116,11 +126,15 @@ public class ServerApplication {
     public byte[] decipherAndVerifyMessage(SecureMessage secureMessage) throws Exception {
         int senderId = secureMessage.get_senderId();
         PublicKey verifyKey = getVerifyKey(senderId);
-        return secureMessage.decipherAndVerify( _secretKeys.get(senderId), verifyKey );
+        String alias = (senderId >= 1000) ? "server" + (senderId - 1000) : "user" + (senderId);
+        SecretKey secret = _keyStore.getSecretKey(alias);
+        return secureMessage.decipherAndVerify(secret, verifyKey);
     }
 
     public static SecureMessage cipherAndSignMessage(int receiverId, byte[] messageBytes) throws Exception {
-        return new SecureMessage(_serverId + 1000, messageBytes, _secretKeys.get(receiverId), _keyStore.getPersonalPrivateKey());
+        String alias = (receiverId >= 1000) ? "server" + (receiverId - 1000) : "user" + (receiverId);
+        SecretKey secret = _keyStore.getSecretKey(alias);
+        return new SecureMessage(_serverId + 1000, messageBytes, secret, _keyStore.getPersonalPrivateKey());
     }
 
     public DBLocationReport decipherAndVerifyReport(SecureMessage secureMessage) throws Exception {
@@ -208,8 +222,11 @@ public class ServerApplication {
     }
 
     public void refreshServerSecretKeys() throws Exception {
+
         for (int serverId = 0; serverId < _serverCount; serverId++) {
-            if (_secretKeys.get(serverId+1000) != null && !_secretKeysUsed.get(serverId+1000)) continue; // there is a fresh key
+
+            boolean exists = ( _secretKeysUsed.get(serverId+1000) != null );
+            if (exists && !_secretKeysUsed.get(serverId+1000)) continue; // there is a fresh key
 
             // Generate secret key
             SecretKey newSecretKey = AESKeyGenerator.makeAESKey();
@@ -233,6 +250,7 @@ public class ServerApplication {
             // Tell other servers to refresh keys
             sendRefreshSecretKeys(serverId);
         }
+
     }
 
 

@@ -15,7 +15,10 @@ import pt.tecnico.sec.client.*;
 import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
 import javax.crypto.SecretKey;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
+import java.security.UnrecoverableEntryException;
 import java.util.*;
 
 import static java.lang.System.exit;
@@ -28,7 +31,6 @@ public class HealthAuthorityApplication {
     private static JavaKeyStore _keyStore;
     private static int _serverCount;
 
-    private static final Map<Integer, SecretKey> _secretKeys = new HashMap<>();
     private static final Map<Integer, Integer> _sKeysUsages = new HashMap<>();
 
     public static void main(String[] args) {
@@ -266,8 +268,9 @@ public class HealthAuthorityApplication {
     /* ====[               Handle Secret Keys               ]==== */
     /* ========================================================== */
 
-    public boolean secretKeyValid(int serverId) {
-        return _secretKeys.get(serverId) != null && _sKeysUsages.get(serverId) <= SECRET_KEY_DURATION;
+    public boolean secretKeyValid(int serverId) throws UnrecoverableEntryException, KeyStoreException, NoSuchAlgorithmException {
+        SecretKey secret = _keyStore.getSecretKey("server" + serverId);
+        return secret != null && _sKeysUsages.get(serverId) <= SECRET_KEY_DURATION;
     }
 
     public SecretKey updateSecretKey(int serverId) throws Exception {
@@ -285,11 +288,11 @@ public class HealthAuthorityApplication {
                 throw new IllegalArgumentException("Error exchanging new secret key");
 
             // Success! Update key
-            _secretKeys.put(serverId, newSecretKey);
+            _keyStore.setAndStoreSecretKey("server" + serverId, newSecretKey);
             _sKeysUsages.put(serverId, 0);
 
             System.out.println("Done!");
         }
-        return _secretKeys.get(serverId);
+        return _keyStore.getSecretKey("server" + serverId);
     }
 }

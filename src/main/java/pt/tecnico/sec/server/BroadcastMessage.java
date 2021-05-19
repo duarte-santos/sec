@@ -47,14 +47,6 @@ public class BroadcastMessage {
         return _report;
     }
 
-    public Integer getTimestamp(){
-        return _timestamp;
-    }
-
-    public ObtainLocationRequest getObtainLocationRequest() {
-        return _request;
-    }
-
     public DBLocationReport get_report() {
         return _report;
     }
@@ -64,6 +56,7 @@ public class BroadcastMessage {
     }
 
     public Integer get_timestamp() {
+        System.out.println("get_timestamp: " + _timestamp);
         return _timestamp;
     }
 

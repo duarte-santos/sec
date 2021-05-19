@@ -69,7 +69,8 @@ public class BroadcastService {
         if (_request == null) return false;
         if (_request.is_write()) {
             DBLocationReport request = _request.getDBLocationReport();
-            int response = m.getTimestamp();
+            Integer response = m.get_timestamp();
+
             return _request.get_broadcastId().equals(m.get_broadcastId()) && request.get_timestamp() == response;
         }
         else if (_request.is_read()) {
