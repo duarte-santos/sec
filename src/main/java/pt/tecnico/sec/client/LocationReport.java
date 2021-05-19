@@ -2,20 +2,24 @@ package pt.tecnico.sec.client;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import pt.tecnico.sec.JavaKeyStore;
 import pt.tecnico.sec.ObjectMapperHandler;
-import pt.tecnico.sec.RSAKeyGenerator;
+import pt.tecnico.sec.CryptoRSA;
 import pt.tecnico.sec.server.DBLocationProof;
 import pt.tecnico.sec.server.DBLocationReport;
 
 import java.io.IOException;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
+import java.security.cert.CertificateException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import static pt.tecnico.sec.Constants.DETECTION_RANGE;
-import static pt.tecnico.sec.Constants.SUCCESS;
+import static pt.tecnico.sec.Constants.*;
+import static pt.tecnico.sec.Constants.KEYSTORE_TYPE;
 
 @SuppressWarnings("unused")
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -108,13 +112,23 @@ public class LocationReport {
         return distance <= DETECTION_RANGE;
     }
 
+    private PublicKey readClientPublicKey(int clientId) throws CertificateException, IOException, NoSuchAlgorithmException, KeyStoreException {
+        // FIXME : chamar uma keystore so para dar load a uma pubkey? o owner esta certo?
+        // Instantiate KeyStore
+        String keyStoreName = "user" + _userId + KEYSTORE_EXTENSION;
+        String keyStorePassword = "server" + _userId;
+        JavaKeyStore keyStore = new JavaKeyStore(KEYSTORE_TYPE, keyStorePassword, keyStoreName);
+        keyStore.loadKeyStore();
+        return keyStore.getPublicKey("user" + clientId);
+    }
+
     public boolean isProofValid(LocationProof signedProof, Set<Integer> prevWitnessIds) throws Exception {
         ProofData proofData = signedProof.get_proofData();
         byte[] data = ObjectMapperHandler.writeValueAsBytes(proofData);
         String signature = signedProof.get_signature();
-        PublicKey clientKey = RSAKeyGenerator.readClientPublicKey(signedProof.get_witnessId());
+        PublicKey clientKey = readClientPublicKey(signedProof.get_witnessId());
 
-        return !( signature == null || !RSAKeyGenerator.verify(data, signature, clientKey)
+        return !( signature == null || !CryptoRSA.verify(data, signature, clientKey)
                 || proofData.get_epoch() != _epoch
                 || !isNearby(proofData.get_location())
                 || !proofData.get_type().equals(SUCCESS)

@@ -9,8 +9,8 @@ public final class Constants {
     public static final String KEYSTORE_DIRECTORY = "src/main/resources/keystore/";
     public static final String KEYSTORE_EXTENSION = ".pfx"; // .pfx or .p12 for "PKCS#12" // .jks for "JKS"
     public static final String KEYSTORE_TYPE = "PKCS12";
-    public static final String PRIVATE_KEY = "private";
-    public static final String CERTIFICATE = "certificate";
+    public static final String KEYSTORE_PRIVATE_KEY = "private";
+    public static final String KEYSTORE_CERTIFICATE = "certificate";
 
     // JDBC driver name and database URL
     public static final String JDBC_DRIVER = "com.mysql.cj.jdbc.Driver";
@@ -36,7 +36,7 @@ public final class Constants {
 
     // Client
     public static final int CLIENT_BASE_PORT = 8000;
-    public static final String CLIENT_USAGE = "Usage: ./mvnw spring-boot:run -Dstart-class=pt.tecnico.sec.client.ClientApplication -Dspring-boot.run.arguments=\"[userId serverCount]\"";
+    public static final String CLIENT_USAGE = "Usage: ./mvnw spring-boot:run -Dstart-class=pt.tecnico.sec.client.ClientApplication -Dspring-boot.run.arguments=\"[userId] [serverCount]\"";
     public static final String EXCEPTION_STR = "Caught exception with description: ";
     public static final String EXIT_CMD = "exit";
     public static final String HELP_CMD = "help";

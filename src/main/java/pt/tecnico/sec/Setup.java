@@ -10,7 +10,6 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.OperatorCreationException;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
-import org.springframework.data.util.Pair;
 
 import java.io.File;
 import java.io.IOException;
@@ -218,6 +217,8 @@ public class Setup {
 
 
     private static X509Certificate generateAndStoreKeyPairs(String name, String password, BouncyCastleProvider bcProvider) throws KeyStoreException, CertificateException, NoSuchAlgorithmException, IOException, OperatorCreationException, NoSuchProviderException {
+        System.out.println("Name: " + name + ", \tPassword: " + password);
+
         // Create a KeyStore instance
         JavaKeyStore keyStore = new JavaKeyStore(KEYSTORE_TYPE, password, name + KEYSTORE_EXTENSION);
         keyStore.createEmptyKeyStore();
@@ -232,12 +233,12 @@ public class Setup {
         X509Certificate certificate = generateSelfSignedCertificate(keyPair, bcProvider);
 
         // Store the certificate (public key)
-        keyStore.setCertificateEntry(CERTIFICATE, certificate);
+        keyStore.setCertificateEntry(KEYSTORE_CERTIFICATE, certificate);
 
         // Store the private key
         X509Certificate[] certificateChain = new X509Certificate[1];
         certificateChain[0] = certificate;
-        keyStore.setKeyEntry(PRIVATE_KEY, keyPair.getPrivate(), password, certificateChain);
+        keyStore.setKeyEntry(KEYSTORE_PRIVATE_KEY, keyPair.getPrivate(), password, certificateChain);
 
         // Save the KeyStore state
         keyStore.storeKeyStore();

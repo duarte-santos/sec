@@ -2,7 +2,6 @@ package pt.tecnico.sec;
 
 import javax.crypto.SecretKey;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -12,7 +11,7 @@ import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.util.Enumeration;
 
-import static pt.tecnico.sec.Constants.KEYSTORE_DIRECTORY;
+import static pt.tecnico.sec.Constants.*;
 
 
 /**
@@ -119,6 +118,22 @@ public class JavaKeyStore {
         PrivateKey privateKey = privateKeyEntry.getPrivateKey();
         // KeyPair
         return new KeyPair(publicKey, privateKey);
+    }
+
+    public PrivateKey getPersonalPrivateKey() throws KeyStoreException, UnrecoverableEntryException, NoSuchAlgorithmException {
+        return getPrivateKey(KEYSTORE_PRIVATE_KEY);
+    }
+
+    public PublicKey getPersonalPublicKey() throws KeyStoreException {
+        return getPublicKey(KEYSTORE_CERTIFICATE);
+    }
+
+    public KeyPair getPersonalKeyPair() throws KeyStoreException, UnrecoverableEntryException, NoSuchAlgorithmException {
+        return getKeyPair(KEYSTORE_CERTIFICATE, KEYSTORE_PRIVATE_KEY);
+    }
+
+    public String toString() {
+        return "Name: " + _name + ", Password: " + _password + ", Type: " + _type;
     }
 
     /* ===========[           DELETE           ]=========== */

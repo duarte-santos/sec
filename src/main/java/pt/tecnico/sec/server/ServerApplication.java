@@ -5,8 +5,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.http.HttpEntity;
 import org.springframework.web.client.RestTemplate;
 import pt.tecnico.sec.AESKeyGenerator;
+import pt.tecnico.sec.JavaKeyStore;
 import pt.tecnico.sec.ObjectMapperHandler;
-import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.client.LocationReport;
 import pt.tecnico.sec.client.ObtainLocationRequest;
 import pt.tecnico.sec.client.SecureMessage;
@@ -17,8 +17,6 @@ import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 import javax.crypto.SecretKey;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
-import java.security.KeyPair;
-import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -29,10 +27,10 @@ import static pt.tecnico.sec.Constants.*;
 @SpringBootApplication
 public class ServerApplication {
 
-    private static KeyPair _keyPair;
     private static int _serverId;
     private static int _serverCount;
     private static int _userCount;
+    private static JavaKeyStore _keyStore;
 
     public final RestTemplate _restTemplate = new RestTemplate();
 
@@ -48,6 +46,13 @@ public class ServerApplication {
 
             if (_serverId >= _serverCount)
                 throw new NumberFormatException("Server ID must be lower than the number of servers");
+
+            // Instantiate KeyStore
+            String keyStoreName = "server" + _serverId + KEYSTORE_EXTENSION;
+            String keyStorePassword = "server" + _serverId;
+            _keyStore = new JavaKeyStore(KEYSTORE_TYPE, keyStorePassword, keyStoreName);
+            _keyStore.loadKeyStore();
+            System.out.println(_keyStore.toString());
 
             // set database information
             int serverPort = SERVER_BASE_PORT + _serverId;
@@ -81,15 +86,6 @@ public class ServerApplication {
         return _userCount;
     }
 
-    public static KeyPair getKeyPair() throws IOException, GeneralSecurityException {
-        if (_keyPair == null) fetchRSAKeyPair();
-        return _keyPair;
-    }
-
-    public static PrivateKey getPrivateKey() throws IOException, GeneralSecurityException {
-        return getKeyPair().getPrivate();
-    }
-
     public SecretKey getSecretKey(int id) {
         return _secretKeys.get(id);
     }
@@ -103,12 +99,6 @@ public class ServerApplication {
     /* ========================================================== */
     /* ====[              Auxiliary functions               ]==== */
     /* ========================================================== */
-
-    public static void fetchRSAKeyPair() throws IOException, GeneralSecurityException {
-        // get server's keyPair
-        String keysPath = KEYS_PATH + "s" + _serverId;
-        _keyPair = RSAKeyGenerator.readKeyPair(keysPath + ".pub", keysPath + ".priv");
-    }
 
     public String getServerURL(int serverId) {
         int serverPort = SERVER_BASE_PORT + serverId;
@@ -224,14 +214,12 @@ public class ServerApplication {
     }
 
     private byte[] sendSecretKey(int serverId, SecretKey keyToSend) throws Exception {
-        PublicKey serverKey = RSAKeyGenerator.readServerPublicKey(serverId);
-        System.out.println("oi key0A " + serverId);
-        SecureMessage secureRequest = new SecureMessage(_serverId+1000, keyToSend, serverKey, _keyPair.getPrivate());
+        PublicKey serverKey = _keyStore.getPublicKey("server" + serverId);
+        SecureMessage secureRequest = new SecureMessage(_serverId+1000, keyToSend, serverKey, _keyStore.getPersonalPrivateKey());
 
         HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
         SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + "/secret-key", request, SecureMessage.class);
 
-        System.out.println("oi key0B " + serverId);
         // Check response's signature and decipher TODO freshness
         assert secureResponse != null;
         return secureResponse.decipherAndVerify( keyToSend, serverKey);
@@ -332,11 +320,11 @@ public class ServerApplication {
     public SecretKey decipherAndVerifyKey(SecureMessage secureMessage) throws Exception {
         int senderId = secureMessage.get_senderId();
         PublicKey verifyKey = getVerifyKey(senderId);
-        return secureMessage.decipherAndVerifyKey( getPrivateKey(), verifyKey );
+        return secureMessage.decipherAndVerifyKey(_keyStore.getPersonalPrivateKey(), verifyKey);
     }
 
     public SecureMessage cipherAndSignMessage(int receiverId, byte[] messageBytes) throws Exception {
-        return new SecureMessage(_serverId + 1000, messageBytes, _secretKeys.get(receiverId), getPrivateKey());
+        return new SecureMessage(_serverId + 1000, messageBytes, _secretKeys.get(receiverId), _keyStore.getPersonalPrivateKey());
     }
 
     /* ===========[   Auxiliary   ]=========== */
@@ -353,12 +341,15 @@ public class ServerApplication {
         return senderId == userId;
     }
 
-    public PublicKey getVerifyKey(int senderId) throws GeneralSecurityException, IOException {
-        if (fromHA(senderId)) return RSAKeyGenerator.readHAKey();
-        else if (fromServer(senderId)) {
-            return RSAKeyGenerator.readServerPublicKey(senderId-1000);
+    public PublicKey getVerifyKey(int senderId) throws GeneralSecurityException {
+        if (fromHA(senderId)) {
+            return _keyStore.getPublicKey("ha" + "0"); // int haId = 0
+        } else if (fromServer(senderId)) {
+            int id = senderId - 1000;
+            return _keyStore.getPublicKey("server" + id);
+        } else {
+            return _keyStore.getPublicKey("user" + senderId);
         }
-        else return RSAKeyGenerator.readClientPublicKey(senderId);
     }
 
     public void checkReportSignatures(LocationReport report) throws Exception {
