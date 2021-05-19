@@ -9,13 +9,12 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.http.HttpEntity;
 import org.springframework.web.client.RestTemplate;
 import pt.tecnico.sec.AESKeyGenerator;
+import pt.tecnico.sec.JavaKeyStore;
 import pt.tecnico.sec.ObjectMapperHandler;
-import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.client.*;
 import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
 import javax.crypto.SecretKey;
-import java.security.KeyPair;
 import java.security.PublicKey;
 import java.util.*;
 
@@ -26,16 +25,22 @@ import static pt.tecnico.sec.Constants.*;
 public class HealthAuthorityApplication {
 
     private RestTemplate _restTemplate;
-    private KeyPair _keyPair;
-    private static PublicKey[] _serverKeys;
+    private static JavaKeyStore _keyStore;
+    private static int _serverCount;
 
     private static final Map<Integer, SecretKey> _secretKeys = new HashMap<>();
     private static final Map<Integer, Integer> _sKeysUsages = new HashMap<>();
 
     public static void main(String[] args) {
         try {
-            int serverCount = Integer.parseInt(args[0]);
-            _serverKeys = new PublicKey[serverCount];
+            _serverCount = Integer.parseInt(args[0]);
+
+            // Instantiate KeyStore
+            int haId = 0;
+            String keyStoreName = "ha" + haId + KEYSTORE_EXTENSION;
+            String keyStorePassword = "ha" + haId;
+            _keyStore = new JavaKeyStore(KEYSTORE_TYPE, keyStorePassword, keyStoreName);
+            _keyStore.loadKeyStore();
 
             SpringApplication app = new SpringApplication(HealthAuthorityApplication.class);
             app.setDefaultProperties(Collections.singletonMap("server.port", HA_BASE_PORT));
@@ -56,10 +61,6 @@ public class HealthAuthorityApplication {
     public CommandLineRunner run(RestTemplate restTemplate) {
         return args -> {
             _restTemplate = restTemplate;
-
-            // get keys
-            _keyPair = RSAKeyGenerator.readKeyPair(KEYS_PATH + "ha.pub", KEYS_PATH + "ha.priv");
-            _serverKeys = RSAKeyGenerator.readServersKeys(_serverKeys.length);
 
             try (Scanner scanner = new Scanner(System.in)) {
                 while (true) {
@@ -87,7 +88,10 @@ public class HealthAuthorityApplication {
 
                             LocationReport report = obtainReport(id, epoch);
                             if (report == null) System.out.println("Location Report not found");
-                            else System.out.println( "User " + id + ", epoch " + epoch + ", location: " + report.get_location() + "\nReport: " + report );
+                            else {
+                                List<PublicKey> clientKeys = _keyStore.getAllUsersPublicKeys();
+                                System.out.println("User " + id + ", epoch " + epoch + ", location: " + report.get_location() + "\nReport: " + report.printReport(clientKeys));
+                            }
                         }
 
                         // obtainUsersAtLocation, [x], [y], [ep]
@@ -145,7 +149,8 @@ public class HealthAuthorityApplication {
     public LocationReport checkLocationReport(SignedLocationReport signedReport, PublicKey verifyKey) throws Exception {
         // Check report
         signedReport.verify(verifyKey);
-        int validProofCount = signedReport.verifyProofs();
+        List<PublicKey> clientKeys = _keyStore.getAllUsersPublicKeys();
+        int validProofCount = signedReport.verifyProofs(clientKeys);
         if (validProofCount <= BYZANTINE_USERS)
             throw new ReportNotAcceptableException("Not enough proofs to constitute an acceptable Location Report");
 
@@ -159,7 +164,7 @@ public class HealthAuthorityApplication {
 
     public int getRandomServerId() {
         Random random = new Random();
-        return random.nextInt(_serverKeys.length);
+        return random.nextInt(_serverCount);
     }
 
 
@@ -178,7 +183,7 @@ public class HealthAuthorityApplication {
         // Check response
         if (responseBytes == null) return null;
         SignedLocationReport signedReport = checkObtainLocationResponse(responseBytes, userId, epoch);
-        return checkLocationReport(signedReport, RSAKeyGenerator.readClientPublicKey(signedReport.get_userId()));
+        return checkLocationReport(signedReport, _keyStore.getPublicKey("user" + signedReport.get_userId()) );
     }
 
 
@@ -210,7 +215,7 @@ public class HealthAuthorityApplication {
         // Check response
         UsersAtLocation usersAtLocation = checkObtainUsersResponse(responseBytes, location, epoch);
         for (SignedLocationReport signedReport : usersAtLocation.get_reports())
-            checkLocationReport(signedReport, RSAKeyGenerator.readClientPublicKey(signedReport.get_userId()));
+            checkLocationReport(signedReport, _keyStore.getPublicKey("user" + signedReport.get_userId()) );
         return usersAtLocation;
     }
 
@@ -230,7 +235,7 @@ public class HealthAuthorityApplication {
     /* ========================================================== */
 
     private byte[] sendRequest(int serverId, SecureMessage secureRequest, SecretKey secretKey, String endpoint) throws Exception {
-        PublicKey serverKey = _serverKeys[serverId];
+        PublicKey serverKey = _keyStore.getPublicKey("server" + serverId);
         HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
         SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + endpoint, request, SecureMessage.class);
 
@@ -245,13 +250,13 @@ public class HealthAuthorityApplication {
         SecretKey secretKey = updateSecretKey(serverId);
         secretKeyUsed(serverId);
         System.out.println("Requesting from server " + serverId);
-        SecureMessage secureRequest = new SecureMessage(-1, messageBytes, secretKey, _keyPair.getPrivate());
+        SecureMessage secureRequest = new SecureMessage(-1, messageBytes, secretKey, _keyStore.getPersonalPrivateKey());
         return sendRequest(serverId, secureRequest, secretKey, endpoint);
     }
 
     private byte[] postKeyToServers(int serverId, SecretKey keyToSend) throws Exception {
-        PublicKey serverKey = _serverKeys[serverId];
-        SecureMessage secureRequest = new SecureMessage(-1, keyToSend, serverKey, _keyPair.getPrivate());
+        PublicKey serverKey = _keyStore.getPublicKey("server" + serverId);
+        SecureMessage secureRequest = new SecureMessage(-1, keyToSend, serverKey, _keyStore.getPersonalPrivateKey());
         return sendRequest(serverId, secureRequest, keyToSend, "/secret-key");
     }
 

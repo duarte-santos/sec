@@ -5,6 +5,13 @@ public final class Constants {
     public static final String ENVIRONMENT_PATH = "src/main/resources/environment.json";
     public static final String KEYS_PATH = "src/main/resources/keys/";
 
+    // KeyStore
+    public static final String KEYSTORE_DIRECTORY = "src/main/resources/keystore/";
+    public static final String KEYSTORE_EXTENSION = ".pfx"; // .pfx or .p12 for "PKCS#12" // .jks for "JKS"
+    public static final String KEYSTORE_TYPE = "PKCS12";
+    public static final String KEYSTORE_PRIVATE_KEY = "private";
+    public static final String KEYSTORE_CERTIFICATE = "certificate";
+
     // JDBC driver name and database URL
     public static final String JDBC_DRIVER = "com.mysql.cj.jdbc.Driver";
     public static final String DB_URL = "jdbc:mysql://localhost/";

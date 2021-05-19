@@ -2,13 +2,14 @@ package pt.tecnico.sec.client;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import pt.tecnico.sec.CryptoRSA;
 import pt.tecnico.sec.ObjectMapperHandler;
-import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.server.DBLocationReport;
 
 import java.io.IOException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
+import java.util.List;
 
 @SuppressWarnings("unused")
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -29,7 +30,7 @@ public class SignedLocationReport {
 
         // sign message with given private sign key
         byte[] bytes = ObjectMapperHandler.writeValueAsBytes(report);
-        _signature = RSAKeyGenerator.sign(bytes, signKey);
+        _signature = CryptoRSA.sign(bytes, signKey);
     }
 
     // convert from server version
@@ -74,12 +75,12 @@ public class SignedLocationReport {
 
     public void verify(PublicKey verifyKey) throws Exception {
         byte[] bytes = ObjectMapperHandler.writeValueAsBytes(_report);
-        if (_signature == null || !RSAKeyGenerator.verify(bytes, _signature, verifyKey))
+        if (_signature == null || !CryptoRSA.verify(bytes, _signature, verifyKey))
             throw new IllegalArgumentException("Signature verify failed!");
     }
 
-    public int verifyProofs() throws Exception {
-        return _report.verifyProofs();
+    public int verifyProofs(List<PublicKey> clientKeys) throws Exception {
+        return _report.verifyProofs(clientKeys);
     }
 
     @Override

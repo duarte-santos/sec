@@ -2,21 +2,24 @@ package pt.tecnico.sec.client;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import pt.tecnico.sec.JavaKeyStore;
 import pt.tecnico.sec.ObjectMapperHandler;
-import pt.tecnico.sec.RSAKeyGenerator;
+import pt.tecnico.sec.CryptoRSA;
 import pt.tecnico.sec.server.DBLocationProof;
 import pt.tecnico.sec.server.DBLocationReport;
 import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
 import java.io.IOException;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
+import java.security.cert.CertificateException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import static pt.tecnico.sec.Constants.DETECTION_RANGE;
-import static pt.tecnico.sec.Constants.SUCCESS;
+import static pt.tecnico.sec.Constants.*;
 
 @SuppressWarnings("unused")
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -95,13 +98,21 @@ public class LocationReport {
             throw new ReportNotAcceptableException("Cannot submit reports from other users");
     }
 
+    public String printReport(List<PublicKey> clientsKeys) {
+        return "LocationReport{" +
+                "_userId=" + _userId +
+                ", _epoch=" + _epoch +
+                ", _location=" + _location +
+                ", _proofs=" + getValidProofs(clientsKeys) +
+                '}';
+    }
+
     @Override
     public String toString() {
         return "LocationReport{" +
                 "_userId=" + _userId +
                 ", _epoch=" + _epoch +
                 ", _location=" + _location +
-                ", _proofs=" + getValidProofs() +
                 '}';
     }
 
@@ -114,13 +125,12 @@ public class LocationReport {
         return distance <= DETECTION_RANGE;
     }
 
-    public boolean isProofValid(LocationProof signedProof, Set<Integer> prevWitnessIds) throws Exception {
+    public boolean isProofValid(LocationProof signedProof, Set<Integer> prevWitnessIds, PublicKey clientKey) throws Exception {
         ProofData proofData = signedProof.get_proofData();
         byte[] data = ObjectMapperHandler.writeValueAsBytes(proofData);
         String signature = signedProof.get_signature();
-        PublicKey clientKey = RSAKeyGenerator.readClientPublicKey(signedProof.get_witnessId());
 
-        return !( signature == null || !RSAKeyGenerator.verify(data, signature, clientKey)
+        return !( signature == null || !CryptoRSA.verify(data, signature, clientKey)
                 || proofData.get_epoch() != _epoch
                 || !isNearby(proofData.get_location())
                 || !proofData.get_type().equals(SUCCESS)
@@ -129,11 +139,11 @@ public class LocationReport {
                 || proofData.get_witnessId() == _userId);
     }
 
-    public int verifyProofs() throws Exception {
+    public int verifyProofs(List<PublicKey> publicKeys) throws Exception {
         Set<Integer> prevWitnessIds = new HashSet<>();
 
         for (LocationProof signedProof : _proofs) {
-            if ( isProofValid(signedProof, prevWitnessIds) )
+            if ( isProofValid(signedProof, prevWitnessIds, publicKeys.get(signedProof.get_witnessId())) )
                 prevWitnessIds.add( signedProof.get_witnessId() ); // keep track of witnesses, can't be repeated
             else
                 System.out.println("Invalid LocationProof: " + signedProof);
@@ -141,13 +151,13 @@ public class LocationReport {
         return prevWitnessIds.size(); // valid proof count
     }
 
-    public List<LocationProof> getValidProofs() {
+    public List<LocationProof> getValidProofs(List<PublicKey> publicKeys) {
         Set<Integer> prevWitnessIds = new HashSet<>();
         List<LocationProof> validProofs = new ArrayList<>();
 
         for (LocationProof signedProof : _proofs) {
             try {
-                if (isProofValid(signedProof, prevWitnessIds)) {
+                if (isProofValid(signedProof, prevWitnessIds, publicKeys.get(signedProof.get_witnessId())) ) {
                     prevWitnessIds.add(signedProof.get_witnessId());
                     validProofs.add(signedProof);
                 }
