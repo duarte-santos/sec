@@ -12,6 +12,7 @@ import javax.crypto.SecretKey;
 import java.security.PublicKey;
 import java.util.*;
 
+import static javax.xml.bind.DatatypeConverter.printHexBinary;
 import static pt.tecnico.sec.Constants.*;
 
 public class User {
@@ -179,7 +180,8 @@ public class User {
         List<LocationProof> epochProofs = getEpochProofs(epoch);
         LocationReport locationReport = new LocationReport(_id, epoch, epochLocation, epochProofs);
         byte[] bytes = ObjectMapperHandler.writeValueAsBytes(locationReport);
-        System.out.println(locationReport);
+        List<PublicKey> clientKeys = _keyStore.getAllUsersPublicKeys(_id);
+        System.out.println(locationReport.printReport(clientKeys));
 
         // Send report
         byte[] responseBytes = postToServers(bytes, "/submit-location-report");
@@ -223,7 +225,8 @@ public class User {
         // Check report
         signedReport.verify(verifyKey);
 
-        int validProofCount = signedReport.verifyProofs();
+        List<PublicKey> clientKeys = _keyStore.getAllUsersPublicKeys(_id);
+        int validProofCount = signedReport.verifyProofs(clientKeys);
         if (validProofCount <= BYZANTINE_USERS)
             throw new ReportNotAcceptableException("Not enough proofs to constitute an acceptable Location Report");
 
@@ -285,7 +288,6 @@ public class User {
     private byte[] postToServers(byte[] messageBytes, String endpoint) throws Exception {
         int serverId = getRandomServerId(); // Choose random server to send request
         SecretKey secretKey = updateSecretKey(serverId);
-        System.out.println(_keyStore.toString());
         System.out.println("Requesting from server " + serverId);
         SecureMessage secureRequest = new SecureMessage(_id, messageBytes, secretKey, _keyStore.getPersonalPrivateKey());
         return sendRequest(serverId, secureRequest, secretKey, endpoint);

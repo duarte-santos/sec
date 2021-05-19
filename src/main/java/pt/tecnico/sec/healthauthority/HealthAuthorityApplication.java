@@ -88,7 +88,10 @@ public class HealthAuthorityApplication {
 
                             LocationReport report = obtainReport(id, epoch);
                             if (report == null) System.out.println("Location Report not found");
-                            else System.out.println( "User " + id + ", epoch " + epoch + ", location: " + report.get_location() + "\nReport: " + report );
+                            else {
+                                List<PublicKey> clientKeys = _keyStore.getAllUsersPublicKeys();
+                                System.out.println("User " + id + ", epoch " + epoch + ", location: " + report.get_location() + "\nReport: " + report.printReport(clientKeys));
+                            }
                         }
 
                         // obtainUsersAtLocation, [x], [y], [ep]
@@ -149,7 +152,8 @@ public class HealthAuthorityApplication {
     public LocationReport checkLocationReport(SignedLocationReport signedReport, PublicKey verifyKey) throws Exception {
         // Check report
         signedReport.verify(verifyKey);
-        int validProofCount = signedReport.verifyProofs();
+        List<PublicKey> clientKeys = _keyStore.getAllUsersPublicKeys();
+        int validProofCount = signedReport.verifyProofs(clientKeys);
         if (validProofCount <= BYZANTINE_USERS)
             throw new ReportNotAcceptableException("Not enough proofs to constitute an acceptable Location Report");
 

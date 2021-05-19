@@ -58,9 +58,11 @@ public class CryptoRSA {
             publicSignature.update(data);
             byte[] signatureBytes = Base64.getDecoder().decode(signature);
             return publicSignature.verify(signatureBytes);
-        } catch (Exception e) {
+        }
+        catch (Exception e) {
             throw new InvalidSignatureException("Invalid signature");
         }
+
     }
 
 }

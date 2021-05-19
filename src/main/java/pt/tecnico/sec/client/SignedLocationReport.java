@@ -9,6 +9,7 @@ import pt.tecnico.sec.server.DBLocationReport;
 import java.io.IOException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
+import java.util.List;
 
 @SuppressWarnings("unused")
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -78,8 +79,8 @@ public class SignedLocationReport {
             throw new IllegalArgumentException("Signature verify failed!");
     }
 
-    public int verifyProofs() throws Exception {
-        return _report.verifyProofs();
+    public int verifyProofs(List<PublicKey> clientKeys) throws Exception {
+        return _report.verifyProofs(clientKeys);
     }
 
     @Override

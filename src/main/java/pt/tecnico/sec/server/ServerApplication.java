@@ -20,8 +20,10 @@ import java.security.GeneralSecurityException;
 import java.security.PublicKey;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
+import static javax.xml.bind.DatatypeConverter.printHexBinary;
 import static pt.tecnico.sec.Constants.*;
 
 @SpringBootApplication
@@ -52,7 +54,6 @@ public class ServerApplication {
             String keyStorePassword = "server" + _serverId;
             _keyStore = new JavaKeyStore(KEYSTORE_TYPE, keyStorePassword, keyStoreName);
             _keyStore.loadKeyStore();
-            System.out.println(_keyStore.toString());
 
             // set database information
             int serverPort = SERVER_BASE_PORT + _serverId;
@@ -228,18 +229,22 @@ public class ServerApplication {
     public void updateServerSecretKey(int serverId) throws Exception {
 
         if (!serverSecretKeyValid(serverId)) {
+
             // Generate secret key
             SecretKey newSecretKey = AESKeyGenerator.makeAESKey();
 
             // Send key
-            byte[] responseBytes = sendSecretKey(serverId-1000, newSecretKey);
+            if (serverId - 1000 != _serverId) {
+                byte[] responseBytes = sendSecretKey(serverId - 1000, newSecretKey);
 
-            // Check response
-            if (responseBytes == null || !ObjectMapperHandler.getStringFromBytes(responseBytes).equals("OK"))
-                throw new IllegalArgumentException("Error exchanging new secret key");
+                // Check response
+                if (responseBytes == null || !ObjectMapperHandler.getStringFromBytes(responseBytes).equals("OK"))
+                    throw new IllegalArgumentException("Error exchanging new secret key");
+            }
 
             // Success! Update key
             saveSecretKey(serverId, newSecretKey);
+
         }
     }
 
@@ -353,7 +358,8 @@ public class ServerApplication {
     }
 
     public void checkReportSignatures(LocationReport report) throws Exception {
-        int validProofCount = report.verifyProofs();
+        List<PublicKey> clientKeys = _keyStore.getAllUsersPublicKeys();
+        int validProofCount = report.verifyProofs(clientKeys);
         if (validProofCount <= BYZANTINE_USERS)
             throw new ReportNotAcceptableException("Not enough proofs to constitute an acceptable Location Report");
     }

@@ -93,13 +93,21 @@ public class LocationReport {
         return null;
     }
 
+    public String printReport(List<PublicKey> clientsKeys) {
+        return "LocationReport{" +
+                "_userId=" + _userId +
+                ", _epoch=" + _epoch +
+                ", _location=" + _location +
+                ", _proofs=" + getValidProofs(clientsKeys) +
+                '}';
+    }
+
     @Override
     public String toString() {
         return "LocationReport{" +
                 "_userId=" + _userId +
                 ", _epoch=" + _epoch +
                 ", _location=" + _location +
-                ", _proofs=" + getValidProofs() +
                 '}';
     }
 
@@ -112,21 +120,10 @@ public class LocationReport {
         return distance <= DETECTION_RANGE;
     }
 
-    private PublicKey readClientPublicKey(int clientId) throws CertificateException, IOException, NoSuchAlgorithmException, KeyStoreException {
-        // FIXME : chamar uma keystore so para dar load a uma pubkey? o owner esta certo?
-        // Instantiate KeyStore
-        String keyStoreName = "user" + _userId + KEYSTORE_EXTENSION;
-        String keyStorePassword = "server" + _userId;
-        JavaKeyStore keyStore = new JavaKeyStore(KEYSTORE_TYPE, keyStorePassword, keyStoreName);
-        keyStore.loadKeyStore();
-        return keyStore.getPublicKey("user" + clientId);
-    }
-
-    public boolean isProofValid(LocationProof signedProof, Set<Integer> prevWitnessIds) throws Exception {
+    public boolean isProofValid(LocationProof signedProof, Set<Integer> prevWitnessIds, PublicKey clientKey) throws Exception {
         ProofData proofData = signedProof.get_proofData();
         byte[] data = ObjectMapperHandler.writeValueAsBytes(proofData);
         String signature = signedProof.get_signature();
-        PublicKey clientKey = readClientPublicKey(signedProof.get_witnessId());
 
         return !( signature == null || !CryptoRSA.verify(data, signature, clientKey)
                 || proofData.get_epoch() != _epoch
@@ -137,11 +134,11 @@ public class LocationReport {
                 || proofData.get_witnessId() == _userId);
     }
 
-    public int verifyProofs() throws Exception {
+    public int verifyProofs(List<PublicKey> publicKeys) throws Exception {
         Set<Integer> prevWitnessIds = new HashSet<>();
 
         for (LocationProof signedProof : _proofs) {
-            if ( isProofValid(signedProof, prevWitnessIds) )
+            if ( isProofValid(signedProof, prevWitnessIds, publicKeys.get(signedProof.get_witnessId())) )
                 prevWitnessIds.add( signedProof.get_witnessId() ); // keep track of witnesses, can't be repeated
             else
                 System.out.println("Invalid LocationProof: " + signedProof);
@@ -149,13 +146,13 @@ public class LocationReport {
         return prevWitnessIds.size(); // valid proof count
     }
 
-    public List<LocationProof> getValidProofs() {
+    public List<LocationProof> getValidProofs(List<PublicKey> publicKeys) {
         Set<Integer> prevWitnessIds = new HashSet<>();
         List<LocationProof> validProofs = new ArrayList<>();
 
         for (LocationProof signedProof : _proofs) {
             try {
-                if (isProofValid(signedProof, prevWitnessIds)) {
+                if (isProofValid(signedProof, prevWitnessIds, publicKeys.get(signedProof.get_witnessId())) ) {
                     prevWitnessIds.add(signedProof.get_witnessId());
                     validProofs.add(signedProof);
                 }

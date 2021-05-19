@@ -9,7 +9,9 @@ import java.nio.file.Paths;
 import java.security.*;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
+import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.List;
 
 import static pt.tecnico.sec.Constants.*;
 
@@ -94,27 +96,32 @@ public class JavaKeyStore {
     public SecretKey getSecretKey(String alias) throws KeyStoreException, UnrecoverableEntryException, NoSuchAlgorithmException {
         KeyStore.ProtectionParameter protectionParameter = new KeyStore.PasswordProtection(_password.toCharArray());
         KeyStore.SecretKeyEntry secretKeyEntry = (KeyStore.SecretKeyEntry) _keyStore.getEntry(alias, protectionParameter);
+        if (secretKeyEntry == null) return null;
         return secretKeyEntry.getSecretKey();
     }
 
     public PrivateKey getPrivateKey(String alias) throws KeyStoreException, UnrecoverableEntryException, NoSuchAlgorithmException {
         KeyStore.ProtectionParameter protectionParameter = new KeyStore.PasswordProtection(_password.toCharArray());
         KeyStore.PrivateKeyEntry privateKeyEntry = (KeyStore.PrivateKeyEntry) _keyStore.getEntry(alias, protectionParameter);
+        if (privateKeyEntry == null) return null;
         return privateKeyEntry.getPrivateKey();
     }
 
     public PublicKey getPublicKey(String alias) throws KeyStoreException {
         Certificate certificate = _keyStore.getCertificate(alias);
+        if (certificate == null) return null;
         return certificate.getPublicKey();
     }
 
     public KeyPair getKeyPair(String certificateAlias, String privateKeyAlias) throws KeyStoreException, UnrecoverableEntryException, NoSuchAlgorithmException {
         // Public Key
         Certificate certificate = _keyStore.getCertificate(certificateAlias);
+        if (certificate == null) return null;
         PublicKey publicKey = certificate.getPublicKey();
         // Private Key
         KeyStore.ProtectionParameter protectionParameter = new KeyStore.PasswordProtection(_password.toCharArray());
         KeyStore.PrivateKeyEntry privateKeyEntry = (KeyStore.PrivateKeyEntry) _keyStore.getEntry(privateKeyAlias, protectionParameter);
+        if (privateKeyEntry == null) return null;
         PrivateKey privateKey = privateKeyEntry.getPrivateKey();
         // KeyPair
         return new KeyPair(publicKey, privateKey);
@@ -130,6 +137,26 @@ public class JavaKeyStore {
 
     public KeyPair getPersonalKeyPair() throws KeyStoreException, UnrecoverableEntryException, NoSuchAlgorithmException {
         return getKeyPair(KEYSTORE_CERTIFICATE, KEYSTORE_PRIVATE_KEY);
+    }
+
+    public List<PublicKey> getAllUsersPublicKeys(int personalId) throws KeyStoreException {
+        List<PublicKey> publicKeyArray = new ArrayList<>();
+        PublicKey publicKey = (personalId == 0) ? getPersonalPublicKey() : getPublicKey("user" + 0);
+        for (int userId = 1; publicKey != null; userId++) {
+            publicKeyArray.add(publicKey);
+            publicKey = (personalId == userId) ? getPersonalPublicKey() : getPublicKey("user" + userId);
+        }
+        return publicKeyArray;
+    }
+
+    public List<PublicKey> getAllUsersPublicKeys() throws KeyStoreException {
+        List<PublicKey> publicKeyArray = new ArrayList<>();
+        PublicKey publicKey = getPublicKey("user" + 0);
+        for (int userId = 1; publicKey != null; userId++) {
+            publicKeyArray.add(publicKey);
+            publicKey = getPublicKey("user" + userId);
+        }
+        return publicKeyArray;
     }
 
     public String toString() {
