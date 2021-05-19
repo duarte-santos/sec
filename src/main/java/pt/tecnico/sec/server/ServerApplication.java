@@ -290,7 +290,7 @@ public class ServerApplication {
 
     public void broadcastW(DBLocationReport report) throws Exception {
         BroadcastId broadcastId = new BroadcastId(_serverId+1000, _broadcastCount);
-        report.set_timestamp( report.get_timestamp() + 1 ); //FIXME timestamp of the report??
+        report.set_timestamp( report.get_timestamp() + 1 );
         BroadcastMessage m = new BroadcastMessage(broadcastId, report);
 
         _myBroadcastW = new BroadcastService(this, broadcastId);
