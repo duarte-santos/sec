@@ -10,8 +10,6 @@ import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.client.LocationReport;
 import pt.tecnico.sec.client.ObtainLocationRequest;
 import pt.tecnico.sec.client.SecureMessage;
-import pt.tecnico.sec.client.WitnessProofsRequest;
-import pt.tecnico.sec.healthauthority.ObtainUsersRequest;
 import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
 import javax.crypto.SecretKey;
@@ -114,6 +112,69 @@ public class ServerApplication {
 
     public int getServerCount() {
         return _serverCount;
+    }
+
+
+    /* ========================================================== */
+    /* ====[             Ciphers and Signatures             ]==== */
+    /* ========================================================== */
+
+    public SecretKey decipherAndVerifyKey(SecureMessage secureMessage) throws Exception {
+        int senderId = secureMessage.get_senderId();
+        PublicKey verifyKey = getVerifyKey(senderId);
+        return secureMessage.decipherAndVerifyKey( getPrivateKey(), verifyKey );
+    }
+
+    public byte[] decipherAndVerifyMessage(SecureMessage secureMessage) throws Exception {
+        int senderId = secureMessage.get_senderId();
+        PublicKey verifyKey = getVerifyKey(senderId);
+        return secureMessage.decipherAndVerify( _secretKeys.get(senderId), verifyKey );
+    }
+
+    public static SecureMessage cipherAndSignMessage(int receiverId, byte[] messageBytes) throws Exception {
+        return new SecureMessage(_serverId + 1000, messageBytes, _secretKeys.get(receiverId), getPrivateKey());
+    }
+
+    public DBLocationReport decipherAndVerifyReport(SecureMessage secureMessage) throws Exception {
+        byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
+        LocationReport locationReport = LocationReport.getFromBytes(messageBytes);
+        locationReport.checkSender(secureMessage.get_senderId());
+
+        // check proofs signatures
+        checkReportSignatures(locationReport);
+
+        return new DBLocationReport(locationReport, secureMessage.get_signature());
+    }
+
+    public BroadcastMessage decipherAndVerifyBroadcastMessage(SecureMessage secureMessage) throws Exception {
+        byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
+        BroadcastMessage m = ObjectMapperHandler.getBroadcastMessageFromBytes(messageBytes);
+        m.checkOrigin();
+        return m;
+    }
+
+    /* ===========[   Auxiliary   ]=========== */
+
+    public boolean fromServer(int senderId) {
+        return senderId >= 1000;
+    }
+
+    public boolean fromHA(int senderId) {
+        return senderId == -1;
+    }
+
+    public PublicKey getVerifyKey(int senderId) throws GeneralSecurityException, IOException {
+        if (fromHA(senderId)) return RSAKeyGenerator.readHAKey();
+        else if (fromServer(senderId)) {
+            return RSAKeyGenerator.readServerPublicKey(senderId-1000);
+        }
+        else return RSAKeyGenerator.readClientPublicKey(senderId);
+    }
+
+    public void checkReportSignatures(LocationReport report) throws Exception {
+        int validProofCount = report.verifyProofs();
+        if (validProofCount <= BYZANTINE_USERS)
+            throw new ReportNotAcceptableException("Not enough proofs to constitute an acceptable Location Report");
     }
 
 
@@ -288,113 +349,4 @@ public class ServerApplication {
         }
 
     }
-
-    /* ========================================================== */
-    /* ====[          Decipher and Verify Requests          ]==== */
-    /* ========================================================== */
-
-    public byte[] decipherAndVerifyMessage(SecureMessage secureMessage) throws Exception {
-        int senderId = secureMessage.get_senderId();
-        PublicKey verifyKey = getVerifyKey(senderId);
-        return secureMessage.decipherAndVerify( _secretKeys.get(senderId), verifyKey );
-    }
-
-    public ObtainLocationRequest decipherAndVerifyReportRequest(SecureMessage secureMessage) throws Exception {
-        byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
-        ObtainLocationRequest request = ObtainLocationRequest.getFromBytes(messageBytes);
-
-        // check sender
-        int sender_id = secureMessage.get_senderId();
-        if ( !(fromHA(sender_id) || fromServer(sender_id) || fromSelf(sender_id, request.get_userId())) )
-            throw new IllegalArgumentException("Cannot request reports from other users.");
-
-        return request;
-    }
-
-    public DBLocationReport decipherAndVerifyReport(SecureMessage secureMessage) throws Exception {
-        byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
-        LocationReport locationReport = LocationReport.getFromBytes(messageBytes);
-
-        // check sender
-        if (!fromSelf(secureMessage.get_senderId(), locationReport.get_userId()))
-            throw new ReportNotAcceptableException("Cannot submit reports from other users");
-
-        // check proofs signatures
-        checkReportSignatures(locationReport);
-
-        return new DBLocationReport(locationReport, secureMessage.get_signature());
-    }
-
-    public WitnessProofsRequest decipherAndVerifyProofsRequest(SecureMessage secureMessage) throws Exception {
-        byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
-        WitnessProofsRequest request = WitnessProofsRequest.getFromBytes(messageBytes);
-
-        // check sender
-        if (!fromSelf(secureMessage.get_senderId(), request.get_userId()))
-            throw new IllegalArgumentException("Cannot request proofs from other users");
-
-        return request;
-    }
-
-    public ObtainUsersRequest decipherAndVerifyUsersRequest(SecureMessage secureMessage) throws Exception {
-        byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
-        ObtainUsersRequest request = ObtainUsersRequest.getFromBytes(messageBytes);
-
-        // check sender
-        if (!fromHA(secureMessage.get_senderId()))
-            throw new IllegalArgumentException("Only the health authority can make 'users at location' requests");
-
-        return request;
-    }
-
-    public SecretKey decipherAndVerifyKey(SecureMessage secureMessage) throws Exception {
-        int senderId = secureMessage.get_senderId();
-        PublicKey verifyKey = getVerifyKey(senderId);
-        return secureMessage.decipherAndVerifyKey( getPrivateKey(), verifyKey );
-    }
-
-    public static SecureMessage cipherAndSignMessage(int receiverId, byte[] messageBytes) throws Exception {
-        return new SecureMessage(_serverId + 1000, messageBytes, _secretKeys.get(receiverId), getPrivateKey());
-    }
-
-    public BroadcastMessage decipherAndVerifyBroadcastMessage(SecureMessage secureMessage) throws Exception {
-        byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
-        BroadcastMessage m = ObjectMapperHandler.getBroadcastMessageFromBytes(messageBytes);
-        verifyBroadcastMessage(m);
-        return m;
-    }
-
-    public void verifyBroadcastMessage(BroadcastMessage m) {
-        if (!fromServer(m.get_originalId()))
-            throw new ReportNotAcceptableException("Can only accept broadcast messages from servers.");
-    }
-
-    /* ===========[   Auxiliary   ]=========== */
-
-    public boolean fromServer(int senderId) {
-        return senderId >= 1000;
-    }
-
-    public boolean fromHA(int senderId) {
-        return senderId == -1;
-    }
-
-    public boolean fromSelf(int senderId, int userId) {
-        return senderId == userId;
-    }
-
-    public PublicKey getVerifyKey(int senderId) throws GeneralSecurityException, IOException {
-        if (fromHA(senderId)) return RSAKeyGenerator.readHAKey();
-        else if (fromServer(senderId)) {
-            return RSAKeyGenerator.readServerPublicKey(senderId-1000);
-        }
-        else return RSAKeyGenerator.readClientPublicKey(senderId);
-    }
-
-    public void checkReportSignatures(LocationReport report) throws Exception {
-        int validProofCount = report.verifyProofs();
-        if (validProofCount <= BYZANTINE_USERS)
-            throw new ReportNotAcceptableException("Not enough proofs to constitute an acceptable Location Report");
-    }
-
 }

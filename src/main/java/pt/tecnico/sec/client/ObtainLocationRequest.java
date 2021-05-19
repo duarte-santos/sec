@@ -39,6 +39,11 @@ public class ObtainLocationRequest {
         this._epoch = _epoch;
     }
 
+    public void checkSender(int sender_id) {
+        if ( !(sender_id == -1 || sender_id >= 1000 || sender_id == _userId) )
+            throw new IllegalArgumentException("Cannot request reports from other users.");
+    }
+
     @Override
     public String toString() {
         return "ObtainLocationRequest{" +

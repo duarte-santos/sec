@@ -2,6 +2,7 @@ package pt.tecnico.sec.server;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import pt.tecnico.sec.client.ObtainLocationRequest;
+import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
 import java.util.Objects;
 
@@ -84,6 +85,11 @@ public class BroadcastMessage {
 
     public boolean is_read() {
         return _request != null && _timestamp == null && _report == null;
+    }
+
+    public void checkOrigin() {
+        if (get_originalId() >= 1000)
+            throw new ReportNotAcceptableException("Can only accept broadcast requests originated by servers.");
     }
 
     @Override

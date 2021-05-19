@@ -39,6 +39,11 @@ public class WitnessProofsRequest {
         this._epochs = _epochs;
     }
 
+    public void checkSender(int sender_id) {
+        if ( sender_id != _userId )
+            throw new IllegalArgumentException("Cannot request proofs from other users");
+    }
+
     @Override
     public String toString() {
         return "WitnessProofsRequest{" +

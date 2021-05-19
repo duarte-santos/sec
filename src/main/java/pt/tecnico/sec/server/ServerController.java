@@ -38,7 +38,9 @@ public class ServerController {
     @PostMapping("/obtain-location-report")
     public SecureMessage getLocationClient(@RequestBody SecureMessage secureRequest) throws Exception {
         // decipher and verify request
-        ObtainLocationRequest request = _serverApp.decipherAndVerifyReportRequest(secureRequest);
+        byte[] messageBytes = _serverApp.decipherAndVerifyMessage(secureRequest);
+        ObtainLocationRequest request = ObtainLocationRequest.getFromBytes(messageBytes);
+        request.checkSender( secureRequest.get_senderId() );
 
         // broadcast Read operation
         _serverApp.refreshServerSecretKeys();
@@ -80,10 +82,12 @@ public class ServerController {
     @PostMapping("/request-proofs")
     public SecureMessage getWitnessProofs(@RequestBody SecureMessage secureRequest) throws Exception {
         // decipher and verify request
-        WitnessProofsRequest request = _serverApp.decipherAndVerifyProofsRequest(secureRequest);
+        byte[] messageBytes = _serverApp.decipherAndVerifyMessage(secureRequest);
+        WitnessProofsRequest request = WitnessProofsRequest.getFromBytes(messageBytes);
+        request.checkSender( secureRequest.get_senderId() );
+
         int witnessId = request.get_userId();
         Set<Integer> epochs = request.get_epochs();
-
         List<LocationProof> locationProofs = new ArrayList<>();
 
         // set of read operations
@@ -117,10 +121,12 @@ public class ServerController {
     @PostMapping("/users") // FIXME : regular operation? ou pode ser atomic? perguntar
     public SecureMessage getUsers(@RequestBody SecureMessage secureRequest) throws Exception {
         // decipher and verify request
-        ObtainUsersRequest request = _serverApp.decipherAndVerifyUsersRequest(secureRequest);
+        byte[] messageBytes = _serverApp.decipherAndVerifyMessage(secureRequest);
+        ObtainUsersRequest request = ObtainUsersRequest.getFromBytes(messageBytes);
+        request.checkSender(secureRequest.get_senderId());
+
         int ep = request.get_epoch();
         Location loc = request.get_location();
-
         List<SignedLocationReport> reports = new ArrayList<>();
 
         // set of read operations
@@ -225,7 +231,7 @@ public class ServerController {
 
     public int writeLocationReport(BroadcastMessage m) throws Exception {
         // Decipher and check report
-        _serverApp.verifyBroadcastMessage(m);
+        m.checkOrigin();
         DBLocationReport locationReport = m.getDBLocationReport();
         _serverApp.checkReportSignatures(new LocationReport(locationReport));
 
@@ -249,7 +255,7 @@ public class ServerController {
 
     public DBLocationReport readLocationReport(BroadcastMessage m) {
         // Decipher and check request
-        _serverApp.verifyBroadcastMessage(m);
+        m.checkOrigin();
         ObtainLocationRequest locationRequest = m.get_request();
 
         int epoch = locationRequest.get_epoch();

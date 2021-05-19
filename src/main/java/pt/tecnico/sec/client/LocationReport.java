@@ -6,6 +6,7 @@ import pt.tecnico.sec.ObjectMapperHandler;
 import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.server.DBLocationProof;
 import pt.tecnico.sec.server.DBLocationReport;
+import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
 import java.io.IOException;
 import java.security.PublicKey;
@@ -87,6 +88,11 @@ public class LocationReport {
         for (LocationProof proof : _proofs)
             if (proof.get_witnessId() == id) return proof;
         return null;
+    }
+
+    public void checkSender(int sender_id) {
+        if (sender_id != _userId)
+            throw new ReportNotAcceptableException("Cannot submit reports from other users");
     }
 
     @Override
