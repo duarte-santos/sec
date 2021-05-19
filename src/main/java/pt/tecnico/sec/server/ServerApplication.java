@@ -13,14 +13,11 @@ import pt.tecnico.sec.client.SecureMessage;
 import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
 import javax.crypto.SecretKey;
-import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.security.PublicKey;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-
-import static javax.xml.bind.DatatypeConverter.printHexBinary;
 import static pt.tecnico.sec.Constants.*;
 
 @SpringBootApplication
@@ -80,10 +77,6 @@ public class ServerApplication {
         return _userCount;
     }
 
-    public SecretKey getSecretKey(int id) {
-        return _secretKeys.get(id);
-    }
-
     public void saveSecretKey(int id, SecretKey secretKey) {
         System.out.println("Changed key for " + id);
         _secretKeys.put(id, secretKey);
@@ -117,7 +110,7 @@ public class ServerApplication {
     public SecretKey decipherAndVerifyKey(SecureMessage secureMessage) throws Exception {
         int senderId = secureMessage.get_senderId();
         PublicKey verifyKey = getVerifyKey(senderId);
-        return secureMessage.decipherAndVerifyKey( getPrivateKey(), verifyKey );
+        return secureMessage.decipherAndVerifyKey(_keyStore.getPersonalPrivateKey(), verifyKey );
     }
 
     public byte[] decipherAndVerifyMessage(SecureMessage secureMessage) throws Exception {
@@ -127,7 +120,7 @@ public class ServerApplication {
     }
 
     public static SecureMessage cipherAndSignMessage(int receiverId, byte[] messageBytes) throws Exception {
-        return new SecureMessage(_serverId + 1000, messageBytes, _secretKeys.get(receiverId), getPrivateKey());
+        return new SecureMessage(_serverId + 1000, messageBytes, _secretKeys.get(receiverId), _keyStore.getPersonalPrivateKey());
     }
 
     public DBLocationReport decipherAndVerifyReport(SecureMessage secureMessage) throws Exception {
@@ -158,16 +151,12 @@ public class ServerApplication {
         return senderId == -1;
     }
 
-    public boolean fromSelf(int senderId, int userId) {
-        return senderId == userId;
-    }
-
     public PublicKey getVerifyKey(int senderId) throws GeneralSecurityException {
         if (fromHA(senderId)) {
-            return _keyStore.getPublicKey("ha" + "0"); // int haId = 0
+            return _keyStore.getPublicKey("ha" + 0); // int haId = 0
         } else if (fromServer(senderId)) {
             int id = senderId - 1000;
-            return _keyStore.getPublicKey("server" + id);
+            return (id != _serverId) ? _keyStore.getPublicKey("server" + id) : _keyStore.getPersonalPublicKey();
         } else {
             return _keyStore.getPublicKey("user" + senderId);
         }
@@ -202,8 +191,8 @@ public class ServerApplication {
     /* ===========[        Handle Secret Keys        ]=========== */
 
     private byte[] sendSecretKey(int serverId, SecretKey keyToSend) throws Exception {
-        PublicKey serverKey = RSAKeyGenerator.readServerPublicKey(serverId);
-        SecureMessage secureRequest = new SecureMessage(_serverId+1000, keyToSend, serverKey, _keyPair.getPrivate());
+        PublicKey serverKey = _keyStore.getPublicKey("server" + serverId);
+        SecureMessage secureRequest = new SecureMessage(_serverId+1000, keyToSend, serverKey, _keyStore.getPersonalPrivateKey());
 
         HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
         SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + "/secret-key", request, SecureMessage.class);

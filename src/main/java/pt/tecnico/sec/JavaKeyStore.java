@@ -20,6 +20,7 @@ import static pt.tecnico.sec.Constants.*;
  * This class was adapted from:
  * @author https://www.baeldung.com/java-keystore
  */
+@SuppressWarnings("unused")
 public class JavaKeyStore {
 
     private KeyStore _keyStore;

@@ -1,8 +1,8 @@
 package pt.tecnico.sec.client;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import pt.tecnico.sec.ObjectMapperHandler;
 import pt.tecnico.sec.CryptoRSA;
+import pt.tecnico.sec.ObjectMapperHandler;
 import pt.tecnico.sec.server.DBLocationProof;
 
 import java.security.PublicKey;

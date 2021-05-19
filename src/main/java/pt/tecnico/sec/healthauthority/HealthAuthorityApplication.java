@@ -234,6 +234,7 @@ public class HealthAuthorityApplication {
     /* ====[              Server communication              ]==== */
     /* ========================================================== */
 
+    @SuppressWarnings("DuplicatedCode")
     private byte[] sendRequest(int serverId, SecureMessage secureRequest, SecretKey secretKey, String endpoint) throws Exception {
         PublicKey serverKey = _keyStore.getPublicKey("server" + serverId);
         HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);

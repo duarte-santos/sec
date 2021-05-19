@@ -1,22 +1,13 @@
 package pt.tecnico.sec;
 
-import org.apache.tomcat.util.http.fileupload.FileUtils;
 import pt.tecnico.sec.server.exception.InvalidSignatureException;
 
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.security.*;
-import java.security.spec.PKCS8EncodedKeySpec;
-import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
-
-import static pt.tecnico.sec.Constants.KEYS_PATH;
 
 public class CryptoRSA {
 

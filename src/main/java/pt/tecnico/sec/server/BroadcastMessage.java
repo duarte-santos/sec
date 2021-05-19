@@ -88,7 +88,7 @@ public class BroadcastMessage {
     }
 
     public void checkOrigin() {
-        if (get_originalId() >= 1000)
+        if (get_originalId() < 1000)
             throw new ReportNotAcceptableException("Can only accept broadcast requests originated by servers.");
     }
 

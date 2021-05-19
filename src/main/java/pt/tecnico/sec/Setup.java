@@ -104,12 +104,9 @@ public class Setup {
             stmt.executeUpdate(sql);
             System.out.println("Database created successfully.");
         }
-        catch (SQLException se) {
-            // Handle errors for JDBC
-            se.printStackTrace();
-        }
         catch (Exception e) {
-            // Handle errors for Class.forName
+            // SQLException: Handle errors for JDBC
+            // Exception: Handle errors for Class.forName
             e.printStackTrace();
         }
         finally {
@@ -138,6 +135,7 @@ public class Setup {
     /* ====[                    KeyStore                    ]==== */
     /* ========================================================== */
 
+    @SuppressWarnings({"SameParameterValue", "ResultOfMethodCallIgnored"})
     private static void createCleanDirectory(String path) throws IOException {
         // Create directory if it doesnt already exist
         File directory = new File(path);
@@ -162,7 +160,8 @@ public class Setup {
         public X509Certificate getCertificate() { return _certificate; }
     }
 
-    private static void createKeyStores(int userCount, int serverCount, int haCount, BouncyCastleProvider bcProvider) throws NoSuchAlgorithmException, CertificateException, KeyStoreException, IOException, OperatorCreationException, NoSuchProviderException {
+    @SuppressWarnings("SameParameterValue")
+    private static void createKeyStores(int userCount, int serverCount, int haCount, BouncyCastleProvider bcProvider) throws NoSuchAlgorithmException, CertificateException, KeyStoreException, IOException, OperatorCreationException {
         createCleanDirectory(KEYSTORE_DIRECTORY);
 
         CertificateEntry[] certificatesArray = new CertificateEntry[userCount + serverCount + haCount];
@@ -216,7 +215,7 @@ public class Setup {
     } // void createKeyStores
 
 
-    private static X509Certificate generateAndStoreKeyPairs(String name, String password, BouncyCastleProvider bcProvider) throws KeyStoreException, CertificateException, NoSuchAlgorithmException, IOException, OperatorCreationException, NoSuchProviderException {
+    private static X509Certificate generateAndStoreKeyPairs(String name, String password, BouncyCastleProvider bcProvider) throws KeyStoreException, CertificateException, NoSuchAlgorithmException, IOException, OperatorCreationException {
         System.out.println("Name: " + name + ", \tPassword: " + password);
 
         // Create a KeyStore instance

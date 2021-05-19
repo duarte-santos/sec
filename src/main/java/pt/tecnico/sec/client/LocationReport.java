@@ -2,24 +2,21 @@ package pt.tecnico.sec.client;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import pt.tecnico.sec.JavaKeyStore;
-import pt.tecnico.sec.ObjectMapperHandler;
 import pt.tecnico.sec.CryptoRSA;
+import pt.tecnico.sec.ObjectMapperHandler;
 import pt.tecnico.sec.server.DBLocationProof;
 import pt.tecnico.sec.server.DBLocationReport;
 import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
 import java.io.IOException;
-import java.security.KeyStoreException;
-import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
-import java.security.cert.CertificateException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import static pt.tecnico.sec.Constants.*;
+import static pt.tecnico.sec.Constants.DETECTION_RANGE;
+import static pt.tecnico.sec.Constants.SUCCESS;
 
 @SuppressWarnings("unused")
 @JsonIgnoreProperties(ignoreUnknown = true)

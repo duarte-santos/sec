@@ -12,7 +12,6 @@ import javax.crypto.SecretKey;
 import java.security.PublicKey;
 import java.util.*;
 
-import static javax.xml.bind.DatatypeConverter.printHexBinary;
 import static pt.tecnico.sec.Constants.*;
 
 public class User {
@@ -274,6 +273,7 @@ public class User {
     /* ====[              Server communication              ]==== */
     /* ========================================================== */
 
+    @SuppressWarnings("DuplicatedCode")
     private byte[] sendRequest(int serverId, SecureMessage secureRequest, SecretKey secretKey, String endpoint) throws Exception {
         PublicKey serverKey = _keyStore.getPublicKey("server" + serverId);
         HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
