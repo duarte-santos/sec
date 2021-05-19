@@ -1,7 +1,11 @@
 package pt.tecnico.sec.server;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import java.util.Objects;
 
+@SuppressWarnings("unused")
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class BroadcastId {
     private int _senderId;
     private int _id;

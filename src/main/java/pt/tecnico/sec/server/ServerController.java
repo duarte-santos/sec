@@ -169,41 +169,65 @@ public class ServerController {
     /* ====[              Double Echo Broadcast             ]==== */
     /* ========================================================== */
 
-    /* ====[                   W R I T E                    ]==== */
-
-
-    @PostMapping("/broadcast-send-w")
+    @PostMapping("/broadcast-send")
     public void doubleEchoBroadcastSend(@RequestBody SecureMessage message) throws Exception {
         int senderId = message.get_senderId();
         System.out.println("[*] Received a @SEND Request from " + senderId);
-        BroadcastWrite bw = _serverApp.decipherAndVerifyBroadcastWrite(message);
-        BroadcastServiceW b = _serverApp.getBroadcastServiceW(bw.get_broadcastId());
-        b.broadcastSENDDeliver(bw);
+        BroadcastMessage m = _serverApp.decipherAndVerifyBroadcastMessage(message);
+        BroadcastService b = _serverApp.getBroadcastService(m.get_broadcastId());
+        b.broadcastSENDDeliver(m);
     }
 
-    @PostMapping("/broadcast-echo-w")
+    @PostMapping("/broadcast-echo")
     public void doubleEchoBroadcastEcho(@RequestBody SecureMessage secureMessage) throws Exception {
         int senderId = secureMessage.get_senderId();
         System.out.println("[*] Received an @ECHO Request from " + senderId);
-        BroadcastWrite bw = _serverApp.decipherAndVerifyBroadcastWrite(secureMessage);
-        BroadcastServiceW b = _serverApp.getBroadcastServiceW(bw.get_broadcastId());
-        b.broadcastECHODeliver(secureMessage.get_senderId()-1000, bw);
+        BroadcastMessage m = _serverApp.decipherAndVerifyBroadcastMessage(secureMessage);
+        BroadcastService b = _serverApp.getBroadcastService(m.get_broadcastId());
+        b.broadcastECHODeliver(secureMessage.get_senderId()-1000, m);
     }
 
-    @PostMapping("/broadcast-ready-w")
+    @PostMapping("/broadcast-ready")
     public void doubleEchoBroadcastReady(@RequestBody SecureMessage secureMessage) throws Exception {
         int senderId = secureMessage.get_senderId();
         System.out.println("[*] Received a @READY Request from " + senderId);
-        BroadcastWrite bw = _serverApp.decipherAndVerifyBroadcastWrite(secureMessage);
-        BroadcastServiceW b = _serverApp.getBroadcastServiceW(bw.get_broadcastId());
-        boolean delivered = b.broadcastREADYDeliver(secureMessage.get_senderId()-1000, bw);
-        if (delivered) writeLocationReport(bw);
+        BroadcastMessage m = _serverApp.decipherAndVerifyBroadcastMessage(secureMessage);
+        BroadcastService b = _serverApp.getBroadcastService(m.get_broadcastId());
+        boolean delivered = b.broadcastREADYDeliver(secureMessage.get_senderId()-1000, m);
+        if (!delivered) return;
 
+        // Deliver
+        BroadcastMessage response;
+        if (m.is_write()) {
+            int timestamp = writeLocationReport(m);
+            response = new BroadcastMessage(m.get_broadcastId(), timestamp);
+        } else if (m.is_read()) {
+            DBLocationReport report = readLocationReport(m);
+            response = new BroadcastMessage(m.get_broadcastId(), report);
+        } else return;
+
+        // Encrypt and send response
+        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(response);
+        _serverApp.postToServer(m.get_originalId() - 1000, bytes, "/broadcast-deliver");
     }
 
-    public void writeLocationReport(BroadcastWrite bw) throws Exception {
+    @PostMapping("/broadcast-deliver")
+    public void doubleEchoBroadcastDeliver(@RequestBody SecureMessage secureMessage) throws Exception {
+        System.out.println("[*] Received a @DELIVER Request from " + secureMessage.get_senderId());
+        BroadcastMessage m = _serverApp.decipherAndVerifyBroadcastMessage(secureMessage);
+        _serverApp.broadcastDeliver(secureMessage.get_senderId()-1000, m);
+    }
+
+
+    /* ========================================================== */
+    /* ====[                 Access Database                ]==== */
+    /* ========================================================== */
+
+    public int writeLocationReport(BroadcastMessage m) throws Exception {
         // Decipher and check report
-        DBLocationReport locationReport = _serverApp.verifyBroadcastRequestW(bw);
+        _serverApp.verifyBroadcastMessage(m);
+        DBLocationReport locationReport = m.getDBLocationReport();
+        _serverApp.checkReportSignatures(new LocationReport(locationReport));
 
         int epoch = locationReport.get_epoch();
         int userId = locationReport.get_userId();
@@ -220,69 +244,18 @@ public class ServerController {
             _reportRepository.save(locationReport);
         }
 
-        // Encrypt and send response
-        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(timestamp);
-        _serverApp.postToServer(bw.get_originalId()-1000, bytes, "/broadcast-deliver-w");
+        return timestamp;
     }
 
-    @PostMapping("/broadcast-deliver-w")
-    public void doubleEchoBroadcastDeliver(@RequestBody SecureMessage secureMessage) throws Exception {
-        System.out.println("[*] Received a @DELIVER Request from " + secureMessage.get_senderId());
-        int timestamp = _serverApp.decipherAndVerifyDeliverW(secureMessage);
-        _serverApp.broadcastDeliverW(secureMessage.get_senderId()-1000, timestamp);
-    }
-
-
-    /* ====[                    R E A D                     ]==== */
-
-    @PostMapping("/broadcast-send-r")
-    public void doubleEchoBroadcastSend_read(@RequestBody SecureMessage message) throws Exception {
-        int senderId = message.get_senderId();
-        System.out.println("[*] Received a @SEND Request from " + senderId);
-        BroadcastRead br = _serverApp.decipherAndVerifyBroadcastRead(message);
-        BroadcastServiceR b = _serverApp.getBroadcastServiceR(br.get_broadcastId());
-        b.broadcastSENDDeliver(br);
-    }
-
-    @PostMapping("/broadcast-echo-r")
-    public void doubleEchoBroadcastEcho_read(@RequestBody SecureMessage secureMessage) throws Exception {
-        int senderId = secureMessage.get_senderId();
-        System.out.println("[*] Received an @ECHO Request from " + senderId);
-        BroadcastRead br = _serverApp.decipherAndVerifyBroadcastRead(secureMessage);
-        BroadcastServiceR b = _serverApp.getBroadcastServiceR(br.get_broadcastId());
-        b.broadcastECHODeliver(secureMessage.get_senderId()-1000, br);
-    }
-
-    @PostMapping("/broadcast-ready-r")
-    public void doubleEchoBroadcastReady_read(@RequestBody SecureMessage secureMessage) throws Exception {
-        int senderId = secureMessage.get_senderId();
-        System.out.println("[*] Received a @READY Request from " + senderId);
-        BroadcastRead br = _serverApp.decipherAndVerifyBroadcastRead(secureMessage);
-        BroadcastServiceR b = _serverApp.getBroadcastServiceR(br.get_broadcastId());
-        boolean delivered = b.broadcastREADYDeliver(secureMessage.get_senderId()-1000, br);
-        if (delivered) readLocationReport(br);
-    }
-
-    public void readLocationReport(BroadcastRead br) throws Exception {
+    public DBLocationReport readLocationReport(BroadcastMessage m) {
         // Decipher and check request
-        ObtainLocationRequest locationRequest = _serverApp.verifyBroadcastRequestR(br);
+        _serverApp.verifyBroadcastMessage(m);
+        ObtainLocationRequest locationRequest = m.get_request();
 
         int epoch = locationRequest.get_epoch();
         int userId = locationRequest.get_userId();
 
         // Find requested report
-        DBLocationReport report = _reportRepository.findReportByEpochAndUser(userId, epoch);
-
-        // Encrypt and send response
-        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(report);
-        _serverApp.postToServer(br.get_originalId()-1000, bytes, "/broadcast-deliver-r");
+        return _reportRepository.findReportByEpochAndUser(userId, epoch);
     }
-
-    @PostMapping("/broadcast-deliver-r")
-    public void doubleEchoBroadcastDeliver_read(@RequestBody SecureMessage secureMessage) throws Exception {
-        System.out.println("[*] Received a @DELIVER Request from " + secureMessage.get_senderId());
-        DBLocationReport report = _serverApp.decipherAndVerifyDeliverR(secureMessage);
-        _serverApp.broadcastDeliverR(secureMessage.get_senderId()-1000, report);
-    }
-
 }
