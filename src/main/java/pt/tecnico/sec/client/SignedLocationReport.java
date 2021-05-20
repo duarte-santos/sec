@@ -79,8 +79,8 @@ public class SignedLocationReport {
             throw new IllegalArgumentException("Signature verify failed!");
     }
 
-    public int verifyProofs(List<PublicKey> clientKeys) throws Exception {
-        return _report.verifyProofs(clientKeys);
+    public void verifyProofs(List<PublicKey> clientKeys) throws Exception {
+        _report.verifyProofs(clientKeys);
     }
 
     @Override

@@ -12,7 +12,6 @@ import pt.tecnico.sec.EnvironmentGenerator;
 import pt.tecnico.sec.JavaKeyStore;
 
 import java.io.IOException;
-import java.security.PublicKey;
 import java.util.*;
 
 import static java.lang.System.exit;
@@ -23,7 +22,6 @@ public class ClientApplication {
     private static Environment _environment;
     private static int _epoch;
     private static User _user;
-    private static JavaKeyStore _keyStore;
 
     public static void main(String[] args) {
         try {
@@ -47,11 +45,11 @@ public class ClientApplication {
             // load keystore
             String keyStoreName = "user" + id + KEYSTORE_EXTENSION;
             String keyStorePassword = "user" + id;
-            _keyStore = new JavaKeyStore(KEYSTORE_TYPE, keyStorePassword, keyStoreName);
-            _keyStore.loadKeyStore();
+            JavaKeyStore keyStore = new JavaKeyStore(KEYSTORE_TYPE, keyStorePassword, keyStoreName);
+            keyStore.loadKeyStore();
 
             // create user
-            _user = new User(_environment.getGrid(_epoch), id, serverCount, _keyStore);
+            _user = new User(_environment.getGrid(_epoch), id, serverCount, keyStore);
             System.out.println("The user \"C00lD0060 No." + id + "\" has SPAWNED.\n");
 
             // create spring application
@@ -140,8 +138,7 @@ public class ClientApplication {
                                 if (report == null)
                                     System.out.println("The requested report doesn't exist");
                                 else {
-                                    List<PublicKey> clientKeys = _keyStore.getAllUsersPublicKeys(_user.getId());
-                                    System.out.println( "User " + report.get_userId() + ", epoch " + ep + ", location: " + report.get_location() + "\nReport: " + report.printReport(clientKeys) );
+                                    System.out.println( "User " + report.get_userId() + ", epoch " + ep + ", location: " + report.get_location() + "\nReport: " + report );
                                 }
                             }
                             catch (Exception e) {

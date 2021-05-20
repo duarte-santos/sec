@@ -56,7 +56,6 @@ public class BroadcastMessage {
     }
 
     public Integer get_timestamp() {
-        System.out.println("get_timestamp: " + _timestamp);
         return _timestamp;
     }
 

@@ -15,7 +15,8 @@ import pt.tecnico.sec.client.*;
 import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
 import javax.crypto.SecretKey;
-import java.security.*;
+import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.util.*;
 
 import static java.lang.System.exit;
@@ -88,8 +89,7 @@ public class HealthAuthorityApplication {
                             LocationReport report = obtainReport(id, epoch);
                             if (report == null) System.out.println("Location Report not found");
                             else {
-                                List<PublicKey> clientKeys = _keyStore.getAllUsersPublicKeys();
-                                System.out.println("User " + id + ", epoch " + epoch + ", location: " + report.get_location() + "\nReport: " + report.printReport(clientKeys));
+                                System.out.println("User " + id + ", epoch " + epoch + ", location: " + report.get_location() + "\nReport: " + report);
                             }
                         }
 
@@ -148,10 +148,11 @@ public class HealthAuthorityApplication {
     public LocationReport checkLocationReport(SignedLocationReport signedReport, PublicKey verifyKey) throws Exception {
         // Check report
         signedReport.verify(verifyKey);
-        List<PublicKey> clientKeys = _keyStore.getAllUsersPublicKeys();
-        int validProofCount = signedReport.verifyProofs(clientKeys);
-        if (validProofCount <= BYZANTINE_USERS)
-            throw new ReportNotAcceptableException("Not enough proofs to constitute an acceptable Location Report");
+        try {
+            signedReport.verifyProofs( _keyStore.getAllUsersPublicKeys() );
+        } catch (ReportNotAcceptableException e) {
+            throw new IllegalArgumentException("Bad server response!");
+        }
 
         // Return safe report
         return signedReport.get_report();
@@ -274,9 +275,9 @@ public class HealthAuthorityApplication {
     /* ====[               Handle Secret Keys               ]==== */
     /* ========================================================== */
 
-    public boolean secretKeyValid(int serverId) throws UnrecoverableEntryException, KeyStoreException, NoSuchAlgorithmException {
-        SecretKey secret = _keyStore.getSecretKey("server" + serverId);
-        return secret != null && _sKeysUsages.get(serverId) <= SECRET_KEY_DURATION;
+    public boolean secretKeyValid(int serverId) {
+        Integer usages = _sKeysUsages.get(serverId);
+        return usages != null && usages <= SECRET_KEY_DURATION;
     }
 
     public SecretKey updateSecretKey(int serverId) throws Exception {

@@ -95,21 +95,13 @@ public class LocationReport {
             throw new ReportNotAcceptableException("Cannot submit reports from other users");
     }
 
-    public String printReport(List<PublicKey> clientsKeys) {
-        return "LocationReport{" +
-                "_userId=" + _userId +
-                ", _epoch=" + _epoch +
-                ", _location=" + _location +
-                ", _proofs=" + getValidProofs(clientsKeys) +
-                '}';
-    }
-
     @Override
     public String toString() {
         return "LocationReport{" +
                 "_userId=" + _userId +
                 ", _epoch=" + _epoch +
                 ", _location=" + _location +
+                ", _proofs=" + _proofs +
                 '}';
     }
 
@@ -136,16 +128,15 @@ public class LocationReport {
                 || proofData.get_witnessId() == _userId);
     }
 
-    public int verifyProofs(List<PublicKey> publicKeys) throws Exception {
+    public void verifyProofs(List<PublicKey> publicKeys) throws Exception {
         Set<Integer> prevWitnessIds = new HashSet<>();
-
         for (LocationProof signedProof : _proofs) {
             if ( isProofValid(signedProof, prevWitnessIds, publicKeys.get(signedProof.get_witnessId())) )
                 prevWitnessIds.add( signedProof.get_witnessId() ); // keep track of witnesses, can't be repeated
-            else
-                System.out.println("Invalid LocationProof: " + signedProof);
+            else {
+                throw new ReportNotAcceptableException("Invalid LocationProof: " + signedProof);
+            }
         }
-        return prevWitnessIds.size(); // valid proof count
     }
 
     public List<LocationProof> getValidProofs(List<PublicKey> publicKeys) {
@@ -163,5 +154,18 @@ public class LocationReport {
             }
         }
         return validProofs;
+    }
+
+    public void removeInvalidProofs(List<PublicKey> publicKeys) throws Exception {
+        Set<Integer> prevWitnessIds = new HashSet<>();
+
+        for (LocationProof signedProof : _proofs) {
+            if ( isProofValid(signedProof, prevWitnessIds, publicKeys.get(signedProof.get_witnessId())) )
+                prevWitnessIds.add( signedProof.get_witnessId() ); // keep track of witnesses, can't be repeated
+            else {
+                _proofs.remove(signedProof);
+                System.out.println("Found invalid proof, will remove: " + signedProof);
+            }
+        }
     }
 }

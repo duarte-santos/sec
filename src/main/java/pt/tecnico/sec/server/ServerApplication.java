@@ -5,6 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.http.HttpEntity;
 import org.springframework.web.client.RestTemplate;
 import pt.tecnico.sec.AESKeyGenerator;
+import pt.tecnico.sec.CryptoRSA;
 import pt.tecnico.sec.JavaKeyStore;
 import pt.tecnico.sec.ObjectMapperHandler;
 import pt.tecnico.sec.client.LocationReport;
@@ -171,6 +172,20 @@ public class ServerApplication {
         return new DBLocationReport(locationReport, secureMessage.get_signature());
     }
 
+    public void verifyDBReport(DBLocationReport report) {
+        try {
+            LocationReport originalReport = new LocationReport(report);
+            byte[] bytes = ObjectMapperHandler.writeValueAsBytes(originalReport);
+            String sig = report.get_signature();
+            PublicKey verifyKey = getPublicKey(report.get_userId());
+            if (sig == null || !CryptoRSA.verify(bytes, sig, verifyKey))
+                throw new IllegalArgumentException("Report signature verify failed!");
+            checkReportSignatures(originalReport);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("DBReport failed verification!");
+        }
+    }
+
     public BroadcastMessage decipherAndVerifyBroadcastMessage(SecureMessage secureMessage) throws Exception {
         byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
         BroadcastMessage m = ObjectMapperHandler.getBroadcastMessageFromBytes(messageBytes);
@@ -207,9 +222,8 @@ public class ServerApplication {
     }
 
     public void checkReportSignatures(LocationReport report) throws Exception {
-        List<PublicKey> clientKeys = _keyStore.getAllUsersPublicKeys();
-        int validProofCount = report.verifyProofs(clientKeys);
-        if (validProofCount <= BYZANTINE_USERS)
+        report.verifyProofs( _keyStore.getAllUsersPublicKeys() );
+        if (report.get_proofs().size() <= F_USERS)
             throw new ReportNotAcceptableException("Not enough proofs to constitute an acceptable Location Report");
     }
 
@@ -346,6 +360,7 @@ public class ServerApplication {
         BroadcastMessage m = new BroadcastMessage(broadcastId, report);
 
         _myBroadcastW = new BroadcastService(this, broadcastId);
+        System.out.println("Broadcasting write...");
         _myBroadcastW.broadcastSend(m);
         _broadcastCount++;
         _myBroadcastW = null;
@@ -359,23 +374,34 @@ public class ServerApplication {
         BroadcastId broadcastId = new BroadcastId(_serverId+1000, _broadcastCount);
         BroadcastMessage m = new BroadcastMessage(broadcastId, locationRequest);
         _myBroadcastR = new BroadcastService(this, broadcastId);
+        System.out.println("Broadcasting read...");
         _myBroadcastR.broadcastSend(m);
         _broadcastCount++;
 
         // Choose the report with the largest timestamp
         DBLocationReport finalLocationReport = null;
         for (BroadcastMessage deliver : _myBroadcastR.get_delivers()) {
-            if (deliver == null || deliver.get_report() == null) continue;
-            DBLocationReport report = deliver.get_report();
-            if (finalLocationReport == null || report.get_timestamp() > finalLocationReport.get_timestamp())
-                finalLocationReport = report;
+            try {
+                if (deliver == null || deliver.get_report() == null) continue;
+                DBLocationReport report = deliver.get_report();
+                verifyDBReport(report);
+                if (finalLocationReport == null || report.get_timestamp() > finalLocationReport.get_timestamp())
+                    finalLocationReport = report;
+            } catch (IllegalArgumentException ignored) {} // ignore invalid responses
         }
         _myBroadcastR = null;
 
-        // Atomic Register: Write-back phase after Read
-        if (finalLocationReport != null) broadcastW(finalLocationReport); // FIXME : only sender or all?
-
         return finalLocationReport;
+    }
+
+    public DBLocationReport atomicBroadcastR(ObtainLocationRequest locationRequest) throws Exception {
+        DBLocationReport locationReport = broadcastR(locationRequest);
+
+        // Atomic Register: Write-back phase after Read
+        if (locationReport != null)
+            broadcastW(locationReport);
+
+        return locationReport;
     }
 
     /* ====[                   A S Y N C                    ]==== */
@@ -397,7 +423,7 @@ public class ServerApplication {
                 byte[] responseBytes = ServerApplication.this.postToServer(_serverId, _messageBytes, _endpoint);
                 handleBroadcastMessageResponse(responseBytes);
             } catch (Exception e) {
-                System.out.println(e.getMessage()); //TODO handle illegal argument exceptions
+                System.out.println(e.getMessage());
             }
         }
 

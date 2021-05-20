@@ -6,7 +6,7 @@ import pt.tecnico.sec.client.ObtainLocationRequest;
 import java.util.HashMap;
 import java.util.Map;
 
-import static pt.tecnico.sec.Constants.FAULTS;
+import static pt.tecnico.sec.Constants.F_SERVERS;
 
 public class BroadcastService {
     private final ServerApplication _serverApp;
@@ -97,9 +97,8 @@ public class BroadcastService {
         _request = m;
 
         // Start threads to broadcast
-        System.out.println("Broadcasting...");
         _serverApp.postToServers(bytes, "/broadcast-send");
-        while (countAcks() <= (_serverCount + FAULTS) / 2) {
+        while (countAcks() <= (_serverCount + F_SERVERS) / 2) {
             // empty
         }
     }
@@ -118,7 +117,7 @@ public class BroadcastService {
         if (_echos[id] == null) _echos[id] = m;
 
         if (!_sentReady) {
-            BroadcastMessage message = searchForMajorityMessage(_echos, (_serverCount+FAULTS)/2);
+            BroadcastMessage message = searchForMajorityMessage(_echos, (_serverCount+ F_SERVERS)/2);
             if (message != null) {
                 _sentReady = true;
                 byte[] bytes = ObjectMapperHandler.writeValueAsBytes(message);
@@ -131,7 +130,7 @@ public class BroadcastService {
     public boolean broadcastREADYDeliver(int id, BroadcastMessage m) throws Exception {
         if (_readys[id] == null) _readys[id] = m;
         if (!_sentReady) {
-            BroadcastMessage message = searchForMajorityMessage(_readys, FAULTS); // FIXME : f is faults or byzantines?
+            BroadcastMessage message = searchForMajorityMessage(_readys, F_SERVERS);
             if (message != null) {
                 _sentReady = true;
                 byte[] bytes = ObjectMapperHandler.writeValueAsBytes(message);
@@ -140,7 +139,7 @@ public class BroadcastService {
             else return false; // for efficiency
         }
         if (!_delivered) {
-            BroadcastMessage message = searchForMajorityMessage(_readys, 2*FAULTS); // FIXME : f is faults or byzantines?
+            BroadcastMessage message = searchForMajorityMessage(_readys, 2* F_SERVERS);
             if (message != null) {
                 _delivered = true;
                 return true;

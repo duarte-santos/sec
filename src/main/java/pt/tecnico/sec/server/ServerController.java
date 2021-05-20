@@ -49,7 +49,7 @@ public class ServerController {
 
             // broadcast Read operation
             _serverApp.refreshServerSecretKeys();
-            DBLocationReport dbLocationReport = _serverApp.broadcastR(request);
+            DBLocationReport dbLocationReport = _serverApp.atomicBroadcastR(request);
             if (dbLocationReport == null)
                 return null;
 
@@ -136,7 +136,7 @@ public class ServerController {
     /* ========================================================== */
 
     @SuppressWarnings("EqualsBetweenInconvertibleTypes")
-    @PostMapping("/users") // FIXME : regular operation? ou pode ser atomic? perguntar
+    @PostMapping("/users")
     public SecureMessage getUsers(@RequestBody SecureMessage secureRequest) {
         try {
             // decipher and verify request
@@ -212,7 +212,7 @@ public class ServerController {
     /* ========================================================== */
 
     @PostMapping("/broadcast-send")
-    public SecureMessage doubleEchoBroadcastSend(@RequestBody SecureMessage message) {
+    public SecureMessage broadcastSend(@RequestBody SecureMessage message) {
         int senderId = message.get_senderId();
         try {
             System.out.println("[*] Received a @SEND Request from " + senderId);
@@ -226,7 +226,7 @@ public class ServerController {
     }
 
     @PostMapping("/broadcast-echo")
-    public SecureMessage doubleEchoBroadcastEcho(@RequestBody SecureMessage secureMessage) {
+    public SecureMessage broadcastEcho(@RequestBody SecureMessage secureMessage) {
         int senderId = secureMessage.get_senderId();
         try {
             System.out.println("[*] Received an @ECHO Request from " + senderId);
@@ -241,7 +241,7 @@ public class ServerController {
     }
 
     @PostMapping("/broadcast-ready")
-    public SecureMessage doubleEchoBroadcastReady(@RequestBody SecureMessage secureMessage) {
+    public SecureMessage broadcastReady(@RequestBody SecureMessage secureMessage) {
         int senderId = secureMessage.get_senderId();
         try {
             System.out.println("[*] Received a @READY Request from " + senderId);
@@ -272,7 +272,7 @@ public class ServerController {
     }
 
     @PostMapping("/broadcast-deliver")
-    public SecureMessage doubleEchoBroadcastDeliver(@RequestBody SecureMessage secureMessage) {
+    public SecureMessage broadcastDeliver(@RequestBody SecureMessage secureMessage) {
         int senderId = secureMessage.get_senderId();
         try {
             System.out.println("[*] Received a @DELIVER Request from " + senderId);
@@ -290,11 +290,11 @@ public class ServerController {
     /* ====[                 Access Database                ]==== */
     /* ========================================================== */
 
-    public int writeLocationReport(BroadcastMessage m) throws Exception {
+    public int writeLocationReport(BroadcastMessage m) {
         // Decipher and check report
         m.checkOrigin();
         DBLocationReport locationReport = m.getDBLocationReport();
-        _serverApp.checkReportSignatures(new LocationReport(locationReport));
+        _serverApp.verifyDBReport(locationReport);
 
         int epoch = locationReport.get_epoch();
         int userId = locationReport.get_userId();

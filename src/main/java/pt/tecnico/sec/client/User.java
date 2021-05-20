@@ -178,11 +178,11 @@ public class User {
         // Build report
         List<LocationProof> epochProofs = getEpochProofs(epoch);
         LocationReport locationReport = new LocationReport(_id, epoch, epochLocation, epochProofs);
-        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(locationReport);
-        List<PublicKey> clientKeys = _keyStore.getAllUsersPublicKeys(_id);
-        System.out.println(locationReport.printReport(clientKeys));
+        locationReport.removeInvalidProofs( _keyStore.getAllUsersPublicKeys(_id) );
+        System.out.println(locationReport);
 
         // Send report
+        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(locationReport);
         byte[] responseBytes = postToServers(bytes, "/submit-location-report");
 
         // Check response
@@ -226,11 +226,11 @@ public class User {
     public LocationReport checkLocationReport(SignedLocationReport signedReport, PublicKey verifyKey) throws Exception {
         // Check report
         signedReport.verify(verifyKey);
-
-        List<PublicKey> clientKeys = _keyStore.getAllUsersPublicKeys(_id);
-        int validProofCount = signedReport.verifyProofs(clientKeys);
-        if (validProofCount <= BYZANTINE_USERS)
-            throw new ReportNotAcceptableException("Not enough proofs to constitute an acceptable Location Report");
+        try {
+            signedReport.verifyProofs( _keyStore.getAllUsersPublicKeys(_id) );
+        } catch (ReportNotAcceptableException e) {
+            throw new IllegalArgumentException("Bad server response!");
+        }
 
         // Return safe report
         return signedReport.get_report();
@@ -265,7 +265,7 @@ public class User {
         List<LocationProof> proofs = ObjectMapperHandler.getLocationProofListFromBytes(responseBytes);
 
         // Check content
-        for (LocationProof proof : proofs) //FIXME invalid proofs?
+        for (LocationProof proof : proofs)
             if (proof.get_witnessId() != witnessId || !epochs.contains( proof.get_epoch() ))
                 throw new IllegalArgumentException("Bad server response!");
 
