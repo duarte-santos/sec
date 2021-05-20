@@ -3,6 +3,8 @@ package pt.tecnico.sec.client;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import pt.tecnico.sec.AESKeyGenerator;
 import pt.tecnico.sec.CryptoRSA;
+import pt.tecnico.sec.ObjectMapperHandler;
+import pt.tecnico.sec.server.BroadcastMessage;
 
 import javax.crypto.SecretKey;
 import java.security.PrivateKey;
@@ -23,6 +25,17 @@ public class SecureMessage {
         _senderId = senderId;
         _cipheredMessage = cipheredMessage;
         _signature = signature;
+    }
+
+    public SecureMessage(int senderId, Message message, SecretKey cipherKey, PrivateKey signKey) throws Exception {
+        _senderId = senderId;
+
+        // encrypt message with given secret key
+        byte[] messageBytes = ObjectMapperHandler.writeValueAsBytes(message);
+        _cipheredMessage = AESKeyGenerator.encrypt(messageBytes, cipherKey);
+
+        // sign message with given private sign key
+        _signature = CryptoRSA.sign(messageBytes, signKey);
     }
 
     public SecureMessage(int senderId, byte[] messageBytes, SecretKey cipherKey, PrivateKey signKey) throws Exception {
@@ -50,11 +63,24 @@ public class SecureMessage {
     }
 
     // Used to respond to secret Key exchange
-    public SecureMessage(int senderId, byte[] messageBytes, PublicKey cipherKey, PrivateKey signKey) throws Exception {
+    public SecureMessage(int senderId, Message message, PublicKey cipherKey, PrivateKey signKey) throws Exception {
         _senderId = senderId;
 
         // encrypt message with given public cipher key
+        byte[] messageBytes = ObjectMapperHandler.writeValueAsBytes(message);
         _cipheredMessage = CryptoRSA.encrypt(messageBytes, cipherKey);
+
+        // sign message with given private sign key
+        _signature = CryptoRSA.sign(messageBytes, signKey);
+    }
+
+    // Used in broadcasts
+    public SecureMessage(int senderId, BroadcastMessage message, SecretKey cipherKey, PrivateKey signKey) throws Exception {
+        _senderId = senderId;
+
+        // encrypt message with given secret key
+        byte[] messageBytes = ObjectMapperHandler.writeValueAsBytes(message);
+        _cipheredMessage = AESKeyGenerator.encrypt(messageBytes, cipherKey);
 
         // sign message with given private sign key
         _signature = CryptoRSA.sign(messageBytes, signKey);
@@ -110,6 +136,12 @@ public class SecureMessage {
     /* ====[             Ciphers and Signatures             ]==== */
     /* ========================================================== */
 
+    public Message decipherAndVerifyMessage(SecretKey decipherKey, PublicKey verifyKey) throws Exception {
+        byte[] messageBytes = decipher(decipherKey);
+        verify(messageBytes, verifyKey);
+        return ObjectMapperHandler.getMessageFromBytes(messageBytes);
+    }
+
     public byte[] decipherAndVerify(SecretKey decipherKey, PublicKey verifyKey) throws Exception {
         byte[] messageBytes = decipher(decipherKey);
         verify(messageBytes, verifyKey);
@@ -124,10 +156,10 @@ public class SecureMessage {
         return AESKeyGenerator.fromEncoded(encodedKey);
     }
 
-    public byte[] decipherAndVerify(PrivateKey decipherKey, PublicKey verifyKey) throws Exception {
+    public Message decipherAndVerifyMessage(PrivateKey decipherKey, PublicKey verifyKey) throws Exception {
         byte[] messageBytes = CryptoRSA.decrypt(_cipheredMessage, decipherKey);
         verify(messageBytes, verifyKey);
-        return messageBytes;
+        return ObjectMapperHandler.getMessageFromBytes(messageBytes);
     }
 
     public byte[] decipher(SecretKey decipherKey) throws Exception {
@@ -137,5 +169,11 @@ public class SecureMessage {
     public void verify(byte[] messageBytes, PublicKey verifyKey) {
         if (_signature == null || !CryptoRSA.verify(messageBytes, _signature, verifyKey))
             throw new IllegalArgumentException("Signature verify failed!");
+    }
+
+    public BroadcastMessage decipherAndVerifyBroadcastMessage(SecretKey decipherKey, PublicKey verifyKey) throws Exception {
+        byte[] messageBytes = decipher(decipherKey);
+        verify(messageBytes, verifyKey);
+        return ObjectMapperHandler.getBroadcastMessageFromBytes(messageBytes);
     }
 }

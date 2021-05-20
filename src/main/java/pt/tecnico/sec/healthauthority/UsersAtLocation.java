@@ -1,5 +1,6 @@
 package pt.tecnico.sec.healthauthority;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import pt.tecnico.sec.client.Location;
 import pt.tecnico.sec.client.LocationReport;
@@ -12,6 +13,7 @@ import java.util.List;
 import java.util.Set;
 
 @SuppressWarnings("unused")
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class UsersAtLocation {
     private Location _location;
     private int _epoch;
@@ -55,14 +57,14 @@ public class UsersAtLocation {
         this._reports = _reports;
     }
 
-    public Set<Integer> getUserIds() {
+    public Set<Integer> retrieveUserIds() {
         Set<Integer> userIds = new HashSet<>();
         for (SignedLocationReport report : _reports)
             userIds.add(report.get_userId());
         return userIds;
     }
 
-    public List<LocationReport> getLocationReports() {
+    public List<LocationReport> retrieveLocationReports() {
         List<LocationReport> locationReports = new ArrayList<>();
         for (SignedLocationReport signedReport : _reports)
             locationReports.add(signedReport.get_report());
@@ -72,7 +74,7 @@ public class UsersAtLocation {
     @Override
     public String toString() {
         if (_reports.size() == 0) return "No users at location " + _location + " and epoch " + _epoch;
-        else return "Users at location " + _location + " and epoch " + _epoch + ": " + getUserIds()
-                + "\nReports: " + getLocationReports();
+        else return "Users at location " + _location + " and epoch " + _epoch + ": " + retrieveUserIds()
+                + "\nReports: " + retrieveLocationReports();
     }
 }

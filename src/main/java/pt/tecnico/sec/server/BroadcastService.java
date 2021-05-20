@@ -1,6 +1,5 @@
 package pt.tecnico.sec.server;
 
-import pt.tecnico.sec.ObjectMapperHandler;
 import pt.tecnico.sec.client.ObtainLocationRequest;
 
 import java.util.HashMap;
@@ -90,51 +89,46 @@ public class BroadcastService {
 
     // Send SEND
     @SuppressWarnings("StatementWithEmptyBody")
-    public void broadcastSend(BroadcastMessage m) throws Exception {
+    public void broadcastSend(BroadcastMessage m) {
         _delivers = new BroadcastMessage[_serverCount];
-
-        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(m);
         _request = m;
 
         // Start threads to broadcast
-        _serverApp.postToServers(bytes, "/broadcast-send");
+        _serverApp.postToServers(m, "/broadcast-send");
         while (countAcks() <= (_serverCount + F_SERVERS) / 2) {
             // empty
         }
     }
 
     // Deliver SEND -> Send ECHO
-    public void broadcastSENDDeliver(BroadcastMessage m) throws Exception {
+    public void broadcastSENDDeliver(BroadcastMessage m) {
         if (!_sentEcho) {
-            byte[] bytes = ObjectMapperHandler.writeValueAsBytes(m);
             _sentEcho = true;
-            _serverApp.postToServers(bytes, "/broadcast-echo");
+            _serverApp.postToServers(m, "/broadcast-echo");
         }
     }
 
     // Deliver ECHO -> Send READY
-    public void broadcastECHODeliver(int id, BroadcastMessage m) throws Exception {
+    public void broadcastECHODeliver(int id, BroadcastMessage m) {
         if (_echos[id] == null) _echos[id] = m;
 
         if (!_sentReady) {
             BroadcastMessage message = searchForMajorityMessage(_echos, (_serverCount+ F_SERVERS)/2);
             if (message != null) {
                 _sentReady = true;
-                byte[] bytes = ObjectMapperHandler.writeValueAsBytes(message);
-                _serverApp.postToServers(bytes, "/broadcast-ready");
+                _serverApp.postToServers(message, "/broadcast-ready");
             }
         }
     }
 
     // Deliver READY -> Send READY, Deliver response
-    public boolean broadcastREADYDeliver(int id, BroadcastMessage m) throws Exception {
+    public boolean broadcastREADYDeliver(int id, BroadcastMessage m) {
         if (_readys[id] == null) _readys[id] = m;
         if (!_sentReady) {
             BroadcastMessage message = searchForMajorityMessage(_readys, F_SERVERS);
             if (message != null) {
                 _sentReady = true;
-                byte[] bytes = ObjectMapperHandler.writeValueAsBytes(message);
-                _serverApp.postToServers(bytes, "/broadcast-ready");
+                _serverApp.postToServers(message, "/broadcast-ready");
             }
             else return false; // for efficiency
         }

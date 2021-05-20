@@ -10,7 +10,6 @@ import org.springframework.http.HttpEntity;
 import org.springframework.web.client.RestTemplate;
 import pt.tecnico.sec.AESKeyGenerator;
 import pt.tecnico.sec.JavaKeyStore;
-import pt.tecnico.sec.ObjectMapperHandler;
 import pt.tecnico.sec.client.*;
 import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
@@ -175,22 +174,21 @@ public class HealthAuthorityApplication {
     public LocationReport obtainReport(int userId, int epoch) throws Exception {
         // Create request
         ObtainLocationRequest locationRequest = new ObtainLocationRequest(userId, epoch);
-        byte[] requestBytes = ObjectMapperHandler.writeValueAsBytes(locationRequest);
+        Message request = new Message(0, locationRequest);
 
         // Perform request
-        byte[] responseBytes = postToServers(requestBytes, "/obtain-location-report");
+        Message response = postToServers(request, "/obtain-location-report");
 
         // Check response
-        ObjectMapperHandler.throwIfException(responseBytes);
-        if (responseBytes == null) return null;
-        SignedLocationReport signedReport = checkObtainLocationResponse(responseBytes, userId, epoch);
+        if (response.get_data() == null) return null;
+        response.throwIfException();
+        SignedLocationReport signedReport = checkObtainLocationResponse(response, userId, epoch);
         return checkLocationReport(signedReport, _keyStore.getPublicKey("user" + signedReport.get_userId()) );
     }
 
 
-    public SignedLocationReport checkObtainLocationResponse(byte[] messageBytes, int id, int epoch) throws Exception {
-        SignedLocationReport report = SignedLocationReport.getFromBytes(messageBytes);
-
+    public SignedLocationReport checkObtainLocationResponse(Message response, int id, int epoch) {
+        SignedLocationReport report = response.retrieveSignedLocationReport();
         // Check content
         if (report.get_userId() != id || report.get_epoch() != epoch)
             throw new IllegalArgumentException("Bad server response!");
@@ -206,29 +204,28 @@ public class HealthAuthorityApplication {
     public UsersAtLocation obtainUsers(Location location, int epoch) throws Exception {
         // Create request
         ObtainUsersRequest usersRequest = new ObtainUsersRequest(location, epoch);
-        byte[] requestBytes = ObjectMapperHandler.writeValueAsBytes(usersRequest);
+        Message request = new Message(0, usersRequest);
 
         // Perform request
-        byte[] responseBytes = postToServers(requestBytes, "/users");
-        if (responseBytes == null)
+        Message response = postToServers(request, "/users");
+        if (response == null)
             throw new IllegalArgumentException("Error in response");
 
         // Check response
-        ObjectMapperHandler.throwIfException(responseBytes);
-        UsersAtLocation usersAtLocation = checkObtainUsersResponse(responseBytes, location, epoch);
+        response.throwIfException();
+        UsersAtLocation usersAtLocation = checkObtainUsersResponse(response, location, epoch);
         for (SignedLocationReport signedReport : usersAtLocation.get_reports())
             checkLocationReport(signedReport, _keyStore.getPublicKey("user" + signedReport.get_userId()) );
         return usersAtLocation;
     }
 
-    public UsersAtLocation checkObtainUsersResponse(byte[] messageBytes, Location location, int epoch) throws Exception {
-        UsersAtLocation response = UsersAtLocation.getFromBytes(messageBytes);
-
+    public UsersAtLocation checkObtainUsersResponse(Message response, Location location, int epoch) {
+        UsersAtLocation users = response.retrieveUsersAtLocation();
         // Check content
-        if (!response.get_location().equals(location) || response.get_epoch() != epoch)
+        if (!users.get_location().equals(location) || users.get_epoch() != epoch)
             throw new IllegalArgumentException("Bad server response!");
 
-        return response;
+        return users;
     }
 
 
@@ -236,7 +233,7 @@ public class HealthAuthorityApplication {
     /* ====[              Server communication              ]==== */
     /* ========================================================== */
 
-    private byte[] sendRequest(int serverId, SecureMessage secureRequest, SecretKey secretKey, String endpoint) throws Exception {
+    private Message sendRequest(int serverId, SecureMessage secureRequest, SecretKey secretKey, String endpoint) throws Exception {
         PublicKey serverKey = _keyStore.getPublicKey("server" + serverId);
         HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
         SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + endpoint, request, SecureMessage.class);
@@ -244,30 +241,29 @@ public class HealthAuthorityApplication {
         if (secureResponse == null) return null;
 
         // Check response's signature and decipher TODO freshness
-        return secureResponse.decipherAndVerify( secretKey, serverKey);
+        return secureResponse.decipherAndVerifyMessage( secretKey, serverKey);
     }
 
-    private byte[] postToServers(byte[] messageBytes, String endpoint) throws Exception {
+    private Message postToServers(Message message, String endpoint) throws Exception {
         int serverId = getRandomServerId(); // Choose random server to send request
         SecretKey secretKey = updateSecretKey(serverId);
         secretKeyUsed(serverId);
         System.out.println("Requesting from server " + serverId);
-        SecureMessage secureRequest = new SecureMessage(-1, messageBytes, secretKey, _keyStore.getPersonalPrivateKey());
+        SecureMessage secureRequest = new SecureMessage(-1, message, secretKey, _keyStore.getPersonalPrivateKey());
         return sendRequest(serverId, secureRequest, secretKey, endpoint);
     }
 
-    private byte[] postKeyToServers(int serverId, SecretKey keyToSend) throws Exception {
+    private Message postKeyToServers(int serverId, SecretKey keyToSend) throws Exception {
         PublicKey serverKey = _keyStore.getPublicKey("server" + serverId);
         PrivateKey myKey = _keyStore.getPersonalPrivateKey();
         SecureMessage secureRequest = new SecureMessage(-1, keyToSend, serverKey, myKey);
 
-        HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
-        SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + "/secret-key", request, SecureMessage.class);
-
-        if (secureResponse == null) return null;
+        HttpEntity<SecureMessage> httpRequest = new HttpEntity<>(secureRequest);
+        SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + "/secret-key", httpRequest, SecureMessage.class);
 
         // Check response's signature and decipher TODO freshness
-        return secureResponse.decipherAndVerify( myKey, serverKey);
+        assert secureResponse != null;
+        return secureResponse.decipherAndVerifyMessage( myKey, serverKey);
     }
 
 
@@ -288,13 +284,12 @@ public class HealthAuthorityApplication {
             SecretKey newSecretKey = AESKeyGenerator.makeAESKey();
 
             // Send key
-            byte[] responseBytes = postKeyToServers(serverId, newSecretKey);
+            Message response = postKeyToServers(serverId, newSecretKey);
 
             // Check response
-            if (!ObjectMapperHandler.isOKString(responseBytes)) {
-                ObjectMapperHandler.throwIfException(responseBytes);
+            response.throwIfException();
+            if (!response.isOKString())
                 throw new IllegalArgumentException("Error exchanging new secret key");
-            }
 
             // Success! Update key
             _keyStore.setAndStoreSecretKey("server" + serverId, newSecretKey);

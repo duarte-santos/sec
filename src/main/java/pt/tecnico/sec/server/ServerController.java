@@ -4,7 +4,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
-import pt.tecnico.sec.ObjectMapperHandler;
 import pt.tecnico.sec.client.*;
 import pt.tecnico.sec.healthauthority.ObtainUsersRequest;
 import pt.tecnico.sec.healthauthority.UsersAtLocation;
@@ -35,32 +34,38 @@ public class ServerController {
     /* ========================================================== */
 
     public SecureMessage secureOKMessage(int senderId) throws Exception {
-        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(OK);
-        return _serverApp.cipherAndSignMessage(senderId, bytes);
+        Message m = new Message(0, OK);
+        return _serverApp.cipherAndSignMessage(senderId, m);
+    }
+
+    public SecureMessage secureExceptionMessage(int senderId, Exception exception) {
+        try {
+            Message m = new Message(0, exception);
+            return _serverApp.cipherAndSignMessage(senderId, m);
+        } catch (Exception e) { return null; }
     }
 
     @PostMapping("/obtain-location-report")
     public SecureMessage getLocationClient(@RequestBody SecureMessage secureRequest) {
         try {
             // decipher and verify request
-            byte[] messageBytes = _serverApp.decipherAndVerifyMessage(secureRequest);
-            ObtainLocationRequest request = ObtainLocationRequest.getFromBytes(messageBytes);
+            Message message = _serverApp.decipherAndVerifyMessage(secureRequest);
+            ObtainLocationRequest request = message.retrieveObtainLocationRequest();
             request.checkSender( secureRequest.get_senderId() );
 
             // broadcast Read operation
             _serverApp.refreshServerSecretKeys();
             DBLocationReport dbLocationReport = _serverApp.atomicBroadcastR(request);
-            if (dbLocationReport == null)
-                return null;
-
-            SignedLocationReport report = new SignedLocationReport(dbLocationReport);
+            SignedLocationReport report;
+            if (dbLocationReport == null) report = null;
+            else report = new SignedLocationReport(dbLocationReport);
 
             // encrypt using same secret key and client/HA public key, sign using server private key
-            byte[] bytes = ObjectMapperHandler.writeValueAsBytes(report);
-            return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), bytes);
+            Message response = new Message(0, report);
+            return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), response);
 
         } catch (Exception e) {
-            return _serverApp.cipherAndSignException(secureRequest.get_senderId(), e);
+            return secureExceptionMessage(secureRequest.get_senderId(), e);
         }
     }
 
@@ -88,7 +93,7 @@ public class ServerController {
             return secureOKMessage(secureMessage.get_senderId());
 
         } catch (Exception e) {
-            return _serverApp.cipherAndSignException(secureMessage.get_senderId(), e);
+            return secureExceptionMessage(secureMessage.get_senderId(), e);
         }
     }
 
@@ -96,8 +101,8 @@ public class ServerController {
     public SecureMessage getWitnessProofs(@RequestBody SecureMessage secureRequest) {
         try {
             // decipher and verify request
-            byte[] messageBytes = _serverApp.decipherAndVerifyMessage(secureRequest);
-            WitnessProofsRequest request = WitnessProofsRequest.getFromBytes(messageBytes);
+            Message message = _serverApp.decipherAndVerifyMessage(secureRequest);
+            WitnessProofsRequest request = message.retrieveWitnessProofsRequest();
             request.checkSender( secureRequest.get_senderId() );
 
             int witnessId = request.get_userId();
@@ -123,11 +128,11 @@ public class ServerController {
             }
 
             // encrypt and send response
-            byte[] bytes = ObjectMapperHandler.writeValueAsBytes(locationProofs);
-            return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), bytes);
+            Message response = new Message(0, locationProofs);
+            return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), response);
 
         } catch (Exception e) {
-            return _serverApp.cipherAndSignException(secureRequest.get_senderId(), e);
+            return secureExceptionMessage(secureRequest.get_senderId(), e);
         }
     }
 
@@ -140,8 +145,8 @@ public class ServerController {
     public SecureMessage getUsers(@RequestBody SecureMessage secureRequest) {
         try {
             // decipher and verify request
-            byte[] messageBytes = _serverApp.decipherAndVerifyMessage(secureRequest);
-            ObtainUsersRequest request = ObtainUsersRequest.getFromBytes(messageBytes);
+            Message message = _serverApp.decipherAndVerifyMessage(secureRequest);
+            ObtainUsersRequest request = message.retrieveObtainUsersRequest();
             request.checkSender(secureRequest.get_senderId());
 
             int ep = request.get_epoch();
@@ -161,12 +166,11 @@ public class ServerController {
             }
 
             // encrypt and send response
-            UsersAtLocation response = new UsersAtLocation(loc, ep, reports);
-            byte[] bytes = ObjectMapperHandler.writeValueAsBytes(response);
-            return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), bytes);
+            Message response = new Message(0, new UsersAtLocation(loc, ep, reports) );
+            return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), response);
 
         } catch (Exception e) {
-            return _serverApp.cipherAndSignException(secureRequest.get_senderId(), e);
+            return secureExceptionMessage(secureRequest.get_senderId(), e);
         }
     }
 
@@ -185,8 +189,8 @@ public class ServerController {
             _serverApp.saveSecretKey(secureMessage.get_senderId(), newSecretKey);
 
             // Send secure response
-            byte[] bytes = ObjectMapperHandler.writeValueAsBytes(OK);
-            return _serverApp.cipherAndSignKeyResponse(secureMessage.get_senderId(), bytes);
+            Message response = new Message(0, OK);
+            return _serverApp.cipherAndSignKeyResponse(secureMessage.get_senderId(), response);
 
         } catch (Exception e) {
             System.out.println(e.getMessage());
@@ -202,7 +206,7 @@ public class ServerController {
             _serverApp.refreshServerSecretKeys();
             return secureOKMessage(senderId);
         } catch (Exception e) {
-            return _serverApp.cipherAndSignException(senderId, e);
+            return secureExceptionMessage(senderId, e);
         }
     }
 
@@ -221,7 +225,7 @@ public class ServerController {
             b.broadcastSENDDeliver(m);
             return secureOKMessage(senderId);
         } catch (Exception e) {
-            return _serverApp.cipherAndSignException(senderId, e);
+            return secureExceptionMessage(senderId, e);
         }
     }
 
@@ -236,7 +240,7 @@ public class ServerController {
             return secureOKMessage(senderId);
 
         } catch (Exception e) {
-            return _serverApp.cipherAndSignException(senderId, e);
+            return secureExceptionMessage(senderId, e);
         }
     }
 
@@ -251,23 +255,22 @@ public class ServerController {
             if (!delivered) return secureOKMessage(senderId);
 
             // Deliver
-            BroadcastMessage response;
+            BroadcastMessage deliver;
             if (m.is_write()) {
                 int timestamp = writeLocationReport(m);
-                response = new BroadcastMessage(m.get_broadcastId(), timestamp);
+                deliver = new BroadcastMessage(m.get_broadcastId(), timestamp);
             } else if (m.is_read()) {
                 DBLocationReport report = readLocationReport(m);
-                response = new BroadcastMessage(m.get_broadcastId(), report);
+                deliver = new BroadcastMessage(m.get_broadcastId(), report);
             } else throw new IllegalArgumentException("Broadcast messages must be reads or writes.");
 
             // Encrypt and send response
-            byte[] bytes = ObjectMapperHandler.writeValueAsBytes(response);
-            byte[] responseBytes = _serverApp.postToServer(m.get_originalId() - 1000, bytes, "/broadcast-deliver");
-            _serverApp.handleBroadcastMessageResponse(responseBytes);
+            Message response = _serverApp.postBroadcastToServer(m.get_originalId() - 1000, deliver, "/broadcast-deliver");
+            _serverApp.handleBroadcastMessageResponse(response);
             return secureOKMessage(senderId);
 
         } catch (Exception e) {
-            return _serverApp.cipherAndSignException(senderId, e);
+            return secureExceptionMessage(senderId, e);
         }
     }
 
@@ -281,7 +284,7 @@ public class ServerController {
             return secureOKMessage(senderId);
 
         } catch (Exception e) {
-            return _serverApp.cipherAndSignException(senderId, e);
+            return secureExceptionMessage(senderId, e);
         }
     }
 

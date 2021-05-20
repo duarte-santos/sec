@@ -28,6 +28,7 @@ public final class Constants {
     public static final String SUCCESS = "success";
     public static final String FAILURE = "failure";
     public static final String OK = "OK";
+    public static final int POW_N = 2; // Number of leading 0's in Proof of Work
 
     // Health Authority
     public static final int HA_BASE_PORT = 6000;
