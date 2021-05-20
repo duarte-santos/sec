@@ -10,9 +10,7 @@ import pt.tecnico.sec.ObjectMapperHandler;
 import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
 import javax.crypto.SecretKey;
-import java.security.PrivateKey;
 import java.nio.ByteBuffer;
-import java.security.KeyPair;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
@@ -379,7 +377,7 @@ public class User {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
 
         // Try to find the nonce to get n leading zeros
-        for (i=0;; i++){
+        for (i=0; ;i++){
 
             nonce = ByteBuffer.allocate(POW_N+2).putInt(i).array();
             messageWithNonce = new byte[message.length + nonce.length];
@@ -390,9 +388,10 @@ public class User {
 
             // Check if it has n leading 0s
             boolean found = true;
-            for (int k=0; k<POW_N; k++){
-                if (hash[k] != 0){
+            for (int k = 0; k < POW_N; k++){
+                if (hash[k] != 0) {
                     found = false;
+                    break;
                 }
             }
             if (found) break;

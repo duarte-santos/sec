@@ -7,7 +7,6 @@ import org.springframework.web.client.RestTemplate;
 import pt.tecnico.sec.AESKeyGenerator;
 import pt.tecnico.sec.CryptoRSA;
 import pt.tecnico.sec.JavaKeyStore;
-import pt.tecnico.sec.JavaKeyStore;
 import pt.tecnico.sec.ObjectMapperHandler;
 import pt.tecnico.sec.client.LocationReport;
 import pt.tecnico.sec.client.ObtainLocationRequest;
@@ -18,14 +17,6 @@ import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 import javax.crypto.SecretKey;
 import java.io.IOException;
 import java.security.*;
-import java.security.cert.CertificateException;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.security.*;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
 import java.security.cert.CertificateException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -156,7 +147,7 @@ public class ServerApplication {
         SecretKey secret = _keyStore.getSecretKey(alias);
         byte[] messageBytes = secureMessage.decipherAndVerify(secret, verifyKey);
         // Check Proof of Work
-        if (alias.contains("user")) messageBytes = checkProofOfWork(messageBytes);
+        if (!fromServer(senderId) && !fromHA(senderId)) messageBytes = checkProofOfWork(messageBytes);
         return messageBytes;
     }
 
@@ -421,29 +412,6 @@ public class ServerApplication {
         return locationReport;
     }
 
-    /* PROOF OF WORK */
-
-
-    public byte[] checkProofOfWork(byte[] message) throws Exception {
-
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        byte[] hash = digest.digest(message);
-
-        // Check if the hash has n leading 0s
-        boolean correct = true;
-        for (int k=0; k<POW_N; k++){
-            if (hash[k] != 0){
-                correct = false;
-            }
-        }
-
-        if (correct){
-            // Return message without the nonce
-            System.out.println("Correct Proof of Work");
-            return Arrays.copyOfRange(message, 0, message.length-POW_N+2);
-        } else { throw new Exception("Incorrect Proof of Work"); }
-
-    }
 
     /* ====[                   A S Y N C                    ]==== */
 
@@ -468,5 +436,22 @@ public class ServerApplication {
             }
         }
 
+    }
+
+    /* ========================================================== */
+    /* ====[                 Proof of Work                  ]==== */
+    /* ========================================================== */
+
+    public byte[] checkProofOfWork(byte[] message) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        byte[] hash = digest.digest(message);
+
+        // Check if the hash has n leading 0s
+        for (int k=0; k < POW_N; k++)
+            if (hash[k] != 0) throw new IllegalArgumentException("Incorrect Proof of Work");
+
+        // Return message without the nonce
+        System.out.println("Correct Proof of Work");
+        return Arrays.copyOfRange(message, 0, message.length-POW_N+2);
     }
 }
