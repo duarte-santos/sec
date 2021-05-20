@@ -14,6 +14,7 @@ import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
 import javax.crypto.SecretKey;
 import java.security.GeneralSecurityException;
+import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -109,18 +110,44 @@ public class ServerApplication {
 
     public SecretKey decipherAndVerifyKey(SecureMessage secureMessage) throws Exception {
         int senderId = secureMessage.get_senderId();
-        PublicKey verifyKey = getVerifyKey(senderId);
+        PublicKey verifyKey = getPublicKey(senderId);
         return secureMessage.decipherAndVerifyKey(_keyStore.getPersonalPrivateKey(), verifyKey );
     }
 
+    public SecureMessage cipherAndSignKeyResponse(int receiverId, byte[] messageBytes) throws Exception {
+        PublicKey cipherKey = getPublicKey(receiverId);
+        return new SecureMessage(_serverId + 1000, messageBytes, cipherKey, _keyStore.getPersonalPrivateKey());
+    }
+
+    public SecureMessage cipherAndSignKeyException(int receiverId, Exception exception) {
+        try {
+            byte[] messageBytes = ObjectMapperHandler.writeValueAsBytes(exception);
+            return cipherAndSignKeyResponse(receiverId, messageBytes);
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+        }
+        return null;
+    }
+
     public byte[] decipherAndVerifyMessage(SecureMessage secureMessage) throws Exception {
+        if (secureMessage == null) throw new IllegalArgumentException("Cannot decipher null message.");
         int senderId = secureMessage.get_senderId();
-        PublicKey verifyKey = getVerifyKey(senderId);
+        PublicKey verifyKey = getPublicKey(senderId);
         return secureMessage.decipherAndVerify( _secretKeys.get(senderId), verifyKey );
     }
 
     public static SecureMessage cipherAndSignMessage(int receiverId, byte[] messageBytes) throws Exception {
         return new SecureMessage(_serverId + 1000, messageBytes, _secretKeys.get(receiverId), _keyStore.getPersonalPrivateKey());
+    }
+
+    public static SecureMessage cipherAndSignException(int receiverId, Exception exception) {
+        try {
+            byte[] messageBytes = ObjectMapperHandler.writeValueAsBytes(exception);
+            return cipherAndSignMessage(receiverId, messageBytes);
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+        }
+        return null;
     }
 
     public DBLocationReport decipherAndVerifyReport(SecureMessage secureMessage) throws Exception {
@@ -141,6 +168,13 @@ public class ServerApplication {
         return m;
     }
 
+    public void handleBroadcastMessageResponse(byte[] bytes) throws Exception {
+        if (!ObjectMapperHandler.isOKString(bytes)) {
+            ObjectMapperHandler.throwIfException(bytes);
+            throw new IllegalArgumentException("Error during broadcast.");
+        }
+    }
+
     /* ===========[   Auxiliary   ]=========== */
 
     public boolean fromServer(int senderId) {
@@ -151,7 +185,7 @@ public class ServerApplication {
         return senderId == -1;
     }
 
-    public PublicKey getVerifyKey(int senderId) throws GeneralSecurityException {
+    public PublicKey getPublicKey(int senderId) throws GeneralSecurityException {
         if (fromHA(senderId)) {
             return _keyStore.getPublicKey("ha" + 0); // int haId = 0
         } else if (fromServer(senderId)) {
@@ -174,11 +208,12 @@ public class ServerApplication {
     /* ====[           Server-server communication          ]==== */
     /* ========================================================== */
 
-    public void postToServer(int serverId, byte[] messageBytes, String endpoint) throws Exception {
+    public byte[] postToServer(int serverId, byte[] messageBytes, String endpoint) throws Exception {
         SecureMessage secureRequest = cipherAndSignMessage(serverId+1000, messageBytes);
         serverSecretKeyUsed(serverId+1000);
         HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
-        _restTemplate.postForObject(getServerURL(serverId) + endpoint, request, SecureMessage.class);
+        SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + endpoint, request, SecureMessage.class);
+        return decipherAndVerifyMessage(secureResponse);
     }
 
     public void postToServers(byte[] m, String endpoint) {
@@ -192,7 +227,8 @@ public class ServerApplication {
 
     private byte[] sendSecretKey(int serverId, SecretKey keyToSend) throws Exception {
         PublicKey serverKey = _keyStore.getPublicKey("server" + serverId);
-        SecureMessage secureRequest = new SecureMessage(_serverId+1000, keyToSend, serverKey, _keyStore.getPersonalPrivateKey());
+        PrivateKey myKey = _keyStore.getPersonalPrivateKey();
+        SecureMessage secureRequest = new SecureMessage(_serverId+1000, keyToSend, serverKey, myKey);
 
         HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
         SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + "/secret-key", request, SecureMessage.class);
@@ -200,11 +236,19 @@ public class ServerApplication {
         // Check response's signature and decipher
         // TODO : freshness
         assert secureResponse != null;
-        return secureResponse.decipherAndVerify( keyToSend, serverKey);
+        return secureResponse.decipherAndVerify( myKey, serverKey);
     }
 
-    private void sendRefreshSecretKeys(int serverId) {
-        _restTemplate.getForObject(getServerURL(serverId) + "/refresh-secret-keys", void.class);
+    private void sendRefreshSecretKeys(int serverId) throws Exception {
+        SecureMessage secureRequest = new SecureMessage();
+        secureRequest.set_senderId(_serverId+1000);
+        HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
+        SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + "/refresh-secret-keys", request, SecureMessage.class);
+        byte[] responseBytes = decipherAndVerifyMessage(secureResponse);
+        if (!ObjectMapperHandler.isOKString(responseBytes)) {
+            ObjectMapperHandler.throwIfException(responseBytes);
+            throw new IllegalArgumentException("Error during broadcast.");
+        }
     }
 
     public void refreshServerSecretKeys() throws Exception {
@@ -224,8 +268,10 @@ public class ServerApplication {
             byte[] responseBytes = sendSecretKey(serverId, newSecretKey);
 
             // Check response
-            if (responseBytes == null || !ObjectMapperHandler.getStringFromBytes(responseBytes).equals("OK"))
+            if (!ObjectMapperHandler.isOKString(responseBytes)) {
+                ObjectMapperHandler.throwIfException(responseBytes);
                 throw new IllegalArgumentException("Error exchanging new secret key");
+            }
 
             // Success! Update key
             saveSecretKey(serverId+1000, newSecretKey);
@@ -334,9 +380,10 @@ public class ServerApplication {
 
         public void run() {
             try {
-                ServerApplication.this.postToServer(_serverId, _messageBytes, _endpoint);
-            } catch (Exception e) { // FIXME : ignore exceptions that are not IllegalArgument
-                System.out.println(e.getMessage());
+                byte[] responseBytes = ServerApplication.this.postToServer(_serverId, _messageBytes, _endpoint);
+                handleBroadcastMessageResponse(responseBytes);
+            } catch (Exception e) {
+                System.out.println(e.getMessage()); //TODO handle illegal argument exceptions
             }
         }
 

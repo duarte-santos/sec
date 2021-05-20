@@ -9,6 +9,7 @@ import pt.tecnico.sec.ObjectMapperHandler;
 import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
 import javax.crypto.SecretKey;
+import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.util.*;
 
@@ -186,11 +187,12 @@ public class User {
         byte[] responseBytes = postToServers(bytes, "/submit-location-report");
 
         // Check response
-        if (responseBytes == null || !ObjectMapperHandler.getStringFromBytes(responseBytes).equals("OK"))
+        if (!ObjectMapperHandler.isOKString(responseBytes)) {
+            ObjectMapperHandler.throwIfException(responseBytes);
             throw new IllegalArgumentException("Bad server response!");
+        }
         return OK;
     }
-
 
     /* ========================================================== */
     /* ====[             Obtain Location Report             ]==== */
@@ -205,6 +207,7 @@ public class User {
         byte[] responseBytes = postToServers(requestBytes, "/obtain-location-report");
 
         // Check response
+        ObjectMapperHandler.throwIfException(responseBytes);
         if (responseBytes == null) return null;
         SignedLocationReport signedReport = checkObtainLocationResponse(responseBytes, _id, epoch);
         return checkLocationReport(signedReport, _keyStore.getPersonalPublicKey());
@@ -247,6 +250,7 @@ public class User {
         byte[] responseBytes = postToServers(requestBytes, "/request-proofs");
 
         // Check response
+        ObjectMapperHandler.throwIfException(responseBytes);
         List<LocationProof> proofs = checkWitnessProofsResponse(responseBytes, _id, epochs);
         for (LocationProof proof : proofs)
             proof.verify(_keyStore.getPersonalPublicKey());
@@ -273,7 +277,6 @@ public class User {
     /* ====[              Server communication              ]==== */
     /* ========================================================== */
 
-    @SuppressWarnings("DuplicatedCode")
     private byte[] sendRequest(int serverId, SecureMessage secureRequest, SecretKey secretKey, String endpoint) throws Exception {
         PublicKey serverKey = _keyStore.getPublicKey("server" + serverId);
         HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
@@ -295,8 +298,16 @@ public class User {
 
     private byte[] postKeyToServer(int serverId, SecretKey keyToSend) throws Exception {
         PublicKey serverKey = _keyStore.getPublicKey("server" + serverId);
-        SecureMessage secureRequest = new SecureMessage(_id, keyToSend, serverKey, _keyStore.getPersonalPrivateKey());
-        return sendRequest(serverId, secureRequest, keyToSend, "/secret-key");
+        PrivateKey myKey = _keyStore.getPersonalPrivateKey();
+        SecureMessage secureRequest = new SecureMessage(_id, keyToSend, serverKey, myKey);
+
+        HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
+        SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + "/secret-key", request, SecureMessage.class);
+
+        if (secureResponse == null) return null;
+
+        // Check response's signature and decipher TODO freshness
+        return secureResponse.decipherAndVerify( myKey, serverKey);
     }
 
 
@@ -320,8 +331,10 @@ public class User {
             byte[] responseBytes = postKeyToServer(serverId, newSecretKey);
 
             // Check response
-            if (responseBytes == null || !ObjectMapperHandler.getStringFromBytes(responseBytes).equals(OK))
+            if (!ObjectMapperHandler.isOKString(responseBytes)) {
+                ObjectMapperHandler.throwIfException(responseBytes);
                 throw new IllegalArgumentException("Error exchanging new secret key");
+            }
 
             // Success! Update key
             _secretKeys.put(serverId, newSecretKey);

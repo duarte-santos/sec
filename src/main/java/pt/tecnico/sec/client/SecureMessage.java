@@ -49,6 +49,17 @@ public class SecureMessage {
         _signature = CryptoRSA.sign(encodedKey, signKey);
     }
 
+    // Used to respond to secret Key exchange
+    public SecureMessage(int senderId, byte[] messageBytes, PublicKey cipherKey, PrivateKey signKey) throws Exception {
+        _senderId = senderId;
+
+        // encrypt message with given public cipher key
+        _cipheredMessage = CryptoRSA.encrypt(messageBytes, cipherKey);
+
+        // sign message with given private sign key
+        _signature = CryptoRSA.sign(messageBytes, signKey);
+    }
+
     public int get_senderId() {
         return _senderId;
     }
@@ -111,6 +122,12 @@ public class SecureMessage {
 
         // get secret key from bytes
         return AESKeyGenerator.fromEncoded(encodedKey);
+    }
+
+    public byte[] decipherAndVerify(PrivateKey decipherKey, PublicKey verifyKey) throws Exception {
+        byte[] messageBytes = CryptoRSA.decrypt(_cipheredMessage, decipherKey);
+        verify(messageBytes, verifyKey);
+        return messageBytes;
     }
 
     public byte[] decipher(SecretKey decipherKey) throws Exception {

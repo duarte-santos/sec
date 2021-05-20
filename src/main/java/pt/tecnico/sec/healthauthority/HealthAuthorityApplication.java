@@ -15,6 +15,7 @@ import pt.tecnico.sec.client.*;
 import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
 import javax.crypto.SecretKey;
+import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.util.*;
 
@@ -181,6 +182,7 @@ public class HealthAuthorityApplication {
         byte[] responseBytes = postToServers(requestBytes, "/obtain-location-report");
 
         // Check response
+        ObjectMapperHandler.throwIfException(responseBytes);
         if (responseBytes == null) return null;
         SignedLocationReport signedReport = checkObtainLocationResponse(responseBytes, userId, epoch);
         return checkLocationReport(signedReport, _keyStore.getPublicKey("user" + signedReport.get_userId()) );
@@ -213,6 +215,7 @@ public class HealthAuthorityApplication {
             throw new IllegalArgumentException("Error in response");
 
         // Check response
+        ObjectMapperHandler.throwIfException(responseBytes);
         UsersAtLocation usersAtLocation = checkObtainUsersResponse(responseBytes, location, epoch);
         for (SignedLocationReport signedReport : usersAtLocation.get_reports())
             checkLocationReport(signedReport, _keyStore.getPublicKey("user" + signedReport.get_userId()) );
@@ -234,7 +237,6 @@ public class HealthAuthorityApplication {
     /* ====[              Server communication              ]==== */
     /* ========================================================== */
 
-    @SuppressWarnings("DuplicatedCode")
     private byte[] sendRequest(int serverId, SecureMessage secureRequest, SecretKey secretKey, String endpoint) throws Exception {
         PublicKey serverKey = _keyStore.getPublicKey("server" + serverId);
         HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
@@ -257,8 +259,16 @@ public class HealthAuthorityApplication {
 
     private byte[] postKeyToServers(int serverId, SecretKey keyToSend) throws Exception {
         PublicKey serverKey = _keyStore.getPublicKey("server" + serverId);
-        SecureMessage secureRequest = new SecureMessage(-1, keyToSend, serverKey, _keyStore.getPersonalPrivateKey());
-        return sendRequest(serverId, secureRequest, keyToSend, "/secret-key");
+        PrivateKey myKey = _keyStore.getPersonalPrivateKey();
+        SecureMessage secureRequest = new SecureMessage(-1, keyToSend, serverKey, myKey);
+
+        HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
+        SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + "/secret-key", request, SecureMessage.class);
+
+        if (secureResponse == null) return null;
+
+        // Check response's signature and decipher TODO freshness
+        return secureResponse.decipherAndVerify( myKey, serverKey);
     }
 
 
@@ -281,8 +291,10 @@ public class HealthAuthorityApplication {
             byte[] responseBytes = postKeyToServers(serverId, newSecretKey);
 
             // Check response
-            if (responseBytes == null || !ObjectMapperHandler.getStringFromBytes(responseBytes).equals(OK))
+            if (!ObjectMapperHandler.isOKString(responseBytes)) {
+                ObjectMapperHandler.throwIfException(responseBytes);
                 throw new IllegalArgumentException("Error exchanging new secret key");
+            }
 
             // Success! Update key
             _secretKeys.put(serverId, newSecretKey);
