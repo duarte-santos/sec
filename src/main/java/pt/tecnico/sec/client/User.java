@@ -182,7 +182,8 @@ public class User {
         System.out.println(locationReport);
 
         // Send report
-        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(locationReport);
+        SignedLocationReport signedLocationReport = new SignedLocationReport(locationReport, _keyStore.getPersonalPrivateKey());
+        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(signedLocationReport);
         byte[] responseBytes = postToServers(bytes, "/submit-location-report");
 
         // Check response

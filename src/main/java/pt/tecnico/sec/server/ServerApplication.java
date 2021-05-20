@@ -11,6 +11,7 @@ import pt.tecnico.sec.ObjectMapperHandler;
 import pt.tecnico.sec.client.LocationReport;
 import pt.tecnico.sec.client.ObtainLocationRequest;
 import pt.tecnico.sec.client.SecureMessage;
+import pt.tecnico.sec.client.SignedLocationReport;
 import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
 import javax.crypto.SecretKey;
@@ -163,13 +164,15 @@ public class ServerApplication {
 
     public DBLocationReport decipherAndVerifyReport(SecureMessage secureMessage) throws Exception {
         byte[] messageBytes = decipherAndVerifyMessage(secureMessage);
-        LocationReport locationReport = LocationReport.getFromBytes(messageBytes);
+        SignedLocationReport signedLocationReport = SignedLocationReport.getFromBytes(messageBytes);
+        LocationReport locationReport = signedLocationReport.get_report();
+
         locationReport.checkSender(secureMessage.get_senderId());
 
         // check proofs signatures
         checkReportSignatures(locationReport);
 
-        return new DBLocationReport(locationReport, secureMessage.get_signature());
+        return new DBLocationReport(locationReport, signedLocationReport.get_signature());
     }
 
     public void verifyDBReport(DBLocationReport report) {
