@@ -1,7 +1,7 @@
-package pt.tecnico.sec.client;
+package pt.tecnico.sec.client.report;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import pt.tecnico.sec.server.DBLocation;
+import pt.tecnico.sec.server.database.DBLocation;
 
 import java.util.Objects;
 

@@ -1,4 +1,6 @@
-package pt.tecnico.sec.client;
+package pt.tecnico.sec.client.domain;
+
+import pt.tecnico.sec.client.report.Location;
 
 import java.util.ArrayList;
 import java.util.HashMap;

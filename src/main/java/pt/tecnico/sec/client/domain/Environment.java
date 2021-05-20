@@ -1,4 +1,4 @@
-package pt.tecnico.sec.client;
+package pt.tecnico.sec.client.domain;
 
 import java.util.*;
 

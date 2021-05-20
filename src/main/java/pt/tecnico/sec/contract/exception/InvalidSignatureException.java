@@ -1,4 +1,4 @@
-package pt.tecnico.sec.server.exception;
+package pt.tecnico.sec.contract.exception;
 
 public class InvalidSignatureException extends RuntimeException {
 

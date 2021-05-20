@@ -9,7 +9,12 @@ import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.web.client.RestTemplate;
 import pt.tecnico.sec.EnvironmentGenerator;
-import pt.tecnico.sec.JavaKeyStore;
+import pt.tecnico.sec.client.domain.Environment;
+import pt.tecnico.sec.client.domain.Grid;
+import pt.tecnico.sec.client.report.Location;
+import pt.tecnico.sec.client.report.LocationProof;
+import pt.tecnico.sec.client.report.LocationReport;
+import pt.tecnico.sec.keys.JavaKeyStore;
 
 import java.io.IOException;
 import java.util.*;

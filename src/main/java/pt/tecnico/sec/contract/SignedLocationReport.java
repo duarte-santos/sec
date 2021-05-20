@@ -1,10 +1,11 @@
-package pt.tecnico.sec.client;
+package pt.tecnico.sec.contract;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import pt.tecnico.sec.CryptoRSA;
-import pt.tecnico.sec.ObjectMapperHandler;
-import pt.tecnico.sec.server.DBLocationReport;
+import pt.tecnico.sec.client.report.LocationProof;
+import pt.tecnico.sec.client.report.LocationReport;
+import pt.tecnico.sec.keys.CryptoRSA;
+import pt.tecnico.sec.server.database.DBLocationReport;
 
 import java.io.IOException;
 import java.security.PrivateKey;

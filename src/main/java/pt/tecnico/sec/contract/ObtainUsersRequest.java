@@ -1,7 +1,7 @@
-package pt.tecnico.sec.healthauthority;
+package pt.tecnico.sec.contract;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import pt.tecnico.sec.client.Location;
+import pt.tecnico.sec.client.report.Location;
 
 import java.io.IOException;
 

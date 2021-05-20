@@ -1,4 +1,4 @@
-package pt.tecnico.sec.server;
+package pt.tecnico.sec.server.broadcast;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 

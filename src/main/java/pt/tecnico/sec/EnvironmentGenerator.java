@@ -3,9 +3,9 @@ package pt.tecnico.sec;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
-import pt.tecnico.sec.client.Environment;
-import pt.tecnico.sec.client.Grid;
-import pt.tecnico.sec.client.Location;
+import pt.tecnico.sec.client.domain.Environment;
+import pt.tecnico.sec.client.domain.Grid;
+import pt.tecnico.sec.client.report.Location;
 
 import java.io.FileReader;
 import java.io.FileWriter;

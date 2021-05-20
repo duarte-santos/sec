@@ -14,7 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
-import pt.tecnico.sec.AESKeyGenerator;
+import pt.tecnico.sec.keys.AESKeyGenerator;
 import pt.tecnico.sec.EnvironmentGenerator;
 import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.client.*;

@@ -1,4 +1,4 @@
-package pt.tecnico.sec.client;
+package pt.tecnico.sec.contract;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 

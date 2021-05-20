@@ -1,8 +1,9 @@
-package pt.tecnico.sec.server;
+package pt.tecnico.sec.server.broadcast;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import pt.tecnico.sec.client.ObtainLocationRequest;
-import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
+import pt.tecnico.sec.contract.ObtainLocationRequest;
+import pt.tecnico.sec.contract.exception.ReportNotAcceptableException;
+import pt.tecnico.sec.server.database.DBLocationReport;
 
 import java.util.Objects;
 

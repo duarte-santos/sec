@@ -1,10 +1,9 @@
-package pt.tecnico.sec.healthauthority;
+package pt.tecnico.sec.contract;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import pt.tecnico.sec.client.Location;
-import pt.tecnico.sec.client.LocationReport;
-import pt.tecnico.sec.client.SignedLocationReport;
+import pt.tecnico.sec.client.report.Location;
+import pt.tecnico.sec.client.report.LocationReport;
 
 import java.io.IOException;
 import java.util.ArrayList;

@@ -1,10 +1,9 @@
-package pt.tecnico.sec.client;
+package pt.tecnico.sec.contract;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import pt.tecnico.sec.AESKeyGenerator;
-import pt.tecnico.sec.CryptoRSA;
-import pt.tecnico.sec.ObjectMapperHandler;
-import pt.tecnico.sec.server.BroadcastMessage;
+import pt.tecnico.sec.keys.AESKeyGenerator;
+import pt.tecnico.sec.keys.CryptoRSA;
+import pt.tecnico.sec.server.broadcast.BroadcastMessage;
 
 import javax.crypto.SecretKey;
 import java.security.PrivateKey;

@@ -1,11 +1,10 @@
-package pt.tecnico.sec;
+package pt.tecnico.sec.contract;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import pt.tecnico.sec.client.LocationReport;
-import pt.tecnico.sec.client.Message;
-import pt.tecnico.sec.client.ProofData;
-import pt.tecnico.sec.server.BroadcastMessage;
+import pt.tecnico.sec.client.report.LocationReport;
+import pt.tecnico.sec.client.report.ProofData;
+import pt.tecnico.sec.server.broadcast.BroadcastMessage;
 
 import java.io.IOException;
 

@@ -1,7 +1,7 @@
-package pt.tecnico.sec.client;
+package pt.tecnico.sec.client.report;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import pt.tecnico.sec.server.DBProofData;
+import pt.tecnico.sec.server.database.DBProofData;
 
 @SuppressWarnings("unused")
 @JsonIgnoreProperties(ignoreUnknown = true)

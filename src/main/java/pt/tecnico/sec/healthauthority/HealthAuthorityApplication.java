@@ -8,10 +8,12 @@ import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.http.HttpEntity;
 import org.springframework.web.client.RestTemplate;
-import pt.tecnico.sec.AESKeyGenerator;
-import pt.tecnico.sec.JavaKeyStore;
-import pt.tecnico.sec.client.*;
-import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
+import pt.tecnico.sec.client.report.Location;
+import pt.tecnico.sec.client.report.LocationReport;
+import pt.tecnico.sec.contract.*;
+import pt.tecnico.sec.contract.exception.ReportNotAcceptableException;
+import pt.tecnico.sec.keys.AESKeyGenerator;
+import pt.tecnico.sec.keys.JavaKeyStore;
 
 import javax.crypto.SecretKey;
 import java.security.PrivateKey;

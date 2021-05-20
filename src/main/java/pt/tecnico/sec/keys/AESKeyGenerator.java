@@ -1,4 +1,4 @@
-package pt.tecnico.sec;
+package pt.tecnico.sec.keys;
 
 import javax.crypto.*;
 import javax.crypto.spec.IvParameterSpec;

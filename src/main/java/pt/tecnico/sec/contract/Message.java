@@ -1,8 +1,7 @@
-package pt.tecnico.sec.client;
+package pt.tecnico.sec.contract;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import pt.tecnico.sec.healthauthority.ObtainUsersRequest;
-import pt.tecnico.sec.healthauthority.UsersAtLocation;
+import pt.tecnico.sec.client.report.LocationProof;
 
 import javax.crypto.SecretKey;
 import java.util.ArrayList;

@@ -1,6 +1,8 @@
-package pt.tecnico.sec.server;
+package pt.tecnico.sec.server.broadcast;
 
-import pt.tecnico.sec.client.ObtainLocationRequest;
+import pt.tecnico.sec.contract.ObtainLocationRequest;
+import pt.tecnico.sec.server.ServerApplication;
+import pt.tecnico.sec.server.database.DBLocationReport;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -21,7 +23,7 @@ public class BroadcastService {
     private BroadcastMessage[] _delivers;
     private BroadcastMessage _request;
 
-    BroadcastService(ServerApplication serverApp, BroadcastId broadcastId) {
+    public BroadcastService(ServerApplication serverApp, BroadcastId broadcastId) {
         _serverApp = serverApp;
         _broadcastId = broadcastId;
         _serverCount = _serverApp.getServerCount();

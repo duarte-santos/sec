@@ -1,6 +1,6 @@
-package pt.tecnico.sec;
+package pt.tecnico.sec.keys;
 
-import pt.tecnico.sec.server.exception.InvalidSignatureException;
+import pt.tecnico.sec.contract.exception.InvalidSignatureException;
 
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;

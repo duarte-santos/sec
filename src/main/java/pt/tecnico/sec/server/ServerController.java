@@ -4,10 +4,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
-import pt.tecnico.sec.client.*;
-import pt.tecnico.sec.healthauthority.ObtainUsersRequest;
-import pt.tecnico.sec.healthauthority.UsersAtLocation;
-import pt.tecnico.sec.server.exception.RecordAlreadyExistsException;
+import pt.tecnico.sec.client.report.Location;
+import pt.tecnico.sec.client.report.LocationProof;
+import pt.tecnico.sec.contract.*;
+import pt.tecnico.sec.contract.exception.RecordAlreadyExistsException;
+import pt.tecnico.sec.server.broadcast.BroadcastMessage;
+import pt.tecnico.sec.server.broadcast.BroadcastService;
+import pt.tecnico.sec.server.database.DBLocationProof;
+import pt.tecnico.sec.server.database.DBLocationReport;
 
 import javax.crypto.SecretKey;
 import java.util.ArrayList;

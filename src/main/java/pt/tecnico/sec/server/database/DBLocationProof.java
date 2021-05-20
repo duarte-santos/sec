@@ -1,7 +1,7 @@
-package pt.tecnico.sec.server;
+package pt.tecnico.sec.server.database;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import pt.tecnico.sec.client.LocationProof;
+import pt.tecnico.sec.client.report.LocationProof;
 
 import javax.persistence.*;
 import java.util.Objects;
