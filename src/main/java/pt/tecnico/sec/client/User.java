@@ -10,7 +10,10 @@ import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
 import javax.crypto.SecretKey;
 import java.security.PrivateKey;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
+import java.security.UnrecoverableEntryException;
 import java.util.*;
 
 import static pt.tecnico.sec.Constants.*;
@@ -27,7 +30,6 @@ public class User {
     private int _epoch = 0;
     private final Map<Integer, List<LocationProof>> _proofs =  new HashMap<>();
 
-    private static final Map<Integer, SecretKey> _secretKeys = new HashMap<>();
     private static final Map<Integer, Integer> _sKeysCreationEpoch = new HashMap<>();
 
     public User(Grid grid, int id, int serverCount, JavaKeyStore keyStore) {
@@ -191,6 +193,7 @@ public class User {
             ObjectMapperHandler.throwIfException(responseBytes);
             throw new IllegalArgumentException("Bad server response!");
         }
+
         return OK;
     }
 
@@ -315,12 +318,12 @@ public class User {
     /* ====[               Handle Secret Keys               ]==== */
     /* ========================================================== */
 
-    public boolean secretKeyValid(int serverId) {
-        return _secretKeys.get(serverId) != null && _epoch - _sKeysCreationEpoch.get(serverId) <= SECRET_KEY_DURATION;
+    public boolean secretKeyValid(int serverId) throws UnrecoverableEntryException, KeyStoreException, NoSuchAlgorithmException {
+        Integer creation = _sKeysCreationEpoch.get(serverId);
+        return creation != null && (_epoch - creation) <= SECRET_KEY_DURATION;
     }
 
     public SecretKey updateSecretKey(int serverId) throws Exception {
-
         if (!secretKeyValid(serverId)) {
             System.out.print("Generating new secret key...");
 
@@ -337,13 +340,13 @@ public class User {
             }
 
             // Success! Update key
-            _secretKeys.put(serverId, newSecretKey);
+            _keyStore.setAndStoreSecretKey("server" + serverId, newSecretKey);
             _sKeysCreationEpoch.put(serverId, _epoch);
 
             System.out.println("Done!");
         }
 
-        return _secretKeys.get(serverId);
+        return _keyStore.getSecretKey("server" + serverId);
     }
 
 }

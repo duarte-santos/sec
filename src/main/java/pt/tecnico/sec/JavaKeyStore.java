@@ -16,10 +16,6 @@ import java.util.List;
 import static pt.tecnico.sec.Constants.*;
 
 
-/**
- * This class was adapted from:
- * @author https://www.baeldung.com/java-keystore
- */
 @SuppressWarnings("unused")
 public class JavaKeyStore {
 
@@ -71,7 +67,9 @@ public class JavaKeyStore {
         _keyStore.load(new FileInputStream(_name), pwdArray);
     }
 
-    public void setEntry(String alias, KeyStore.SecretKeyEntry secretKeyEntry, KeyStore.ProtectionParameter protectionParameter) throws KeyStoreException {
+    public void setEntry(String alias, SecretKey secretKey) throws KeyStoreException {
+        KeyStore.SecretKeyEntry secretKeyEntry = new KeyStore.SecretKeyEntry(secretKey);
+        KeyStore.ProtectionParameter protectionParameter = new KeyStore.PasswordProtection(_password.toCharArray());
         _keyStore.setEntry(alias, secretKeyEntry, protectionParameter);
     }
 
@@ -94,37 +92,35 @@ public class JavaKeyStore {
 
     /* ===========[          GET KEYS          ]=========== */
 
+    public void setAndStoreSecretKey(String alias, SecretKey secretKey) throws KeyStoreException, CertificateException, IOException, NoSuchAlgorithmException {
+        alias = "secret" + alias;
+        setEntry(alias, secretKey);
+        storeKeyStore();
+    }
+
     public SecretKey getSecretKey(String alias) throws KeyStoreException, UnrecoverableEntryException, NoSuchAlgorithmException {
-        KeyStore.ProtectionParameter protectionParameter = new KeyStore.PasswordProtection(_password.toCharArray());
-        KeyStore.SecretKeyEntry secretKeyEntry = (KeyStore.SecretKeyEntry) _keyStore.getEntry(alias, protectionParameter);
+        alias = "secret" + alias;
+        KeyStore.SecretKeyEntry secretKeyEntry = (KeyStore.SecretKeyEntry) getEntry(alias);
         if (secretKeyEntry == null) return null;
         return secretKeyEntry.getSecretKey();
     }
 
     public PrivateKey getPrivateKey(String alias) throws KeyStoreException, UnrecoverableEntryException, NoSuchAlgorithmException {
-        KeyStore.ProtectionParameter protectionParameter = new KeyStore.PasswordProtection(_password.toCharArray());
-        KeyStore.PrivateKeyEntry privateKeyEntry = (KeyStore.PrivateKeyEntry) _keyStore.getEntry(alias, protectionParameter);
+        KeyStore.PrivateKeyEntry privateKeyEntry = (KeyStore.PrivateKeyEntry) getEntry(alias);
         if (privateKeyEntry == null) return null;
         return privateKeyEntry.getPrivateKey();
     }
 
     public PublicKey getPublicKey(String alias) throws KeyStoreException {
-        Certificate certificate = _keyStore.getCertificate(alias);
+        Certificate certificate = getCertificate(alias);
         if (certificate == null) return null;
         return certificate.getPublicKey();
     }
 
     public KeyPair getKeyPair(String certificateAlias, String privateKeyAlias) throws KeyStoreException, UnrecoverableEntryException, NoSuchAlgorithmException {
-        // Public Key
-        Certificate certificate = _keyStore.getCertificate(certificateAlias);
-        if (certificate == null) return null;
-        PublicKey publicKey = certificate.getPublicKey();
-        // Private Key
-        KeyStore.ProtectionParameter protectionParameter = new KeyStore.PasswordProtection(_password.toCharArray());
-        KeyStore.PrivateKeyEntry privateKeyEntry = (KeyStore.PrivateKeyEntry) _keyStore.getEntry(privateKeyAlias, protectionParameter);
-        if (privateKeyEntry == null) return null;
-        PrivateKey privateKey = privateKeyEntry.getPrivateKey();
-        // KeyPair
+        PublicKey publicKey = getPublicKey(certificateAlias);
+        PrivateKey privateKey = getPrivateKey(privateKeyAlias);
+        if (publicKey == null || privateKey == null) return null;
         return new KeyPair(publicKey, privateKey);
     }
 
@@ -158,10 +154,6 @@ public class JavaKeyStore {
             publicKey = getPublicKey("user" + userId);
         }
         return publicKeyArray;
-    }
-
-    public String toString() {
-        return "Name: " + _name + ", Password: " + _password + ", Type: " + _type;
     }
 
     /* ===========[           DELETE           ]=========== */
