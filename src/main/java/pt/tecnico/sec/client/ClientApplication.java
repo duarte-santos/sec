@@ -9,11 +9,9 @@ import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.web.client.RestTemplate;
 import pt.tecnico.sec.EnvironmentGenerator;
-import pt.tecnico.sec.RSAKeyGenerator;
+import pt.tecnico.sec.JavaKeyStore;
 
 import java.io.IOException;
-import java.security.GeneralSecurityException;
-import java.security.KeyPair;
 import java.security.PublicKey;
 import java.util.*;
 
@@ -25,6 +23,7 @@ public class ClientApplication {
     private static Environment _environment;
     private static int _epoch;
     private static User _user;
+    private static JavaKeyStore _keyStore;
 
     public static void main(String[] args) {
         try {
@@ -45,13 +44,14 @@ public class ClientApplication {
             if (serverCount <= 0)  // client must exist in environment
                 throw new NumberFormatException("Argument 'serverCount' be a positive integer.");
 
-            // get keys
-            String keysPath = KEYS_PATH + "c" + id;
-            KeyPair keyPair = RSAKeyGenerator.readKeyPair(keysPath + ".pub", keysPath + ".priv");
-            PublicKey[] serverKeys = RSAKeyGenerator.readServersKeys(serverCount);
+            // load keystore
+            String keyStoreName = "user" + id + KEYSTORE_EXTENSION;
+            String keyStorePassword = "user" + id;
+            _keyStore = new JavaKeyStore(KEYSTORE_TYPE, keyStorePassword, keyStoreName);
+            _keyStore.loadKeyStore();
 
             // create user
-            _user = new User(_environment.getGrid(_epoch), id, keyPair, serverKeys);
+            _user = new User(_environment.getGrid(_epoch), id, serverCount, _keyStore);
             System.out.println("The user \"C00lD0060 No." + id + "\" has SPAWNED.\n");
 
             // create spring application
@@ -60,8 +60,8 @@ public class ClientApplication {
             springApplication.setDefaultProperties(Collections.singletonMap("server.port", String.valueOf(port)));
             springApplication.run(args);
 
-        } catch (IOException|ParseException|GeneralSecurityException e) {
-            System.out.println("Error setting up client. Please make sure to properly run EnvironmentGenerator and RSAKeyGenerator before running the client.");
+        } catch (IOException|ParseException e) {
+            System.out.println("Error setting up client. Please make sure to properly run EnvironmentGenerator and CryptoRSA before running the client.");
         } catch (Exception e) {
             System.out.println(EXCEPTION_STR + e.getMessage());
             System.out.println(CLIENT_USAGE);
@@ -110,7 +110,7 @@ public class ClientApplication {
                                 }
                             }
                             catch (Exception e) {
-                                System.out.println(e.getLocalizedMessage());
+                                System.out.println(e.getMessage());
                             }
                         }
 
@@ -139,8 +139,10 @@ public class ClientApplication {
                                 LocationReport report = _user.obtainReport(ep);
                                 if (report == null)
                                     System.out.println("The requested report doesn't exist");
-                                else
-                                    System.out.println( "User " + report.get_userId() + ", epoch " + ep + ", location: " + report.get_location() + "\nReport: " + report );
+                                else {
+                                    List<PublicKey> clientKeys = _keyStore.getAllUsersPublicKeys(_user.getId());
+                                    System.out.println( "User " + report.get_userId() + ", epoch " + ep + ", location: " + report.get_location() + "\nReport: " + report.printReport(clientKeys) );
+                                }
                             }
                             catch (Exception e) {
                                 System.out.println(e.getMessage());

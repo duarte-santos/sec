@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import pt.tecnico.sec.client.LocationProof;
 
 import javax.persistence.*;
+import java.util.Objects;
 
 @SuppressWarnings("unused")
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -73,5 +74,18 @@ public class DBLocationProof {
         return "DBLocationProof{" +
                 "DBProofData='" + _proofData + '\'' +
                 '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        DBLocationProof that = (DBLocationProof) o;
+        return Objects.equals(_proofData, that._proofData) && Objects.equals(_signature, that._signature) && Objects.equals(id, that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(_proofData, _signature, id);
     }
 }

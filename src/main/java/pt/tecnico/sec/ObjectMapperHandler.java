@@ -6,21 +6,18 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import pt.tecnico.sec.client.*;
 import pt.tecnico.sec.healthauthority.ObtainUsersRequest;
 import pt.tecnico.sec.healthauthority.UsersAtLocation;
-import pt.tecnico.sec.server.DBLocationReport;
+import pt.tecnico.sec.server.BroadcastMessage;
 
 import java.io.IOException;
 import java.util.List;
+
+import static pt.tecnico.sec.Constants.OK;
 
 public final class ObjectMapperHandler {
 
     /* ========================================================== */
     /* ====[                Write as Bytes                  ]==== */
     /* ========================================================== */
-
-    public static byte[] writeValueAsBytes(Integer integer) throws JsonProcessingException {
-        ObjectMapper objectMapper = new ObjectMapper();
-        return objectMapper.writeValueAsBytes(integer);
-    }
 
     public static byte[] writeValueAsBytes(String string) throws JsonProcessingException {
         ObjectMapper objectMapper = new ObjectMapper();
@@ -47,11 +44,6 @@ public final class ObjectMapperHandler {
         return objectMapper.writeValueAsBytes(signedReport);
     }
 
-    public static byte[] writeValueAsBytes(DBLocationReport dbReport) throws JsonProcessingException {
-        ObjectMapper objectMapper = new ObjectMapper();
-        return objectMapper.writeValueAsBytes(dbReport);
-    }
-
     public static byte[] writeValueAsBytes(UsersAtLocation users) throws JsonProcessingException {
         ObjectMapper objectMapper = new ObjectMapper();
         return objectMapper.writeValueAsBytes(users);
@@ -72,15 +64,20 @@ public final class ObjectMapperHandler {
         return objectMapper.writeValueAsBytes(proofsRequest);
     }
 
+    public static byte[] writeValueAsBytes(BroadcastMessage m) throws JsonProcessingException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        return objectMapper.writeValueAsBytes(m);
+    }
+
+    public static byte[] writeValueAsBytes(Exception e) throws JsonProcessingException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        return objectMapper.writeValueAsBytes(e);
+    }
+
 
     /* ========================================================== */
     /* ====[                Get from Bytes                  ]==== */
     /* ========================================================== */
-
-    public static int getIntFromBytes(byte[] bytes) throws IOException {
-        ObjectMapper objectMapper = new ObjectMapper();
-        return objectMapper.readValue(bytes, Integer.class);
-    }
 
     public static String getStringFromBytes(byte[] bytes) throws IOException {
         ObjectMapper objectMapper = new ObjectMapper();
@@ -92,4 +89,39 @@ public final class ObjectMapperHandler {
         return objectMapper.readValue(bytes, new TypeReference<>(){});
     }
 
+    public static BroadcastMessage getBroadcastMessageFromBytes(byte[] bytes) throws IOException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        return objectMapper.readValue(bytes, BroadcastMessage.class);
+    }
+
+
+    /* ========================================================== */
+    /* ====[                   Auxiliary                    ]==== */
+    /* ========================================================== */
+
+    public static void throwIfException(byte[] responseBytes) throws Exception {
+        if (responseBytes == null) return;
+
+        Exception exception;
+        try {
+            final ObjectMapper objectMapper = new ObjectMapper();
+            exception = objectMapper.readValue(responseBytes, Exception.class);
+
+        } catch (Exception e) {
+            return; // cannot be converted -> it is not an exception
+        }
+        if (exception != null) {
+            throw exception;
+        }
+    }
+
+    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
+    public static boolean isOKString(byte[] bytes) {
+        if (bytes == null) return false;
+        try {
+            return ObjectMapperHandler.getStringFromBytes(bytes).equals(OK);
+        } catch (Exception e) {
+            return false;
+        }
+    }
 }

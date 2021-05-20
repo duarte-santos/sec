@@ -4,8 +4,9 @@ import org.apache.commons.codec.binary.Hex;
 import org.springframework.http.HttpEntity;
 import org.springframework.web.client.RestTemplate;
 import pt.tecnico.sec.AESKeyGenerator;
+import pt.tecnico.sec.CryptoRSA;
+import pt.tecnico.sec.JavaKeyStore;
 import pt.tecnico.sec.ObjectMapperHandler;
-import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
 import javax.crypto.SecretKey;
@@ -13,6 +14,7 @@ import java.nio.ByteBuffer;
 import java.security.KeyPair;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.util.*;
 
@@ -22,8 +24,8 @@ public class User {
 
     private RestTemplate _restTemplate;
     private final int _id;
-    private final KeyPair _keyPair;
-    private final PublicKey[] _serverKeys;
+    private final int _serverCount;
+    private final JavaKeyStore _keyStore;
 
     private final int POW_N = 2; // Number of leading 0's in Proof of Work
 
@@ -32,14 +34,13 @@ public class User {
     private int _epoch = 0;
     private final Map<Integer, List<LocationProof>> _proofs =  new HashMap<>();
 
-    private static final Map<Integer, SecretKey> _secretKeys = new HashMap<>();
     private static final Map<Integer, Integer> _sKeysCreationEpoch = new HashMap<>();
 
-    public User(Grid grid, int id, KeyPair keyPair, PublicKey[] serverKeys) {
+    public User(Grid grid, int id, int serverCount, JavaKeyStore keyStore) {
         _grid = grid;
         _id = id;
-        _keyPair = keyPair;
-        _serverKeys = serverKeys;
+        _serverCount = serverCount;
+        _keyStore = keyStore;
     }
 
 
@@ -92,7 +93,7 @@ public class User {
 
     public int getRandomServerId() {
         Random random = new Random();
-        return random.nextInt(_serverKeys.length);
+        return random.nextInt(_serverCount);
     }
 
     /* ========================================================== */
@@ -152,7 +153,7 @@ public class User {
 
     public LocationProof signLocationProof(ProofData proofData) throws Exception {
         byte[] proofBytes = ObjectMapperHandler.writeValueAsBytes(proofData);
-        String signature = RSAKeyGenerator.sign(proofBytes, _keyPair.getPrivate());
+        String signature = CryptoRSA.sign(proofBytes, _keyStore.getPersonalPrivateKey());
         return new LocationProof(proofData, signature);
     }
 
@@ -185,7 +186,8 @@ public class User {
         List<LocationProof> epochProofs = getEpochProofs(epoch);
         LocationReport locationReport = new LocationReport(_id, epoch, epochLocation, epochProofs);
         byte[] bytes = ObjectMapperHandler.writeValueAsBytes(locationReport);
-        System.out.println(locationReport);
+        List<PublicKey> clientKeys = _keyStore.getAllUsersPublicKeys(_id);
+        System.out.println(locationReport.printReport(clientKeys));
 
         // Solve puzzle
         bytes = solvePuzzle(bytes);
@@ -194,11 +196,13 @@ public class User {
         byte[] responseBytes = postToServers(bytes, "/submit-location-report");
 
         // Check response
-        if (responseBytes == null || !ObjectMapperHandler.getStringFromBytes(responseBytes).equals("OK"))
+        if (!ObjectMapperHandler.isOKString(responseBytes)) {
+            ObjectMapperHandler.throwIfException(responseBytes);
             throw new IllegalArgumentException("Bad server response!");
+        }
+
         return OK;
     }
-
 
     /* ========================================================== */
     /* ====[             Obtain Location Report             ]==== */
@@ -216,9 +220,10 @@ public class User {
         byte[] responseBytes = postToServers(requestBytes, "/obtain-location-report");
 
         // Check response
+        ObjectMapperHandler.throwIfException(responseBytes);
         if (responseBytes == null) return null;
         SignedLocationReport signedReport = checkObtainLocationResponse(responseBytes, _id, epoch);
-        return checkLocationReport(signedReport, _keyPair.getPublic());
+        return checkLocationReport(signedReport, _keyStore.getPersonalPublicKey());
     }
 
     public SignedLocationReport checkObtainLocationResponse(byte[] responseBytes, int id, int epoch) throws Exception {
@@ -235,7 +240,8 @@ public class User {
         // Check report
         signedReport.verify(verifyKey);
 
-        int validProofCount = signedReport.verifyProofs();
+        List<PublicKey> clientKeys = _keyStore.getAllUsersPublicKeys(_id);
+        int validProofCount = signedReport.verifyProofs(clientKeys);
         if (validProofCount <= BYZANTINE_USERS)
             throw new ReportNotAcceptableException("Not enough proofs to constitute an acceptable Location Report");
 
@@ -259,9 +265,10 @@ public class User {
         byte[] responseBytes = postToServers(requestBytes, "/request-proofs");
 
         // Check response
+        ObjectMapperHandler.throwIfException(responseBytes);
         List<LocationProof> proofs = checkWitnessProofsResponse(responseBytes, _id, epochs);
         for (LocationProof proof : proofs)
-            proof.verify(_keyPair.getPublic()); // throws exception
+            proof.verify(_keyStore.getPersonalPublicKey());
 
         return proofs;
     }
@@ -286,7 +293,7 @@ public class User {
     /* ========================================================== */
 
     private byte[] sendRequest(int serverId, SecureMessage secureRequest, SecretKey secretKey, String endpoint) throws Exception {
-        PublicKey serverKey = _serverKeys[serverId];
+        PublicKey serverKey = _keyStore.getPublicKey("server" + serverId);
         HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
         SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + endpoint, request, SecureMessage.class);
 
@@ -300,14 +307,22 @@ public class User {
         int serverId = getRandomServerId(); // Choose random server to send request
         SecretKey secretKey = updateSecretKey(serverId);
         System.out.println("Requesting from server " + serverId);
-        SecureMessage secureRequest = new SecureMessage(_id, messageBytes, secretKey, _keyPair.getPrivate());
+        SecureMessage secureRequest = new SecureMessage(_id, messageBytes, secretKey, _keyStore.getPersonalPrivateKey());
         return sendRequest(serverId, secureRequest, secretKey, endpoint);
     }
 
     private byte[] postKeyToServer(int serverId, SecretKey keyToSend) throws Exception {
-        PublicKey serverKey = _serverKeys[serverId];
-        SecureMessage secureRequest = new SecureMessage(_id, keyToSend, serverKey, _keyPair.getPrivate());
-        return sendRequest(serverId, secureRequest, keyToSend, "/secret-key");
+        PublicKey serverKey = _keyStore.getPublicKey("server" + serverId);
+        PrivateKey myKey = _keyStore.getPersonalPrivateKey();
+        SecureMessage secureRequest = new SecureMessage(_id, keyToSend, serverKey, myKey);
+
+        HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
+        SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + "/secret-key", request, SecureMessage.class);
+
+        if (secureResponse == null) return null;
+
+        // Check response's signature and decipher TODO freshness
+        return secureResponse.decipherAndVerify( myKey, serverKey);
     }
 
 
@@ -316,11 +331,11 @@ public class User {
     /* ========================================================== */
 
     public boolean secretKeyValid(int serverId) {
-        return _secretKeys.get(serverId) != null && _epoch - _sKeysCreationEpoch.get(serverId) <= SECRET_KEY_DURATION;
+        Integer creation = _sKeysCreationEpoch.get(serverId);
+        return creation != null && (_epoch - creation) <= SECRET_KEY_DURATION;
     }
 
     public SecretKey updateSecretKey(int serverId) throws Exception {
-
         if (!secretKeyValid(serverId)) {
             System.out.print("Generating new secret key...");
 
@@ -331,17 +346,19 @@ public class User {
             byte[] responseBytes = postKeyToServer(serverId, newSecretKey);
 
             // Check response
-            if (responseBytes == null || !ObjectMapperHandler.getStringFromBytes(responseBytes).equals(OK))
+            if (!ObjectMapperHandler.isOKString(responseBytes)) {
+                ObjectMapperHandler.throwIfException(responseBytes);
                 throw new IllegalArgumentException("Error exchanging new secret key");
+            }
 
             // Success! Update key
-            _secretKeys.put(serverId, newSecretKey);
+            _keyStore.setAndStoreSecretKey("server" + serverId, newSecretKey);
             _sKeysCreationEpoch.put(serverId, _epoch);
 
             System.out.println("Done!");
         }
 
-        return _secretKeys.get(serverId);
+        return _keyStore.getSecretKey("server" + serverId);
     }
 
     /* ========================================================== */

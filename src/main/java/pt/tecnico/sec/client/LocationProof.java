@@ -1,8 +1,8 @@
 package pt.tecnico.sec.client;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import pt.tecnico.sec.CryptoRSA;
 import pt.tecnico.sec.ObjectMapperHandler;
-import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.server.DBLocationProof;
 
 import java.security.PublicKey;
@@ -52,7 +52,7 @@ public class LocationProof {
 
     public void verify(PublicKey verifyKey) throws Exception {
         byte[] bytes = ObjectMapperHandler.writeValueAsBytes(_proofData);
-        if (_signature == null || !RSAKeyGenerator.verify(bytes, _signature, verifyKey))
+        if (_signature == null || !CryptoRSA.verify(bytes, _signature, verifyKey))
             throw new IllegalArgumentException("Signature verify failed!");
     }
 

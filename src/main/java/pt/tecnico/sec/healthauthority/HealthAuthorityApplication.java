@@ -9,14 +9,13 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.http.HttpEntity;
 import org.springframework.web.client.RestTemplate;
 import pt.tecnico.sec.AESKeyGenerator;
+import pt.tecnico.sec.JavaKeyStore;
 import pt.tecnico.sec.ObjectMapperHandler;
-import pt.tecnico.sec.RSAKeyGenerator;
 import pt.tecnico.sec.client.*;
 import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
 import javax.crypto.SecretKey;
-import java.security.KeyPair;
-import java.security.PublicKey;
+import java.security.*;
 import java.util.*;
 
 import static java.lang.System.exit;
@@ -26,16 +25,21 @@ import static pt.tecnico.sec.Constants.*;
 public class HealthAuthorityApplication {
 
     private RestTemplate _restTemplate;
-    private KeyPair _keyPair;
-    private static PublicKey[] _serverKeys;
+    private static JavaKeyStore _keyStore;
+    private static int _serverCount;
 
-    private static final Map<Integer, SecretKey> _secretKeys = new HashMap<>();
     private static final Map<Integer, Integer> _sKeysUsages = new HashMap<>();
 
     public static void main(String[] args) {
         try {
-            int serverCount = Integer.parseInt(args[0]);
-            _serverKeys = new PublicKey[serverCount];
+            _serverCount = Integer.parseInt(args[0]);
+
+            // Instantiate KeyStore
+            int haId = 0;
+            String keyStoreName = "ha" + haId + KEYSTORE_EXTENSION;
+            String keyStorePassword = "ha" + haId;
+            _keyStore = new JavaKeyStore(KEYSTORE_TYPE, keyStorePassword, keyStoreName);
+            _keyStore.loadKeyStore();
 
             SpringApplication app = new SpringApplication(HealthAuthorityApplication.class);
             app.setDefaultProperties(Collections.singletonMap("server.port", HA_BASE_PORT));
@@ -56,10 +60,6 @@ public class HealthAuthorityApplication {
     public CommandLineRunner run(RestTemplate restTemplate) {
         return args -> {
             _restTemplate = restTemplate;
-
-            // get keys
-            _keyPair = RSAKeyGenerator.readKeyPair(KEYS_PATH + "ha.pub", KEYS_PATH + "ha.priv");
-            _serverKeys = RSAKeyGenerator.readServersKeys(_serverKeys.length);
 
             try (Scanner scanner = new Scanner(System.in)) {
                 while (true) {
@@ -87,7 +87,10 @@ public class HealthAuthorityApplication {
 
                             LocationReport report = obtainReport(id, epoch);
                             if (report == null) System.out.println("Location Report not found");
-                            else System.out.println( "User " + id + ", epoch " + epoch + ", location: " + report.get_location() + "\nReport: " + report );
+                            else {
+                                List<PublicKey> clientKeys = _keyStore.getAllUsersPublicKeys();
+                                System.out.println("User " + id + ", epoch " + epoch + ", location: " + report.get_location() + "\nReport: " + report.printReport(clientKeys));
+                            }
                         }
 
                         // obtainUsersAtLocation, [x], [y], [ep]
@@ -126,17 +129,14 @@ public class HealthAuthorityApplication {
     @SuppressWarnings("SameReturnValue")
     private static String getHelpString() {
         return """
-                  ============================= Available Commands =============================
-                  step                       - Increase current epoch
-                  submit, [epoch]            - Send the user's DBLocation report of the given
-                                                epoch to the server
-                  obtain, [epoch]            - Ask the server for the user's DBLocation report
-                                                at the given epoch
-                  proofs, [ep1], [ep2], ...  - Ask the server for the proofs that the user
-                                                generated as witness
-                  exit                       - Quit Client App
-                  ==============================================================================
-
+                ======================== Available Commands ========================
+                obtainLocationReport, [userId], [ep]
+                > returns the position of "userId" at the epoch "ep"
+                obtainUsersAtLocation, [x], [y], [ep]
+                > returns a list of users that were at position (x,y) at epoch "ep"
+                exit
+                > exits the Health Authority application
+                ====================================================================
                 """;
     }
 
@@ -148,7 +148,8 @@ public class HealthAuthorityApplication {
     public LocationReport checkLocationReport(SignedLocationReport signedReport, PublicKey verifyKey) throws Exception {
         // Check report
         signedReport.verify(verifyKey);
-        int validProofCount = signedReport.verifyProofs();
+        List<PublicKey> clientKeys = _keyStore.getAllUsersPublicKeys();
+        int validProofCount = signedReport.verifyProofs(clientKeys);
         if (validProofCount <= BYZANTINE_USERS)
             throw new ReportNotAcceptableException("Not enough proofs to constitute an acceptable Location Report");
 
@@ -162,7 +163,7 @@ public class HealthAuthorityApplication {
 
     public int getRandomServerId() {
         Random random = new Random();
-        return random.nextInt(_serverKeys.length);
+        return random.nextInt(_serverCount);
     }
 
 
@@ -179,9 +180,10 @@ public class HealthAuthorityApplication {
         byte[] responseBytes = postToServers(requestBytes, "/obtain-location-report");
 
         // Check response
+        ObjectMapperHandler.throwIfException(responseBytes);
         if (responseBytes == null) return null;
         SignedLocationReport signedReport = checkObtainLocationResponse(responseBytes, userId, epoch);
-        return checkLocationReport(signedReport, RSAKeyGenerator.readClientPublicKey(signedReport.get_userId()));
+        return checkLocationReport(signedReport, _keyStore.getPublicKey("user" + signedReport.get_userId()) );
     }
 
 
@@ -211,9 +213,10 @@ public class HealthAuthorityApplication {
             throw new IllegalArgumentException("Error in response");
 
         // Check response
+        ObjectMapperHandler.throwIfException(responseBytes);
         UsersAtLocation usersAtLocation = checkObtainUsersResponse(responseBytes, location, epoch);
         for (SignedLocationReport signedReport : usersAtLocation.get_reports())
-            checkLocationReport(signedReport, RSAKeyGenerator.readClientPublicKey(signedReport.get_userId()));
+            checkLocationReport(signedReport, _keyStore.getPublicKey("user" + signedReport.get_userId()) );
         return usersAtLocation;
     }
 
@@ -233,7 +236,7 @@ public class HealthAuthorityApplication {
     /* ========================================================== */
 
     private byte[] sendRequest(int serverId, SecureMessage secureRequest, SecretKey secretKey, String endpoint) throws Exception {
-        PublicKey serverKey = _serverKeys[serverId];
+        PublicKey serverKey = _keyStore.getPublicKey("server" + serverId);
         HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
         SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + endpoint, request, SecureMessage.class);
 
@@ -248,14 +251,22 @@ public class HealthAuthorityApplication {
         SecretKey secretKey = updateSecretKey(serverId);
         secretKeyUsed(serverId);
         System.out.println("Requesting from server " + serverId);
-        SecureMessage secureRequest = new SecureMessage(-1, messageBytes, secretKey, _keyPair.getPrivate());
+        SecureMessage secureRequest = new SecureMessage(-1, messageBytes, secretKey, _keyStore.getPersonalPrivateKey());
         return sendRequest(serverId, secureRequest, secretKey, endpoint);
     }
 
     private byte[] postKeyToServers(int serverId, SecretKey keyToSend) throws Exception {
-        PublicKey serverKey = _serverKeys[serverId];
-        SecureMessage secureRequest = new SecureMessage(-1, keyToSend, serverKey, _keyPair.getPrivate());
-        return sendRequest(serverId, secureRequest, keyToSend, "/secret-key");
+        PublicKey serverKey = _keyStore.getPublicKey("server" + serverId);
+        PrivateKey myKey = _keyStore.getPersonalPrivateKey();
+        SecureMessage secureRequest = new SecureMessage(-1, keyToSend, serverKey, myKey);
+
+        HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
+        SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + "/secret-key", request, SecureMessage.class);
+
+        if (secureResponse == null) return null;
+
+        // Check response's signature and decipher TODO freshness
+        return secureResponse.decipherAndVerify( myKey, serverKey);
     }
 
 
@@ -263,8 +274,9 @@ public class HealthAuthorityApplication {
     /* ====[               Handle Secret Keys               ]==== */
     /* ========================================================== */
 
-    public boolean secretKeyValid(int serverId) {
-        return _secretKeys.get(serverId) != null && _sKeysUsages.get(serverId) <= SECRET_KEY_DURATION;
+    public boolean secretKeyValid(int serverId) throws UnrecoverableEntryException, KeyStoreException, NoSuchAlgorithmException {
+        SecretKey secret = _keyStore.getSecretKey("server" + serverId);
+        return secret != null && _sKeysUsages.get(serverId) <= SECRET_KEY_DURATION;
     }
 
     public SecretKey updateSecretKey(int serverId) throws Exception {
@@ -278,15 +290,17 @@ public class HealthAuthorityApplication {
             byte[] responseBytes = postKeyToServers(serverId, newSecretKey);
 
             // Check response
-            if (responseBytes == null || !ObjectMapperHandler.getStringFromBytes(responseBytes).equals(OK))
+            if (!ObjectMapperHandler.isOKString(responseBytes)) {
+                ObjectMapperHandler.throwIfException(responseBytes);
                 throw new IllegalArgumentException("Error exchanging new secret key");
+            }
 
             // Success! Update key
-            _secretKeys.put(serverId, newSecretKey);
+            _keyStore.setAndStoreSecretKey("server" + serverId, newSecretKey);
             _sKeysUsages.put(serverId, 0);
 
             System.out.println("Done!");
         }
-        return _secretKeys.get(serverId);
+        return _keyStore.getSecretKey("server" + serverId);
     }
 }

@@ -1,5 +1,6 @@
 package pt.tecnico.sec;
 
+import javax.crypto.SecretKey;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -8,11 +9,14 @@ import java.nio.file.Paths;
 import java.security.*;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
+import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.List;
 
-/**
- * @author https://www.baeldung.com/java-keystore
- */
+import static pt.tecnico.sec.Constants.*;
+
+
+@SuppressWarnings("unused")
 public class JavaKeyStore {
 
     private KeyStore _keyStore;
@@ -22,7 +26,7 @@ public class JavaKeyStore {
     private final String _password;
 
     public JavaKeyStore(String keyStoreType, String keyStorePassword, String keyStoreName) {
-        _name = keyStoreName;
+        _name = KEYSTORE_DIRECTORY + keyStoreName;
         _type = keyStoreType;
         _password = keyStorePassword;
     }
@@ -37,22 +41,35 @@ public class JavaKeyStore {
         }
         _keyStore = KeyStore.getInstance(_type);
 
-        // Load
+        // Load the KeyStore
         char[] pwdArray = _password.toCharArray();
         _keyStore.load(null, pwdArray);
 
-        // Save the keyStore
+        // Save the KeyStore
         try (FileOutputStream fos = new FileOutputStream(_name)) {
             _keyStore.store(fos, pwdArray);
         }
     }
 
-    public void loadKeyStore() throws IOException, CertificateException, NoSuchAlgorithmException {
+    public void storeKeyStore() throws IOException, CertificateException, KeyStoreException, NoSuchAlgorithmException {
         char[] pwdArray = _password.toCharArray();
+        // Save the KeyStore
+        try (FileOutputStream fos = new FileOutputStream(_name)) {
+            _keyStore.store(fos, pwdArray);
+        }
+    }
+
+    public void loadKeyStore() throws IOException, CertificateException, NoSuchAlgorithmException, KeyStoreException {
+        char[] pwdArray = _password.toCharArray();
+        if (_keyStore == null) {
+            _keyStore = KeyStore.getInstance(_type);
+        }
         _keyStore.load(new FileInputStream(_name), pwdArray);
     }
 
-    public void setEntry(String alias, KeyStore.SecretKeyEntry secretKeyEntry, KeyStore.ProtectionParameter protectionParameter) throws KeyStoreException {
+    public void setEntry(String alias, SecretKey secretKey) throws KeyStoreException {
+        KeyStore.SecretKeyEntry secretKeyEntry = new KeyStore.SecretKeyEntry(secretKey);
+        KeyStore.ProtectionParameter protectionParameter = new KeyStore.PasswordProtection(_password.toCharArray());
         _keyStore.setEntry(alias, secretKeyEntry, protectionParameter);
     }
 
@@ -72,6 +89,74 @@ public class JavaKeyStore {
     public Certificate getCertificate(String alias) throws KeyStoreException {
         return _keyStore.getCertificate(alias);
     }
+
+    /* ===========[          GET KEYS          ]=========== */
+
+    public void setAndStoreSecretKey(String alias, SecretKey secretKey) throws KeyStoreException, CertificateException, IOException, NoSuchAlgorithmException {
+        alias = "secret" + alias;
+        setEntry(alias, secretKey);
+        storeKeyStore();
+    }
+
+    public SecretKey getSecretKey(String alias) throws KeyStoreException, UnrecoverableEntryException, NoSuchAlgorithmException {
+        alias = "secret" + alias;
+        KeyStore.SecretKeyEntry secretKeyEntry = (KeyStore.SecretKeyEntry) getEntry(alias);
+        if (secretKeyEntry == null) return null;
+        return secretKeyEntry.getSecretKey();
+    }
+
+    public PrivateKey getPrivateKey(String alias) throws KeyStoreException, UnrecoverableEntryException, NoSuchAlgorithmException {
+        KeyStore.PrivateKeyEntry privateKeyEntry = (KeyStore.PrivateKeyEntry) getEntry(alias);
+        if (privateKeyEntry == null) return null;
+        return privateKeyEntry.getPrivateKey();
+    }
+
+    public PublicKey getPublicKey(String alias) throws KeyStoreException {
+        Certificate certificate = getCertificate(alias);
+        if (certificate == null) return null;
+        return certificate.getPublicKey();
+    }
+
+    public KeyPair getKeyPair(String certificateAlias, String privateKeyAlias) throws KeyStoreException, UnrecoverableEntryException, NoSuchAlgorithmException {
+        PublicKey publicKey = getPublicKey(certificateAlias);
+        PrivateKey privateKey = getPrivateKey(privateKeyAlias);
+        if (publicKey == null || privateKey == null) return null;
+        return new KeyPair(publicKey, privateKey);
+    }
+
+    public PrivateKey getPersonalPrivateKey() throws KeyStoreException, UnrecoverableEntryException, NoSuchAlgorithmException {
+        return getPrivateKey(KEYSTORE_PRIVATE_KEY);
+    }
+
+    public PublicKey getPersonalPublicKey() throws KeyStoreException {
+        return getPublicKey(KEYSTORE_CERTIFICATE);
+    }
+
+    public KeyPair getPersonalKeyPair() throws KeyStoreException, UnrecoverableEntryException, NoSuchAlgorithmException {
+        return getKeyPair(KEYSTORE_CERTIFICATE, KEYSTORE_PRIVATE_KEY);
+    }
+
+    public List<PublicKey> getAllUsersPublicKeys(int personalId) throws KeyStoreException {
+        List<PublicKey> publicKeyArray = new ArrayList<>();
+        PublicKey publicKey = (personalId == 0) ? getPersonalPublicKey() : getPublicKey("user" + 0);
+        for (int userId = 1; publicKey != null; userId++) {
+            publicKeyArray.add(publicKey);
+            publicKey = (personalId == userId) ? getPersonalPublicKey() : getPublicKey("user" + userId);
+        }
+        return publicKeyArray;
+    }
+
+    public List<PublicKey> getAllUsersPublicKeys() throws KeyStoreException {
+        List<PublicKey> publicKeyArray = new ArrayList<>();
+        PublicKey publicKey = getPublicKey("user" + 0);
+        for (int userId = 1; publicKey != null; userId++) {
+            publicKeyArray.add(publicKey);
+            publicKey = getPublicKey("user" + userId);
+        }
+        return publicKeyArray;
+    }
+
+    /* ===========[           DELETE           ]=========== */
 
     public void deleteEntry(String alias) throws KeyStoreException {
         _keyStore.deleteEntry(alias);

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import pt.tecnico.sec.client.ProofData;
 
 import javax.persistence.*;
+import java.util.Objects;
 
 @SuppressWarnings("unused")
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -99,5 +100,18 @@ public class DBProofData {
                 ", _type='" + _type + '\'' +
                 ", id=" + id +
                 '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        DBProofData that = (DBProofData) o;
+        return _proverId == that._proverId && _witnessId == that._witnessId && _epoch == that._epoch && Objects.equals(_DB_location, that._DB_location) && Objects.equals(_type, that._type) && Objects.equals(id, that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(_DB_location, _proverId, _witnessId, _epoch, _type, id);
     }
 }

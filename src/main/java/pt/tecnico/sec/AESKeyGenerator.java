@@ -26,7 +26,13 @@ public class AESKeyGenerator {
         return new SecretKeySpec(encoded, 0, 16, "AES");
     }
 
-
+    /*
+    SecretKey sk = AESKeyGenerator.makeAESKey();
+    byte[] skEncoded = sk.getEncoded();
+    FileOutputStream fos = new FileOutputStream(KEYS_PATH + "secret.key");
+    fos.write(skEncoded);
+    fos.close();
+    */
 
     /* ========================================================== */
     /* ====[                Encrypt/Decrypt                 ]==== */

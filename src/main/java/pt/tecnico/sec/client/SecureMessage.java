@@ -2,11 +2,12 @@ package pt.tecnico.sec.client;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import pt.tecnico.sec.AESKeyGenerator;
-import pt.tecnico.sec.RSAKeyGenerator;
+import pt.tecnico.sec.CryptoRSA;
 
 import javax.crypto.SecretKey;
 import java.security.PrivateKey;
 import java.security.PublicKey;
+import java.util.Objects;
 
 @SuppressWarnings("unused")
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -31,7 +32,7 @@ public class SecureMessage {
         _cipheredMessage = AESKeyGenerator.encrypt(messageBytes, cipherKey);
 
         // sign message with given private sign key
-        _signature = RSAKeyGenerator.sign(messageBytes, signKey);
+        _signature = CryptoRSA.sign(messageBytes, signKey);
     }
 
     // Used to exchange secret Keys - keyToSend is the new secretKey
@@ -42,10 +43,21 @@ public class SecureMessage {
         byte[] encodedKey = keyToSend.getEncoded();
 
         // encrypt message with given public cipher key
-        _cipheredMessage = RSAKeyGenerator.encrypt(encodedKey, cipherKey);
+        _cipheredMessage = CryptoRSA.encrypt(encodedKey, cipherKey);
 
         // sign message with given private sign key
-        _signature = RSAKeyGenerator.sign(encodedKey, signKey);
+        _signature = CryptoRSA.sign(encodedKey, signKey);
+    }
+
+    // Used to respond to secret Key exchange
+    public SecureMessage(int senderId, byte[] messageBytes, PublicKey cipherKey, PrivateKey signKey) throws Exception {
+        _senderId = senderId;
+
+        // encrypt message with given public cipher key
+        _cipheredMessage = CryptoRSA.encrypt(messageBytes, cipherKey);
+
+        // sign message with given private sign key
+        _signature = CryptoRSA.sign(messageBytes, signKey);
     }
 
     public int get_senderId() {
@@ -81,6 +93,19 @@ public class SecureMessage {
                 '}';
     }
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        SecureMessage that = (SecureMessage) o;
+        return _senderId == that._senderId && Objects.equals(_cipheredMessage, that._cipheredMessage) && Objects.equals(_signature, that._signature);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(_senderId, _cipheredMessage, _signature);
+    }
+
     /* ========================================================== */
     /* ====[             Ciphers and Signatures             ]==== */
     /* ========================================================== */
@@ -92,11 +117,17 @@ public class SecureMessage {
     }
 
     public SecretKey decipherAndVerifyKey(PrivateKey decipherKey, PublicKey verifyKey) throws Exception {
-        byte[] encodedKey = RSAKeyGenerator.decrypt(_cipheredMessage, decipherKey);
+        byte[] encodedKey = CryptoRSA.decrypt(_cipheredMessage, decipherKey);
         verify(encodedKey, verifyKey);
 
         // get secret key from bytes
         return AESKeyGenerator.fromEncoded(encodedKey);
+    }
+
+    public byte[] decipherAndVerify(PrivateKey decipherKey, PublicKey verifyKey) throws Exception {
+        byte[] messageBytes = CryptoRSA.decrypt(_cipheredMessage, decipherKey);
+        verify(messageBytes, verifyKey);
+        return messageBytes;
     }
 
     public byte[] decipher(SecretKey decipherKey) throws Exception {
@@ -104,7 +135,9 @@ public class SecureMessage {
     }
 
     public void verify(byte[] messageBytes, PublicKey verifyKey) {
-        if (_signature == null || !RSAKeyGenerator.verify(messageBytes, _signature, verifyKey))
+        if (_signature == null || !CryptoRSA.verify(messageBytes, _signature, verifyKey)){
+            System.out.println("Signature verify failed.");
             throw new IllegalArgumentException("Signature verify failed!");
+        }
     }
 }

@@ -28,6 +28,11 @@ public class ObtainUsersRequest {
         return objectMapper.readValue(requestBytes, ObtainUsersRequest.class);
     }
 
+    public void checkSender(int sender_id) {
+        if ( sender_id != -1 )
+            throw new IllegalArgumentException("Only the health authority can make 'users at location' requests");
+    }
+
     public Location get_location() {
         return _location;
     }

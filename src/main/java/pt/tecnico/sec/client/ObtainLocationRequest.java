@@ -3,6 +3,7 @@ package pt.tecnico.sec.client;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
+import java.util.Objects;
 
 @SuppressWarnings("unused")
 public class ObtainLocationRequest {
@@ -38,11 +39,29 @@ public class ObtainLocationRequest {
         this._epoch = _epoch;
     }
 
+    public void checkSender(int sender_id) {
+        if ( !(sender_id == -1 || sender_id >= 1000 || sender_id == _userId) )
+            throw new IllegalArgumentException("Cannot request reports from other users.");
+    }
+
     @Override
     public String toString() {
         return "ObtainLocationRequest{" +
                 "_userId=" + _userId +
                 ", _epoch=" + _epoch +
                 '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        ObtainLocationRequest that = (ObtainLocationRequest) o;
+        return _userId == that._userId && _epoch == that._epoch;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(_userId, _epoch);
     }
 }
