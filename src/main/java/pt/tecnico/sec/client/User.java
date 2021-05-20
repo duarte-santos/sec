@@ -10,10 +10,7 @@ import pt.tecnico.sec.server.exception.ReportNotAcceptableException;
 
 import javax.crypto.SecretKey;
 import java.security.PrivateKey;
-import java.security.KeyStoreException;
-import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
-import java.security.UnrecoverableEntryException;
 import java.util.*;
 
 import static pt.tecnico.sec.Constants.*;
@@ -318,7 +315,7 @@ public class User {
     /* ====[               Handle Secret Keys               ]==== */
     /* ========================================================== */
 
-    public boolean secretKeyValid(int serverId) throws UnrecoverableEntryException, KeyStoreException, NoSuchAlgorithmException {
+    public boolean secretKeyValid(int serverId) {
         Integer creation = _sKeysCreationEpoch.get(serverId);
         return creation != null && (_epoch - creation) <= SECRET_KEY_DURATION;
     }
