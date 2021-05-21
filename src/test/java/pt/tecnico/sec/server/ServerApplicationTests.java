@@ -56,9 +56,6 @@ class ServerApplicationTests {
 
     @BeforeAll
     static void generate() throws Exception {
-        String nX = "3", nY = "3", epochCount = "5", userCount = String.valueOf(USER_COUNT), serverCount = String.valueOf(SERVER_COUNT);
-        String[] args = {nX, nY, epochCount, userCount, serverCount};
-        // TODO : Please run the Setup before executing the tests
         _keyStores = new JavaKeyStore[USER_COUNT];
         _users = new User[USER_COUNT];
         _recentSecrets = new Stack<>();
@@ -115,7 +112,7 @@ class ServerApplicationTests {
         submitReport(userId, report, secretKey, true);
 
         // Obtain report
-        LocationReport response = obtainReport(userId, 0, secretKey);
+        LocationReport response = obtainReport(userId, 0, secretKey, 0);
 
         System.out.println(response);
         assert(response.get_userId() == 0);
@@ -175,7 +172,7 @@ class ServerApplicationTests {
         return new String(response.getEntity().getContent().readAllBytes());
     }
 
-    public LocationReport obtainReport(int userId, int epoch, SecretKey secretKey) throws Exception {
+    public LocationReport obtainReport(int userId, int epoch, SecretKey secretKey, int serverId) throws Exception {
         ObtainLocationRequest locationRequest = new ObtainLocationRequest(userId, epoch);
         Message request = new Message(locationRequest);
         byte[] bytes = ObjectMapperHandler.writeValueAsBytes(request);
@@ -186,7 +183,6 @@ class ServerApplicationTests {
         ObjectMapper objectMapper = new ObjectMapper();
 
         CloseableHttpClient client = HttpClients.createDefault();
-        int serverId = 0;
         int serverPort = SERVER_BASE_PORT + serverId;
         HttpPost httpPost = new HttpPost("http://localhost:" + serverPort + "/obtain-location-report");
         StringEntity entity = new StringEntity(asJsonString(secureRequest));
@@ -469,6 +465,48 @@ class ServerApplicationTests {
         byte[] messageBytes = secure.decipherAndVerify(secretKey, _keyStores[userId].getPublicKey("server" + 0));
         String s = new String(messageBytes);
         assert(s.contains("Incorrect Proof of Work"));
+    }
+
+    @Test
+    public void submitDifferentReportToDifferentServers() throws Exception {
+        // Given 2 different reports for the same user and the same epoch
+        Location location0 = new Location(1, 1);
+        Location location1 = new Location(2, 1);
+        ProofData proofData1 = new ProofData(location0, 0, 1, 0, "success");
+        ProofData proofData2 = new ProofData(location0, 0, 2, 0, "success");
+        ProofData proofData3 = new ProofData(location1, 0, 1, 0, "success");
+        ProofData proofData4 = new ProofData(location1, 0, 2, 0, "success");
+        LocationProof proof1 = _users[1].signLocationProof(proofData1);
+        LocationProof proof2 = _users[2].signLocationProof(proofData2);
+        LocationProof proof3 = _users[1].signLocationProof(proofData3);
+        LocationProof proof4 = _users[2].signLocationProof(proofData4);
+        List<LocationProof> proofList0 = new ArrayList<>();
+        proofList0.add(proof1);
+        proofList0.add(proof2);
+        List<LocationProof> proofList1 = new ArrayList<>();
+        proofList1.add(proof3);
+        proofList1.add(proof4);
+
+        int userId = 0;
+        LocationReport report0 = new LocationReport(userId, 0, location0, proofList0);
+        LocationReport report1 = new LocationReport(userId, 0, location1, proofList1);
+
+        // Submit report 0 to server 0
+        SecretKey secretKey0 = AESKeyGenerator.makeAESKey();
+        postKeyToServer(userId, 0, secretKey0);
+        submitReport(userId, report0, secretKey0, true);
+
+        // Submit report 1 to server 1
+        SecretKey secretKey1 = AESKeyGenerator.makeAESKey();
+        postKeyToServer(userId, 1, secretKey1);
+        submitReport(userId, report1, secretKey1, true);
+
+        // Obtain reports from both servers
+        LocationReport response0 = obtainReport(userId, 0, secretKey0, 0);
+        LocationReport response1 = obtainReport(userId, 0, secretKey1, 1);
+
+        // Check they're equal
+        //assert(response0.equals(response1));
     }
 
 }
