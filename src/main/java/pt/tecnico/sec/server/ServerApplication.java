@@ -286,6 +286,9 @@ public class ServerApplication {
 
     public void refreshServerSecretKeys() throws Exception {
 
+        if (broadcastActive()) return;
+        System.out.println("Refreshing! " + _serverId);
+
         for (int serverId = 0; serverId < _serverCount; serverId++) {
 
             boolean exists = ( _secretKeysUsed.get(serverId+1000) != null );
@@ -360,11 +363,19 @@ public class ServerApplication {
         // drop if response was not asked for
     }
 
+    public boolean broadcastActive() {
+        if (_myBroadcastW != null || _myBroadcastR != null) return true;
+        for (BroadcastService bs : _broadcastServices.values()) {
+            if (!bs.is_delivered()) return true;
+        }
+        return false;
+    }
+
     /* ====[                   W R I T E                    ]==== */
 
     private BroadcastService _myBroadcastW = null;
 
-    public void broadcastW(DBLocationReport report) {
+    public synchronized void broadcastW(DBLocationReport report) {
         BroadcastId broadcastId = new BroadcastId(_serverId+1000, _broadcastCount);
         report.set_timestamp( report.get_timestamp() + 1 );
         BroadcastMessage m = new BroadcastMessage(broadcastId, report);
@@ -380,7 +391,7 @@ public class ServerApplication {
 
     private BroadcastService _myBroadcastR = null;
 
-    public DBLocationReport broadcastR(ObtainLocationRequest locationRequest) {
+    public synchronized DBLocationReport broadcastR(ObtainLocationRequest locationRequest) {
         BroadcastId broadcastId = new BroadcastId(_serverId+1000, _broadcastCount);
         BroadcastMessage m = new BroadcastMessage(broadcastId, locationRequest);
         _myBroadcastR = new BroadcastService(this, broadcastId);
@@ -404,7 +415,7 @@ public class ServerApplication {
         return finalLocationReport;
     }
 
-    public DBLocationReport atomicBroadcastR(ObtainLocationRequest locationRequest) {
+    public synchronized DBLocationReport atomicBroadcastR(ObtainLocationRequest locationRequest) {
         DBLocationReport locationReport = broadcastR(locationRequest);
 
         // Atomic Register: Write-back phase after Read
