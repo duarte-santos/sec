@@ -23,7 +23,7 @@ public final class Constants {
     // General
     public static final int DETECTION_RANGE = 2;
     public static final int SECRET_KEY_DURATION = 2;
-    public static final int F_USERS = 2;
+    public static final int F_USERS = 1;
     public static final int F_SERVERS = 1;
     public static final String SUCCESS = "success";
     public static final String FAILURE = "failure";

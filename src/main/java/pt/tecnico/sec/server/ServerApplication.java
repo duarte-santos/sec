@@ -252,7 +252,6 @@ public class ServerApplication {
 
     public Message postToServer(int serverId, Message message, String endpoint) throws Exception {
         SecureMessage secureRequest = cipherAndSignMessage(serverId+1000, message);
-        serverSecretKeyUsed(serverId+1000);
         HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
         SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + endpoint, request, SecureMessage.class);
         return decipherAndVerifyMessage(secureResponse);

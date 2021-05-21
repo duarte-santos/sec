@@ -208,6 +208,7 @@ public class User {
     /* ====[             Obtain Location Report             ]==== */
     /* ========================================================== */
 
+    @SuppressWarnings("DuplicatedCode")
     public LocationReport obtainReport(int epoch) throws Exception {
         // Create request
         ObtainLocationRequest locationRequest = new ObtainLocationRequest(_id, epoch);
@@ -309,8 +310,8 @@ public class User {
     private Message postKeyToServer(int serverId, SecretKey keyToSend) throws Exception {
         PublicKey serverKey = _keyStore.getPublicKey("server" + serverId);
         PrivateKey myKey = _keyStore.getPersonalPrivateKey();
-        SecureMessage secureRequest = new SecureMessage(_id, keyToSend, serverKey, myKey);
 
+        SecureMessage secureRequest = new SecureMessage(_id, keyToSend, serverKey, myKey);
         HttpEntity<SecureMessage> httpRequest = new HttpEntity<>(secureRequest);
         SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + "/secret-key", httpRequest, SecureMessage.class);
 
