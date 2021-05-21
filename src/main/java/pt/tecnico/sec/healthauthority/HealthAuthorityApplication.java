@@ -175,6 +175,7 @@ public class HealthAuthorityApplication {
     /* ====[             Obtain Location Report             ]==== */
     /* ========================================================== */
 
+    @SuppressWarnings("DuplicatedCode")
     public LocationReport obtainReport(int userId, int epoch) throws Exception {
         // Create request
         ObtainLocationRequest locationRequest = new ObtainLocationRequest(userId, epoch);

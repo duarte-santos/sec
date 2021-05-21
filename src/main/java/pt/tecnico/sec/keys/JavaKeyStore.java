@@ -92,6 +92,16 @@ public class JavaKeyStore {
 
     /* ===========[          GET KEYS          ]=========== */
 
+    // Debug method
+    public void printAllKeys() throws KeyStoreException {
+        Enumeration<String> aliases = _keyStore.aliases();
+        System.out.println("[KEY STORE]");
+        while (aliases.hasMoreElements()) {
+            String alias = aliases.nextElement();
+            System.out.println("> " + alias);
+        }
+    }
+
     public void setAndStoreSecretKey(String alias, SecretKey secretKey) throws KeyStoreException, CertificateException, IOException, NoSuchAlgorithmException {
         alias = "secret" + alias;
         setEntry(alias, secretKey);
