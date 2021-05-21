@@ -87,12 +87,10 @@ To run the **HealthAuthorityApplication**:
 
 ## Test
 
-Before running the tests for the first time, the databases for each server should be reset:
-```mysql
-DROP DATABASE sec0; CREATE DATABASE sec0;
-DROP DATABASE sec1; CREATE DATABASE sec1;
+Before running the tests for the first time, the Setup.java must be executed:
+```bash
+./mvnw spring-boot:run -Dstart-class=pt.tecnico.sec.Setup -Dspring-boot.run.arguments="[nX] [nY] [epochCount] 4 [serverCount]"
 ```
-***Note:** In the above example, there are two servers*
 
 <br/>
 
