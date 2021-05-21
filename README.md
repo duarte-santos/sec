@@ -98,7 +98,7 @@ DROP DATABASE sec1; CREATE DATABASE sec1;
 
 In order to run the tests the servers must also be running. For each server:
 ```bash
-./mvnw spring-boot:run -Dstart-class=pt.tecnico.sec.server.ServerApplication -Dspring-boot.run.arguments="[serverId] [serverCount] [userCount]"
+./mvnw spring-boot:run -Dstart-class=pt.tecnico.sec.server.ServerApplication -Dspring-boot.run.arguments="[serverId] [serverCount] 4"
 ```
 ***Note:** Our project assumes 1 faulty server by default, so there must be at least 3 servers running. To change this number, refer to the F_SERVERS constant in the Constants file*
 
