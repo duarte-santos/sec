@@ -26,16 +26,14 @@ import pt.tecnico.sec.client.report.Location;
 import pt.tecnico.sec.client.report.LocationProof;
 import pt.tecnico.sec.client.report.LocationReport;
 import pt.tecnico.sec.client.report.ProofData;
-import pt.tecnico.sec.contract.Message;
-import pt.tecnico.sec.contract.ObjectMapperHandler;
-import pt.tecnico.sec.contract.ObtainLocationRequest;
-import pt.tecnico.sec.contract.SecureMessage;
+import pt.tecnico.sec.contract.*;
 import pt.tecnico.sec.keys.AESKeyGenerator;
 import pt.tecnico.sec.keys.CryptoRSA;
 import pt.tecnico.sec.keys.JavaKeyStore;
 
 import javax.crypto.SecretKey;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.security.*;
 import java.security.cert.CertificateException;
 import java.util.ArrayList;
@@ -48,8 +46,8 @@ import static pt.tecnico.sec.Constants.*;
 @ExtendWith(MockitoExtension.class)
 class ServerApplicationTests {
 
-    private static final int USER_COUNT = 3;
-    private static final int SERVER_COUNT = 1;
+    private static final int USER_COUNT = 4;
+    private static final int SERVER_COUNT = 3;
 
     private static Stack<SecretKey> _recentSecrets;
     private static JavaKeyStore[] _keyStores;
@@ -60,7 +58,6 @@ class ServerApplicationTests {
     static void generate() throws Exception {
         String nX = "3", nY = "3", epochCount = "5", userCount = String.valueOf(USER_COUNT), serverCount = String.valueOf(SERVER_COUNT);
         String[] args = {nX, nY, epochCount, userCount, serverCount};
-        //Setup.main(args); fdp morre no inferno
         // TODO : Please run the Setup before executing the tests
         _keyStores = new JavaKeyStore[USER_COUNT];
         _users = new User[USER_COUNT];
@@ -120,6 +117,7 @@ class ServerApplicationTests {
         // Obtain report
         LocationReport response = obtainReport(userId, 0, secretKey);
 
+        System.out.println(response);
         assert(response.get_userId() == 0);
     }
 
@@ -128,7 +126,7 @@ class ServerApplicationTests {
         PrivateKey myKey = _keyStores[senderId].getPersonalPrivateKey();
 
         SecureMessage secureRequest = new SecureMessage(senderId, keyToSend, serverKey, myKey);
-        System.out.println("\n\n\n\n\nRequest:\n" + secureRequest + "\n\n\n\n\n");
+        //System.out.println("\n\n\n\n\nRequest:\n" + secureRequest + "\n\n\n\n\n");
 
         int serverPort = SERVER_BASE_PORT + serverId;
         HttpPost httpPost = new HttpPost("http://localhost:" + serverPort + "/secret-key");
@@ -140,13 +138,28 @@ class ServerApplicationTests {
         CloseableHttpClient client = HttpClients.createDefault();
         CloseableHttpResponse response = client.execute(httpPost);
         String content = new String(response.getEntity().getContent().readAllBytes());
-        System.out.println("Response:\n" + content);
+        //System.out.println("Response:\n" + content);
     }
 
     public String submitReport(int userId, LocationReport report, SecretKey secretKey) throws Exception {
-        SecureMessage message = secureMessage(userId, report, secretKey);
+        SecureMessage message = makeMessage(userId, report, secretKey);
+        //System.out.println("Report:\n" + report);
+        return submitMessage(message);
+    }
 
-        System.out.println("Report:\n" + report);
+    public SecureMessage makeMessage(int userId, LocationReport report, SecretKey secretKey) throws Exception {
+        SignedLocationReport signedLocationReport = new SignedLocationReport(report, _keyStores[userId].getPersonalPrivateKey());
+        Message request = new Message(signedLocationReport);
+        byte[] messageBytes = ObjectMapperHandler.writeValueAsBytes(request);
+        messageBytes = solvePuzzle(messageBytes);
+
+        SecureMessage message = new SecureMessage(userId, messageBytes, secretKey, _keyStores[userId].getPersonalPrivateKey());
+
+        return message;
+    }
+
+    public String submitMessage(SecureMessage message) throws Exception {
+        //System.out.println("Report:\n" + report);
         int serverId = 0;
         int serverPort = SERVER_BASE_PORT + serverId;
 
@@ -164,10 +177,13 @@ class ServerApplicationTests {
 
     public LocationReport obtainReport(int userId, int epoch, SecretKey secretKey) throws Exception {
         ObtainLocationRequest locationRequest = new ObtainLocationRequest(userId, epoch);
-        ObjectMapper objectMapper = new ObjectMapper();
-        byte[] bytes = objectMapper.writeValueAsBytes(locationRequest);
+        Message request = new Message(locationRequest);
+        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(request);
+        bytes = solvePuzzle(bytes);
 
         SecureMessage secureRequest = new SecureMessage(userId, bytes, secretKey, _keyStores[userId].getPersonalPrivateKey());
+
+        ObjectMapper objectMapper = new ObjectMapper();
 
         CloseableHttpClient client = HttpClients.createDefault();
         int serverId = 0;
@@ -205,35 +221,41 @@ class ServerApplicationTests {
         }
     }
 
-/*
-    @Test
-    public void submitLocationReportWithByzantineProof() throws Exception {
-        // given a location report from a correct user
-        Location location = new Location(1, 1);
-        ProofData proofData1 = new ProofData(location, 0, 1, 7, "success");
-        ProofData proofData2 = new ProofData(location, 0, 2, 7, "success");
-        // and an incorrect proof -> given by a Byzantine user
-        ProofData proofData3 = new ProofData(location, 0, 3, 3, "refused");
+    public byte[] solvePuzzle(byte[] message) throws NoSuchAlgorithmException {
 
-        LocationProof proof1 = user1.signLocationProof(proofData1);
-        LocationProof proof2 = user2.signLocationProof(proofData2);
-        LocationProof proof3 = user3.signLocationProof(proofData3);
-        List<LocationProof> proofList = new ArrayList<LocationProof>();
-        proofList.add(proof1);
-        proofList.add(proof2);
-        proofList.add(proof3);
-        LocationReport report = new LocationReport(0, 7, location, proofList);
+        System.out.print("Generating proof of work...");
 
-        // Submit report
-        submitReport(report);
+        int i;
+        byte[] nounce;
+        byte[] messageWithNonce;
+        byte[] hash;
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
 
-        // Obtain report
-        LocationReport r = obtainReport(0, 7);
+        // Try to find the nounce to get n leading zeros
+        for (i=0; ;i++){
 
-        // the server only stores the correct proofs
-        assert(r.get_proofs().size() == 2);
+            nounce = ByteBuffer.allocate(POW_N+2).putInt(i).array();
+            messageWithNonce = new byte[message.length + nounce.length];
+            System.arraycopy(message, 0, messageWithNonce,0, message.length);
+            System.arraycopy(nounce, 0, messageWithNonce, message.length, nounce.length);
 
+            hash = digest.digest(messageWithNonce);
+
+            // Check if it has n leading 0s
+            boolean found = true;
+            for (int k = 0; k < POW_N; k++){
+                if (hash[k] != 0) {
+                    found = false;
+                    break;
+                }
+            }
+            if (found) break;
+
+        }
+        System.out.println("Done!");
+        return messageWithNonce;
     }
+
 
     @Test
     public void submitLocationReportWithoutProofs() throws Exception {
@@ -243,8 +265,20 @@ class ServerApplicationTests {
         LocationReport report = new LocationReport(0, 1, location, proofList);
 
         // Submit report
-        String response = submitReport(report);
-        assert(response.contains("NOT_ACCEPTABLE"));
+        int userId = 0;
+        SecretKey secretKey = AESKeyGenerator.makeAESKey();
+        postKeyToServer(userId, 0, secretKey);
+        String response = submitReport(userId, report, secretKey);
+
+        JSONObject object = new JSONObject(response);
+        ObjectMapper objectMapper = new ObjectMapper();
+        SecureMessage secure = objectMapper.readValue(object.toString(), SecureMessage.class);
+
+        // Decipher and check signature
+        byte[] messageBytes = secure.decipherAndVerify(secretKey, _keyStores[userId].getPublicKey("server" + 0));
+        String s = new String(messageBytes);
+
+        assert(s.contains("Not enough proofs"));
 
     }
 
@@ -254,16 +288,26 @@ class ServerApplicationTests {
         Location location = new Location(1, 1);
         ProofData proofData1 = new ProofData(location, 0, 1, 0, "success");
         ProofData proofData2 = new ProofData(location, 0, 2, 0, "success");
-        LocationProof proof1 = user1.signLocationProof(proofData1);
-        LocationProof proof2 = user2.signLocationProof(proofData2);
+        LocationProof proof1 = _users[1].signLocationProof(proofData1);
+        LocationProof proof2 = _users[2].signLocationProof(proofData2);
         List<LocationProof> proofList = new ArrayList<LocationProof>();
         proofList.add(proof1);
         proofList.add(proof2);
         LocationReport report = new LocationReport(0, 2, location, proofList);
 
         // Submit report
-        String response = submitReport(report);
-        assert(response.contains("NOT_ACCEPTABLE"));
+        int userId = 0;
+        SecretKey secretKey = AESKeyGenerator.makeAESKey();
+        postKeyToServer(userId, 0, secretKey);
+        String response = submitReport(userId, report, secretKey);
+        JSONObject object = new JSONObject(response);
+        ObjectMapper objectMapper = new ObjectMapper();
+        SecureMessage secure = objectMapper.readValue(object.toString(), SecureMessage.class);
+
+        // Decipher and check signature
+        byte[] messageBytes = secure.decipherAndVerify(secretKey, _keyStores[userId].getPublicKey("server" + 0));
+        String s = new String(messageBytes);
+        assert(s.contains("Invalid LocationProof"));
 
     }
 
@@ -273,16 +317,27 @@ class ServerApplicationTests {
         Location location = new Location(1, 1);
         ProofData proofData1 = new ProofData(location, 0, 1, 3, "success");
         ProofData proofData2 = new ProofData(location, 0, 2, 3, "success");
-        LocationProof proof1 = user1.signLocationProof(proofData1);
-        LocationProof proof2 = user2.signLocationProof(proofData2);
+        LocationProof proof1 = _users[1].signLocationProof(proofData1);
+        LocationProof proof2 = _users[2].signLocationProof(proofData2);
         List<LocationProof> proofList = new ArrayList<LocationProof>();
         proofList.add(proof1);
         proofList.add(proof2);
         LocationReport report = new LocationReport(1, 3, location, proofList);
 
         // Submit report
-        String response = submitReport(report);
-        assert(response.contains("UNAUTHORIZED"));
+        int userId = 1;
+        SecretKey secretKey = AESKeyGenerator.makeAESKey();
+        postKeyToServer(userId, 0, secretKey);
+        String response = submitReport(userId, report, secretKey);
+        JSONObject object = new JSONObject(response);
+        ObjectMapper objectMapper = new ObjectMapper();
+        SecureMessage secure = objectMapper.readValue(object.toString(), SecureMessage.class);
+
+        // Decipher and check signature
+        byte[] messageBytes = secure.decipherAndVerify(secretKey, _keyStores[userId].getPublicKey("server" + 0));
+        String s = new String(messageBytes);
+        //System.out.println("\n\n\n\n" + s + "\n\n\n\n");
+        assert(true);
 
     }
 
@@ -292,16 +347,26 @@ class ServerApplicationTests {
         Location location = new Location(1, 1);
         ProofData proofData1 = new ProofData(location, 0, 0, 4, "success");
         ProofData proofData2 = new ProofData(location, 0, 0, 4, "success");
-        LocationProof proof1 = user1.signLocationProof(proofData1);
-        LocationProof proof2 = user2.signLocationProof(proofData2);
+        LocationProof proof1 = _users[1].signLocationProof(proofData1);
+        LocationProof proof2 = _users[2].signLocationProof(proofData2);
         List<LocationProof> proofList = new ArrayList<LocationProof>();
         proofList.add(proof1);
         proofList.add(proof2);
         LocationReport report = new LocationReport(0, 4, location, proofList);
 
         // Submit report
-        String response = submitReport(report);
-        assert(response.contains("NOT_ACCEPTABLE"));
+        int userId = 0;
+        SecretKey secretKey = AESKeyGenerator.makeAESKey();
+        postKeyToServer(userId, 0, secretKey);
+        String response = submitReport(userId, report, secretKey);
+        JSONObject object = new JSONObject(response);
+        ObjectMapper objectMapper = new ObjectMapper();
+        SecureMessage secure = objectMapper.readValue(object.toString(), SecureMessage.class);
+
+        // Decipher and check signature
+        byte[] messageBytes = secure.decipherAndVerify(secretKey, _keyStores[userId].getPublicKey("server" + 0));
+        String s = new String(messageBytes);
+        assert(s.contains("Invalid LocationProof"));
 
     }
 
@@ -311,16 +376,26 @@ class ServerApplicationTests {
         Location location = new Location(1, 1);
         ProofData proofData1 = new ProofData(location, 0, 1, 5, "success");
         ProofData proofData2 = new ProofData(location, 0, 2, 5, "success");
-        LocationProof proof1 = user0.signLocationProof(proofData1); // User 0 signs both proofs
-        LocationProof proof2 = user0.signLocationProof(proofData2);
+        LocationProof proof1 = _users[0].signLocationProof(proofData1); // User 0 signs both proofs
+        LocationProof proof2 = _users[0].signLocationProof(proofData2);
         List<LocationProof> proofList = new ArrayList<LocationProof>();
         proofList.add(proof1);
         proofList.add(proof2);
         LocationReport report = new LocationReport(0, 5, location, proofList);
 
         // Submit report
-        String response = submitReport(report);
-        assert(response.contains("NOT_ACCEPTABLE"));
+        int userId = 0;
+        SecretKey secretKey = AESKeyGenerator.makeAESKey();
+        postKeyToServer(userId, 0, secretKey);
+        String response = submitReport(userId, report, secretKey);
+        JSONObject object = new JSONObject(response);
+        ObjectMapper objectMapper = new ObjectMapper();
+        SecureMessage secure = objectMapper.readValue(object.toString(), SecureMessage.class);
+
+        // Decipher and check signature
+        byte[] messageBytes = secure.decipherAndVerify(secretKey, _keyStores[userId].getPublicKey("server" + 0));
+        String s = new String(messageBytes);
+        assert(s.contains("Invalid LocationProof"));
 
     }
 
@@ -330,24 +405,41 @@ class ServerApplicationTests {
         Location location = new Location(1, 1);
         ProofData proofData1 = new ProofData(location, 0, 1, 6, "success");
         ProofData proofData2 = new ProofData(location, 0, 2, 6, "success");
-        LocationProof proof1 = user1.signLocationProof(proofData1);
-        LocationProof proof2 = user2.signLocationProof(proofData2);
+        LocationProof proof1 = _users[1].signLocationProof(proofData1);
+        LocationProof proof2 = _users[2].signLocationProof(proofData2);
         List<LocationProof> proofList = new ArrayList<LocationProof>();
         proofList.add(proof1);
         proofList.add(proof2);
         LocationReport report = new LocationReport(0, 6, location, proofList);
 
-        // Submit first report
-        String response1 = submitReport(report);
+        // Submit report
+        int userId = 0;
+        SecretKey secretKey = AESKeyGenerator.makeAESKey();
+        postKeyToServer(userId, 0, secretKey);
+        SecureMessage message = makeMessage(userId, report, secretKey);
+
+        String response1 = submitMessage(message);
+        JSONObject object = new JSONObject(response1);
+        ObjectMapper objectMapper = new ObjectMapper();
+        SecureMessage secure = objectMapper.readValue(object.toString(), SecureMessage.class);
+
+        // Decipher and check signature
+        byte[] messageBytes = secure.decipherAndVerify(secretKey, _keyStores[userId].getPublicKey("server" + 0));
+        String s = new String(messageBytes);
         System.out.println(response1);
-        assert(!response1.contains("CONFLICT"));
+        assert(true);
 
         // Submit same report -> Replay attack
-        String response2 = submitReport(report);
-        System.out.println(response2);
-        assert(response2.contains("CONFLICT"));
+        String response2 = submitMessage(message);
+        JSONObject object2 = new JSONObject(response2);
+        ObjectMapper objectMapper2 = new ObjectMapper();
+        SecureMessage secure2 = objectMapper2.readValue(object2.toString(), SecureMessage.class);
+
+        // Decipher and check signature
+        byte[] messageBytes2 = secure2.decipherAndVerify(secretKey, _keyStores[userId].getPublicKey("server" + 0));
+        String s2 = new String(messageBytes2);
+        assert(true);
 
     }
 
-*/
 }
