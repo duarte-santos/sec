@@ -15,6 +15,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpEntity;
 import pt.tecnico.sec.Constants;
 import pt.tecnico.sec.EnvironmentGenerator;
 import pt.tecnico.sec.Setup;
@@ -25,6 +26,7 @@ import pt.tecnico.sec.client.report.Location;
 import pt.tecnico.sec.client.report.LocationProof;
 import pt.tecnico.sec.client.report.LocationReport;
 import pt.tecnico.sec.client.report.ProofData;
+import pt.tecnico.sec.contract.Message;
 import pt.tecnico.sec.contract.ObjectMapperHandler;
 import pt.tecnico.sec.contract.ObtainLocationRequest;
 import pt.tecnico.sec.contract.SecureMessage;
@@ -47,7 +49,7 @@ import static pt.tecnico.sec.Constants.*;
 class ServerApplicationTests {
 
     private static final int USER_COUNT = 3;
-    private static final int SERVER_COUNT = 3;
+    private static final int SERVER_COUNT = 1;
 
     private static Stack<SecretKey> _recentSecrets;
     private static JavaKeyStore[] _keyStores;
@@ -58,7 +60,8 @@ class ServerApplicationTests {
     static void generate() throws Exception {
         String nX = "3", nY = "3", epochCount = "5", userCount = String.valueOf(USER_COUNT), serverCount = String.valueOf(SERVER_COUNT);
         String[] args = {nX, nY, epochCount, userCount, serverCount};
-        Setup.main(args);
+        //Setup.main(args); fdp morre no inferno
+        // TODO : Please run the Setup before executing the tests
         _keyStores = new JavaKeyStore[USER_COUNT];
         _users = new User[USER_COUNT];
         _recentSecrets = new Stack<>();
@@ -109,23 +112,44 @@ class ServerApplicationTests {
         int userId = 0;
         LocationReport report = new LocationReport(userId, 0, location, proofList);
 
-        // FIXME : updateSecretKey
-
         // Submit report
-        submitReport(userId, report);
+        SecretKey secretKey = AESKeyGenerator.makeAESKey();
+        postKeyToServer(userId, 0, secretKey);
+        submitReport(userId, report, secretKey);
 
         // Obtain report
-        LocationReport response = obtainReport(userId, 0);
+        LocationReport response = obtainReport(userId, 0, secretKey);
 
         assert(response.get_userId() == 0);
     }
 
-    public String submitReport(int userId, LocationReport report) throws Exception {
-        SecureMessage message = secureMessage(userId, report);
+    private void postKeyToServer(int senderId, int serverId, SecretKey keyToSend) throws Exception {
+        PublicKey serverKey = _keyStores[senderId].getPublicKey("server" + serverId);
+        PrivateKey myKey = _keyStores[senderId].getPersonalPrivateKey();
+
+        SecureMessage secureRequest = new SecureMessage(senderId, keyToSend, serverKey, myKey);
+        System.out.println("\n\n\n\n\nRequest:\n" + secureRequest + "\n\n\n\n\n");
+
+        int serverPort = SERVER_BASE_PORT + serverId;
+        HttpPost httpPost = new HttpPost("http://localhost:" + serverPort + "/secret-key");
+        StringEntity entity = new StringEntity(asJsonString(secureRequest));
+        httpPost.setEntity(entity);
+        httpPost.setHeader("Accept","application/json");
+        httpPost.setHeader("Content-type", "application/json");
+
+        CloseableHttpClient client = HttpClients.createDefault();
+        CloseableHttpResponse response = client.execute(httpPost);
+        String content = new String(response.getEntity().getContent().readAllBytes());
+        System.out.println("Response:\n" + content);
+    }
+
+    public String submitReport(int userId, LocationReport report, SecretKey secretKey) throws Exception {
+        SecureMessage message = secureMessage(userId, report, secretKey);
 
         System.out.println("Report:\n" + report);
         int serverId = 0;
         int serverPort = SERVER_BASE_PORT + serverId;
+
         HttpPost httpPost = new HttpPost("http://localhost:" + serverPort + "/submit-location-report");
 
         StringEntity entity = new StringEntity(asJsonString(message));
@@ -138,13 +162,11 @@ class ServerApplicationTests {
         return new String(response.getEntity().getContent().readAllBytes());
     }
 
-    public LocationReport obtainReport(int userId, int epoch) throws Exception {
+    public LocationReport obtainReport(int userId, int epoch, SecretKey secretKey) throws Exception {
         ObtainLocationRequest locationRequest = new ObtainLocationRequest(userId, epoch);
         ObjectMapper objectMapper = new ObjectMapper();
         byte[] bytes = objectMapper.writeValueAsBytes(locationRequest);
-        SecretKey secretKey = _recentSecrets.pop();
 
-        System.out.println("\n\n\n\n" + printHexBinary(_keyStores[userId].getPersonalPrivateKey().getEncoded()) + "\n\n\n\n" + printHexBinary(secretKey.getEncoded()) + "\n\n\n\n");
         SecureMessage secureRequest = new SecureMessage(userId, bytes, secretKey, _keyStores[userId].getPersonalPrivateKey());
 
         CloseableHttpClient client = HttpClients.createDefault();
@@ -157,7 +179,6 @@ class ServerApplicationTests {
         httpPost.setHeader("Content-type", "application/json");
         CloseableHttpResponse response = client.execute(httpPost);
         String responseString = new String(response.getEntity().getContent().readAllBytes());
-        System.out.println("Response:\n" + responseString);
         if (responseString.length() == 0) return null;
 
         JSONObject object = new JSONObject(responseString);
@@ -168,10 +189,8 @@ class ServerApplicationTests {
         return LocationReport.getFromBytes(messageBytes);
     }
 
-    public SecureMessage secureMessage(int userId, LocationReport report) throws Exception {
+    public SecureMessage secureMessage(int userId, LocationReport report, SecretKey secretKey) throws Exception {
         byte[] messageBytes = ObjectMapperHandler.writeValueAsBytes(report);
-        SecretKey secretKey = AESKeyGenerator.makeAESKey();
-        _recentSecrets.push(secretKey);
         SecureMessage m = new SecureMessage(userId, messageBytes, secretKey, _keyStores[userId].getPersonalPrivateKey());
         System.out.println(m);
         return m;
