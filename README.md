@@ -16,7 +16,7 @@ GRANT ALL PRIVILEGES ON * . * TO 'user'@'localhost';
 <br/>
 
 
-Before running the clients and the server, the environment (a set of grids per epoch), the key-pairs of each entity and the servers' databases must be generated.
+Before running the clients and the server, the environment (a set of grids per epoch), the key stores with key-pairs of each entity and the servers' databases must be generated.
 
 The bellow commands must be run in a terminal inside the root directory of the project (```/sec```).
 
@@ -55,6 +55,7 @@ To run the **ServerApplication**:
 ***Suggestion:** 3 servers using serverIds 0, 1 and 2*
 
 ***Note:** Make sure to run 'serverCount' servers before interacting with the clients*
+***Note:** Our project assumes 1 faulty server by default, so there must be at least 3 servers running. To change this number, refer to the F_SERVERS constant in the Constants file*
 
 
 <br/>
@@ -67,6 +68,7 @@ To run the **ClientApplication**:
 ***Suggestion:** 3 users using userIds 0, 1 and 2*
 
 ***Note:** Make sure to run 'userCount' users before interacting with the clients*
+***Note:** Our project assumes 1 faulty client by default, so there must be at least 3 client running. To change this number, refer to the F_CLIENTS constant in the Constants file*
 
 <br/>
 
@@ -85,18 +87,20 @@ To run the **HealthAuthorityApplication**:
 
 ## Test
 
-Before running the tests for the first time, the database should be reset:
+Before running the tests for the first time, the databases for each server should be reset:
 ```mysql
-DROP DATABASE sec;
-CREATE DATABASE sec;
+DROP DATABASE sec0; CREATE DATABASE sec0;
+DROP DATABASE sec1; CREATE DATABASE sec1;
 ```
+***Note:** In the above example, there are two servers*
 
 <br/>
 
-In order to run the tests a server must also be running:
+In order to run the tests the servers must also be running. For each server:
 ```bash
-./mvnw spring-boot:run -Dstart-class=pt.tecnico.sec.server.ServerApplication
+./mvnw spring-boot:run -Dstart-class=pt.tecnico.sec.server.ServerApplication -Dspring-boot.run.arguments="[serverId] [serverCount] [userCount]"
 ```
+***Note:** Our project assumes 1 faulty server by default, so there must be at least 3 servers running. To change this number, refer to the F_SERVERS constant in the Constants file*
 
 
 Then, to run the tests:
@@ -106,6 +110,6 @@ Then, to run the tests:
 
 <br/>
 
-***Note:** Make sure to rerun the server before retesting the project*
+***Note:** Make sure to rerun the servers before retesting the project*
 
 <br/>

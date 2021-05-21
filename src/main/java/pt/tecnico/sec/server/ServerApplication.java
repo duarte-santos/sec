@@ -82,7 +82,7 @@ public class ServerApplication {
     }
 
     public void saveSecretKey(int id, SecretKey secretKey) throws CertificateException, KeyStoreException, IOException, NoSuchAlgorithmException {
-        System.out.println("Changed key for " + id);
+        //System.out.println("Changed key for " + id);
         String alias;
         if (id >= 1000) {
             alias = "server" + (id - 1000);
@@ -154,7 +154,9 @@ public class ServerApplication {
             message = ObjectMapperHandler.getMessageFromBytes(messageBytes);
         }
         else message = secureMessage.decipherAndVerifyMessage(secret, verifyKey);
-        Long nounce = message.checkNounce(_nounces.get(senderId));
+        Long nounce = (!fromServer(senderId)) ?
+                message.checkNounce(_nounces.get(senderId)) :
+                checkBroadcastNounce(_nounces.get(senderId), message.get_nounce());
         _nounces.put(senderId, nounce);
         return message;
     }
@@ -199,7 +201,7 @@ public class ServerApplication {
         String alias = "server" + (senderId - 1000);
         SecretKey secret = _keyStore.getSecretKey(alias);
         BroadcastMessage message = secureMessage.decipherAndVerifyBroadcastMessage(secret, verifyKey);
-        Long nounce = message.checkNounce(_nounces.get(senderId));
+        Long nounce = checkBroadcastNounce(_nounces.get(senderId), message.get_nounce());
         _nounces.put(senderId, nounce);
         message.checkOrigin();
         return message;
@@ -291,7 +293,7 @@ public class ServerApplication {
     public void refreshServerSecretKeys() throws Exception {
 
         if (broadcastActive()) return;
-        System.out.println("Refreshing! " + _serverId);
+        //System.out.println("Refreshing! " + _serverId);
 
         for (int serverId = 0; serverId < _serverCount; serverId++) {
 
@@ -373,6 +375,13 @@ public class ServerApplication {
             if (!bs.is_delivered()) return true;
         }
         return false;
+    }
+
+    public Long checkBroadcastNounce(Long prevNounce, Long recevNounce) {
+        // required window because of threads
+        if (recevNounce == null || (prevNounce != null && recevNounce < prevNounce - 1000))
+            throw new IllegalArgumentException("Broadcast message not fresh!");
+        return recevNounce;
     }
 
     /* ====[                   W R I T E                    ]==== */
