@@ -325,7 +325,7 @@ class ServerApplicationTests {
         LocationReport report = new LocationReport(1, 3, location, proofList);
 
         // Submit report
-        int userId = 1;
+        int userId = 0;
         SecretKey secretKey = AESKeyGenerator.makeAESKey();
         postKeyToServer(userId, 0, secretKey);
         String response = submitReport(userId, report, secretKey);
@@ -336,8 +336,8 @@ class ServerApplicationTests {
         // Decipher and check signature
         byte[] messageBytes = secure.decipherAndVerify(secretKey, _keyStores[userId].getPublicKey("server" + 0));
         String s = new String(messageBytes);
-        //System.out.println("\n\n\n\n" + s + "\n\n\n\n");
-        assert(true);
+        System.out.println("\n\n\n\n" + s + "\n\n\n\n");
+        assert(s.contains("Cannot submit reports from other users"));
 
     }
 
@@ -426,8 +426,7 @@ class ServerApplicationTests {
         // Decipher and check signature
         byte[] messageBytes = secure.decipherAndVerify(secretKey, _keyStores[userId].getPublicKey("server" + 0));
         String s = new String(messageBytes);
-        System.out.println(response1);
-        assert(true);
+        assert(!s.contains("Message not fresh"));
 
         // Submit same report -> Replay attack
         String response2 = submitMessage(message);
@@ -438,7 +437,7 @@ class ServerApplicationTests {
         // Decipher and check signature
         byte[] messageBytes2 = secure2.decipherAndVerify(secretKey, _keyStores[userId].getPublicKey("server" + 0));
         String s2 = new String(messageBytes2);
-        assert(true);
+        assert(s2.contains("Message not fresh"));
 
     }
 
