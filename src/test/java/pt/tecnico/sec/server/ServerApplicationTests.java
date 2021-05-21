@@ -112,7 +112,7 @@ class ServerApplicationTests {
         // Submit report
         SecretKey secretKey = AESKeyGenerator.makeAESKey();
         postKeyToServer(userId, 0, secretKey);
-        submitReport(userId, report, secretKey);
+        submitReport(userId, report, secretKey, true);
 
         // Obtain report
         LocationReport response = obtainReport(userId, 0, secretKey);
@@ -141,17 +141,17 @@ class ServerApplicationTests {
         //System.out.println("Response:\n" + content);
     }
 
-    public String submitReport(int userId, LocationReport report, SecretKey secretKey) throws Exception {
-        SecureMessage message = makeMessage(userId, report, secretKey);
+    public String submitReport(int userId, LocationReport report, SecretKey secretKey, boolean solvePOW) throws Exception {
+        SecureMessage message = makeMessage(userId, report, secretKey, solvePOW);
         //System.out.println("Report:\n" + report);
         return submitMessage(message);
     }
 
-    public SecureMessage makeMessage(int userId, LocationReport report, SecretKey secretKey) throws Exception {
+    public SecureMessage makeMessage(int userId, LocationReport report, SecretKey secretKey, boolean solvePOW) throws Exception {
         SignedLocationReport signedLocationReport = new SignedLocationReport(report, _keyStores[userId].getPersonalPrivateKey());
         Message request = new Message(signedLocationReport);
         byte[] messageBytes = ObjectMapperHandler.writeValueAsBytes(request);
-        messageBytes = solvePuzzle(messageBytes);
+        if (solvePOW) messageBytes = solvePuzzle(messageBytes);
 
         SecureMessage message = new SecureMessage(userId, messageBytes, secretKey, _keyStores[userId].getPersonalPrivateKey());
 
@@ -268,7 +268,7 @@ class ServerApplicationTests {
         int userId = 0;
         SecretKey secretKey = AESKeyGenerator.makeAESKey();
         postKeyToServer(userId, 0, secretKey);
-        String response = submitReport(userId, report, secretKey);
+        String response = submitReport(userId, report, secretKey, true);
 
         JSONObject object = new JSONObject(response);
         ObjectMapper objectMapper = new ObjectMapper();
@@ -299,7 +299,7 @@ class ServerApplicationTests {
         int userId = 0;
         SecretKey secretKey = AESKeyGenerator.makeAESKey();
         postKeyToServer(userId, 0, secretKey);
-        String response = submitReport(userId, report, secretKey);
+        String response = submitReport(userId, report, secretKey, true);
         JSONObject object = new JSONObject(response);
         ObjectMapper objectMapper = new ObjectMapper();
         SecureMessage secure = objectMapper.readValue(object.toString(), SecureMessage.class);
@@ -328,7 +328,7 @@ class ServerApplicationTests {
         int userId = 0;
         SecretKey secretKey = AESKeyGenerator.makeAESKey();
         postKeyToServer(userId, 0, secretKey);
-        String response = submitReport(userId, report, secretKey);
+        String response = submitReport(userId, report, secretKey, true);
         JSONObject object = new JSONObject(response);
         ObjectMapper objectMapper = new ObjectMapper();
         SecureMessage secure = objectMapper.readValue(object.toString(), SecureMessage.class);
@@ -358,7 +358,7 @@ class ServerApplicationTests {
         int userId = 0;
         SecretKey secretKey = AESKeyGenerator.makeAESKey();
         postKeyToServer(userId, 0, secretKey);
-        String response = submitReport(userId, report, secretKey);
+        String response = submitReport(userId, report, secretKey, true);
         JSONObject object = new JSONObject(response);
         ObjectMapper objectMapper = new ObjectMapper();
         SecureMessage secure = objectMapper.readValue(object.toString(), SecureMessage.class);
@@ -387,7 +387,7 @@ class ServerApplicationTests {
         int userId = 0;
         SecretKey secretKey = AESKeyGenerator.makeAESKey();
         postKeyToServer(userId, 0, secretKey);
-        String response = submitReport(userId, report, secretKey);
+        String response = submitReport(userId, report, secretKey, true);
         JSONObject object = new JSONObject(response);
         ObjectMapper objectMapper = new ObjectMapper();
         SecureMessage secure = objectMapper.readValue(object.toString(), SecureMessage.class);
@@ -416,7 +416,7 @@ class ServerApplicationTests {
         int userId = 0;
         SecretKey secretKey = AESKeyGenerator.makeAESKey();
         postKeyToServer(userId, 0, secretKey);
-        SecureMessage message = makeMessage(userId, report, secretKey);
+        SecureMessage message = makeMessage(userId, report, secretKey, true);
 
         String response1 = submitMessage(message);
         JSONObject object = new JSONObject(response1);
@@ -439,6 +439,36 @@ class ServerApplicationTests {
         String s2 = new String(messageBytes2);
         assert(s2.contains("Message not fresh"));
 
+    }
+
+    @Test
+    public void submitWithWrongProofOfWork() throws Exception {
+        // Given a correct location report
+        Location location = new Location(1, 1);
+        ProofData proofData1 = new ProofData(location, 0, 1, 0, "success");
+        ProofData proofData2 = new ProofData(location, 0, 2, 0, "success");
+        LocationProof proof1 = _users[1].signLocationProof(proofData1);
+        LocationProof proof2 = _users[2].signLocationProof(proofData2);
+        List<LocationProof> proofList = new ArrayList<>();
+        proofList.add(proof1);
+        proofList.add(proof2);
+
+        int userId = 0;
+        LocationReport report = new LocationReport(userId, 0, location, proofList);
+
+        // Submit report
+        SecretKey secretKey = AESKeyGenerator.makeAESKey();
+        postKeyToServer(userId, 0, secretKey);
+        String response = submitReport(userId, report, secretKey, false);
+
+        JSONObject object = new JSONObject(response);
+        ObjectMapper objectMapper = new ObjectMapper();
+        SecureMessage secure = objectMapper.readValue(object.toString(), SecureMessage.class);
+
+        // Decipher and check signature
+        byte[] messageBytes = secure.decipherAndVerify(secretKey, _keyStores[userId].getPublicKey("server" + 0));
+        String s = new String(messageBytes);
+        assert(s.contains("Incorrect Proof of Work"));
     }
 
 }
