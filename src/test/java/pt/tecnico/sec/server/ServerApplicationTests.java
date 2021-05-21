@@ -1,6 +1,7 @@
 package pt.tecnico.sec.server;
 
-/*import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;
@@ -14,119 +15,247 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
-import pt.tecnico.sec.keys.AESKeyGenerator;
+import org.springframework.http.HttpEntity;
+import pt.tecnico.sec.Constants;
 import pt.tecnico.sec.EnvironmentGenerator;
-import pt.tecnico.sec.RSAKeyGenerator;
+import pt.tecnico.sec.Setup;
 import pt.tecnico.sec.client.*;
+import pt.tecnico.sec.client.domain.Environment;
+import pt.tecnico.sec.client.domain.Grid;
+import pt.tecnico.sec.client.report.Location;
+import pt.tecnico.sec.client.report.LocationProof;
+import pt.tecnico.sec.client.report.LocationReport;
+import pt.tecnico.sec.client.report.ProofData;
+import pt.tecnico.sec.contract.*;
+import pt.tecnico.sec.keys.AESKeyGenerator;
+import pt.tecnico.sec.keys.CryptoRSA;
+import pt.tecnico.sec.keys.JavaKeyStore;
 
 import javax.crypto.SecretKey;
 import java.io.IOException;
-import java.security.GeneralSecurityException;
-import java.security.KeyPair;
-import java.security.PublicKey;
+import java.nio.ByteBuffer;
+import java.security.*;
+import java.security.cert.CertificateException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Stack;
 
-@ExtendWith(MockitoExtension.class)*/
+import static javax.xml.bind.DatatypeConverter.printHexBinary;
+import static pt.tecnico.sec.Constants.*;
+
+@ExtendWith(MockitoExtension.class)
 class ServerApplicationTests {
-/*
-    private Environment environment;
-    private User user0;
-    private User user1;
-    private User user2;
-    private User user3;
-    private KeyPair keyPair0;
-    private KeyPair keyPair1;
-    private KeyPair keyPair2;
-    private KeyPair keyPair3;
-    private PublicKey[] serverKeys;
+
+    private static final int USER_COUNT = 4;
+    private static final int SERVER_COUNT = 3;
+
+    private static Stack<SecretKey> _recentSecrets;
+    private static JavaKeyStore[] _keyStores;
+    private static User[] _users;
 
 
     @BeforeAll
     static void generate() throws Exception {
-        EnvironmentGenerator.writeEnvironmentJSON(4, 4, 4, 4);
-        RSAKeyGenerator.writeKeyPairs(4, 1);
+        String nX = "3", nY = "3", epochCount = "5", userCount = String.valueOf(USER_COUNT), serverCount = String.valueOf(SERVER_COUNT);
+        String[] args = {nX, nY, epochCount, userCount, serverCount};
+        // TODO : Please run the Setup before executing the tests
+        _keyStores = new JavaKeyStore[USER_COUNT];
+        _users = new User[USER_COUNT];
+        _recentSecrets = new Stack<>();
+    }
+
+    private JavaKeyStore initKeyStore(String name, String password) throws CertificateException, IOException, NoSuchAlgorithmException, KeyStoreException {
+        name = name + KEYSTORE_EXTENSION;
+        JavaKeyStore keyStore = new JavaKeyStore(KEYSTORE_TYPE, password, name);
+        keyStore.loadKeyStore();
+        return keyStore;
     }
 
     @BeforeEach
     public void setup() throws IOException, ParseException, GeneralSecurityException {
+        // Get environment // Import from randomly generated JSON
+        Environment environment = EnvironmentGenerator.parseEnvironmentJSON();
 
-        // create environment
-        environment = EnvironmentGenerator.parseEnvironmentJSON(); // import from randomly generated JSON
-
-        // get keys
-        String keysPath = RSAKeyGenerator.KEYS_PATH;
-        serverKeys[0] = RSAKeyGenerator.readPublicKey(keysPath + "server.pub");
-        keyPair0 = RSAKeyGenerator.readKeyPair(keysPath + 0 + ".pub", keysPath + 0 + ".priv");
-        keyPair1 = RSAKeyGenerator.readKeyPair(keysPath + 1 + ".pub", keysPath + 1 + ".priv");
-        keyPair2 = RSAKeyGenerator.readKeyPair(keysPath + 2 + ".pub", keysPath + 2 + ".priv");
-        keyPair3 = RSAKeyGenerator.readKeyPair(keysPath + 3 + ".pub", keysPath + 2 + ".priv");
-
-        // create users
-        user0 = new User(environment.getGrid(0), 0, keyPair0, serverKeys);
-        user1 = new User(environment.getGrid(0), 1, keyPair1, serverKeys);
-        user2 = new User(environment.getGrid(0), 2, keyPair2, serverKeys);
-        user3 = new User(environment.getGrid(0), 3, keyPair3, serverKeys);
+        // Create users
+        Grid grid = environment.getGrid(0);
+        for (int userId = 0; userId < USER_COUNT; userId++) {
+            String name = "user" + userId;
+            String password = "user" + userId;
+            JavaKeyStore keyStore = initKeyStore(name, password);
+            _keyStores[userId] = keyStore;
+            _users[userId] = new User(grid, userId, SERVER_COUNT, keyStore);
+        }
     }
 
     @AfterAll
     static void cleanup() {
-        // reset database
-        JDBCExample.dropDatabase();
-        JDBCExample.createDatabase();
+        // Reset database
+        JDBCExample.dropDatabases(SERVER_COUNT);
+        JDBCExample.createDatabases(USER_COUNT);
     }
 
     @Test
     public void submitAndObtainCorrectLocationReport() throws Exception {
-        // given a correct location report
+        // Given a correct location report
         Location location = new Location(1, 1);
         ProofData proofData1 = new ProofData(location, 0, 1, 0, "success");
         ProofData proofData2 = new ProofData(location, 0, 2, 0, "success");
-        LocationProof proof1 = user1.signLocationProof(proofData1);
-        LocationProof proof2 = user2.signLocationProof(proofData2);
-        List<LocationProof> proofList = new ArrayList<LocationProof>();
+        LocationProof proof1 = _users[1].signLocationProof(proofData1);
+        LocationProof proof2 = _users[2].signLocationProof(proofData2);
+        List<LocationProof> proofList = new ArrayList<>();
         proofList.add(proof1);
         proofList.add(proof2);
-        LocationReport report = new LocationReport(0, 0, location, proofList);
+
+        int userId = 0;
+        LocationReport report = new LocationReport(userId, 0, location, proofList);
 
         // Submit report
-        submitReport(report);
+        SecretKey secretKey = AESKeyGenerator.makeAESKey();
+        postKeyToServer(userId, 0, secretKey);
+        submitReport(userId, report, secretKey);
 
         // Obtain report
-        LocationReport r = obtainReport(0, 0);
+        LocationReport response = obtainReport(userId, 0, secretKey);
 
-        assert(r.get_userId() == 0);
-
+        System.out.println(response);
+        assert(response.get_userId() == 0);
     }
 
-    @Test
-    public void submitLocationReportWithByzantineProof() throws Exception {
-        // given a location report from a correct user
-        Location location = new Location(1, 1);
-        ProofData proofData1 = new ProofData(location, 0, 1, 7, "success");
-        ProofData proofData2 = new ProofData(location, 0, 2, 7, "success");
-        // and an incorrect proof -> given by a Byzantine user
-        ProofData proofData3 = new ProofData(location, 0, 3, 3, "refused");
+    private void postKeyToServer(int senderId, int serverId, SecretKey keyToSend) throws Exception {
+        PublicKey serverKey = _keyStores[senderId].getPublicKey("server" + serverId);
+        PrivateKey myKey = _keyStores[senderId].getPersonalPrivateKey();
 
-        LocationProof proof1 = user1.signLocationProof(proofData1);
-        LocationProof proof2 = user2.signLocationProof(proofData2);
-        LocationProof proof3 = user3.signLocationProof(proofData3);
-        List<LocationProof> proofList = new ArrayList<LocationProof>();
-        proofList.add(proof1);
-        proofList.add(proof2);
-        proofList.add(proof3);
-        LocationReport report = new LocationReport(0, 7, location, proofList);
+        SecureMessage secureRequest = new SecureMessage(senderId, keyToSend, serverKey, myKey);
+        //System.out.println("\n\n\n\n\nRequest:\n" + secureRequest + "\n\n\n\n\n");
 
-        // Submit report
-        submitReport(report);
+        int serverPort = SERVER_BASE_PORT + serverId;
+        HttpPost httpPost = new HttpPost("http://localhost:" + serverPort + "/secret-key");
+        StringEntity entity = new StringEntity(asJsonString(secureRequest));
+        httpPost.setEntity(entity);
+        httpPost.setHeader("Accept","application/json");
+        httpPost.setHeader("Content-type", "application/json");
 
-        // Obtain report
-        LocationReport r = obtainReport(0, 7);
-
-        // the server only stores the correct proofs
-        assert(r.get_proofs().size() == 2);
-
+        CloseableHttpClient client = HttpClients.createDefault();
+        CloseableHttpResponse response = client.execute(httpPost);
+        String content = new String(response.getEntity().getContent().readAllBytes());
+        //System.out.println("Response:\n" + content);
     }
+
+    public String submitReport(int userId, LocationReport report, SecretKey secretKey) throws Exception {
+        SecureMessage message = makeMessage(userId, report, secretKey);
+        //System.out.println("Report:\n" + report);
+        return submitMessage(message);
+    }
+
+    public SecureMessage makeMessage(int userId, LocationReport report, SecretKey secretKey) throws Exception {
+        SignedLocationReport signedLocationReport = new SignedLocationReport(report, _keyStores[userId].getPersonalPrivateKey());
+        Message request = new Message(signedLocationReport);
+        byte[] messageBytes = ObjectMapperHandler.writeValueAsBytes(request);
+        messageBytes = solvePuzzle(messageBytes);
+
+        SecureMessage message = new SecureMessage(userId, messageBytes, secretKey, _keyStores[userId].getPersonalPrivateKey());
+
+        return message;
+    }
+
+    public String submitMessage(SecureMessage message) throws Exception {
+        //System.out.println("Report:\n" + report);
+        int serverId = 0;
+        int serverPort = SERVER_BASE_PORT + serverId;
+
+        HttpPost httpPost = new HttpPost("http://localhost:" + serverPort + "/submit-location-report");
+
+        StringEntity entity = new StringEntity(asJsonString(message));
+        httpPost.setEntity(entity);
+        httpPost.setHeader("Accept","application/json");
+        httpPost.setHeader("Content-type", "application/json");
+
+        CloseableHttpClient client = HttpClients.createDefault();
+        CloseableHttpResponse response = client.execute(httpPost);
+        return new String(response.getEntity().getContent().readAllBytes());
+    }
+
+    public LocationReport obtainReport(int userId, int epoch, SecretKey secretKey) throws Exception {
+        ObtainLocationRequest locationRequest = new ObtainLocationRequest(userId, epoch);
+        Message request = new Message(locationRequest);
+        byte[] bytes = ObjectMapperHandler.writeValueAsBytes(request);
+        bytes = solvePuzzle(bytes);
+
+        SecureMessage secureRequest = new SecureMessage(userId, bytes, secretKey, _keyStores[userId].getPersonalPrivateKey());
+
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        CloseableHttpClient client = HttpClients.createDefault();
+        int serverId = 0;
+        int serverPort = SERVER_BASE_PORT + serverId;
+        HttpPost httpPost = new HttpPost("http://localhost:" + serverPort + "/obtain-location-report");
+        StringEntity entity = new StringEntity(asJsonString(secureRequest));
+        httpPost.setEntity(entity);
+        httpPost.setHeader("Accept","application/json");
+        httpPost.setHeader("Content-type", "application/json");
+        CloseableHttpResponse response = client.execute(httpPost);
+        String responseString = new String(response.getEntity().getContent().readAllBytes());
+        if (responseString.length() == 0) return null;
+
+        JSONObject object = new JSONObject(responseString);
+        SecureMessage secure = objectMapper.readValue(object.toString(), SecureMessage.class);
+
+        // Decipher and check signature
+        byte[] messageBytes = secure.decipherAndVerify(secretKey, _keyStores[userId].getPublicKey("server" + serverId));
+        return LocationReport.getFromBytes(messageBytes);
+    }
+
+    public SecureMessage secureMessage(int userId, LocationReport report, SecretKey secretKey) throws Exception {
+        byte[] messageBytes = ObjectMapperHandler.writeValueAsBytes(report);
+        SecureMessage m = new SecureMessage(userId, messageBytes, secretKey, _keyStores[userId].getPersonalPrivateKey());
+        System.out.println(m);
+        return m;
+    }
+
+    public static String asJsonString(Object object) {
+        try {
+            return new ObjectMapper().writeValueAsString(object);
+        }
+        catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public byte[] solvePuzzle(byte[] message) throws NoSuchAlgorithmException {
+
+        System.out.print("Generating proof of work...");
+
+        int i;
+        byte[] nounce;
+        byte[] messageWithNonce;
+        byte[] hash;
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+
+        // Try to find the nounce to get n leading zeros
+        for (i=0; ;i++){
+
+            nounce = ByteBuffer.allocate(POW_N+2).putInt(i).array();
+            messageWithNonce = new byte[message.length + nounce.length];
+            System.arraycopy(message, 0, messageWithNonce,0, message.length);
+            System.arraycopy(nounce, 0, messageWithNonce, message.length, nounce.length);
+
+            hash = digest.digest(messageWithNonce);
+
+            // Check if it has n leading 0s
+            boolean found = true;
+            for (int k = 0; k < POW_N; k++){
+                if (hash[k] != 0) {
+                    found = false;
+                    break;
+                }
+            }
+            if (found) break;
+
+        }
+        System.out.println("Done!");
+        return messageWithNonce;
+    }
+
 
     @Test
     public void submitLocationReportWithoutProofs() throws Exception {
@@ -136,8 +265,20 @@ class ServerApplicationTests {
         LocationReport report = new LocationReport(0, 1, location, proofList);
 
         // Submit report
-        String response = submitReport(report);
-        assert(response.contains("NOT_ACCEPTABLE"));
+        int userId = 0;
+        SecretKey secretKey = AESKeyGenerator.makeAESKey();
+        postKeyToServer(userId, 0, secretKey);
+        String response = submitReport(userId, report, secretKey);
+
+        JSONObject object = new JSONObject(response);
+        ObjectMapper objectMapper = new ObjectMapper();
+        SecureMessage secure = objectMapper.readValue(object.toString(), SecureMessage.class);
+
+        // Decipher and check signature
+        byte[] messageBytes = secure.decipherAndVerify(secretKey, _keyStores[userId].getPublicKey("server" + 0));
+        String s = new String(messageBytes);
+
+        assert(s.contains("Not enough proofs"));
 
     }
 
@@ -147,16 +288,26 @@ class ServerApplicationTests {
         Location location = new Location(1, 1);
         ProofData proofData1 = new ProofData(location, 0, 1, 0, "success");
         ProofData proofData2 = new ProofData(location, 0, 2, 0, "success");
-        LocationProof proof1 = user1.signLocationProof(proofData1);
-        LocationProof proof2 = user2.signLocationProof(proofData2);
+        LocationProof proof1 = _users[1].signLocationProof(proofData1);
+        LocationProof proof2 = _users[2].signLocationProof(proofData2);
         List<LocationProof> proofList = new ArrayList<LocationProof>();
         proofList.add(proof1);
         proofList.add(proof2);
         LocationReport report = new LocationReport(0, 2, location, proofList);
 
         // Submit report
-        String response = submitReport(report);
-        assert(response.contains("NOT_ACCEPTABLE"));
+        int userId = 0;
+        SecretKey secretKey = AESKeyGenerator.makeAESKey();
+        postKeyToServer(userId, 0, secretKey);
+        String response = submitReport(userId, report, secretKey);
+        JSONObject object = new JSONObject(response);
+        ObjectMapper objectMapper = new ObjectMapper();
+        SecureMessage secure = objectMapper.readValue(object.toString(), SecureMessage.class);
+
+        // Decipher and check signature
+        byte[] messageBytes = secure.decipherAndVerify(secretKey, _keyStores[userId].getPublicKey("server" + 0));
+        String s = new String(messageBytes);
+        assert(s.contains("Invalid LocationProof"));
 
     }
 
@@ -166,16 +317,27 @@ class ServerApplicationTests {
         Location location = new Location(1, 1);
         ProofData proofData1 = new ProofData(location, 0, 1, 3, "success");
         ProofData proofData2 = new ProofData(location, 0, 2, 3, "success");
-        LocationProof proof1 = user1.signLocationProof(proofData1);
-        LocationProof proof2 = user2.signLocationProof(proofData2);
+        LocationProof proof1 = _users[1].signLocationProof(proofData1);
+        LocationProof proof2 = _users[2].signLocationProof(proofData2);
         List<LocationProof> proofList = new ArrayList<LocationProof>();
         proofList.add(proof1);
         proofList.add(proof2);
         LocationReport report = new LocationReport(1, 3, location, proofList);
 
         // Submit report
-        String response = submitReport(report);
-        assert(response.contains("UNAUTHORIZED"));
+        int userId = 0;
+        SecretKey secretKey = AESKeyGenerator.makeAESKey();
+        postKeyToServer(userId, 0, secretKey);
+        String response = submitReport(userId, report, secretKey);
+        JSONObject object = new JSONObject(response);
+        ObjectMapper objectMapper = new ObjectMapper();
+        SecureMessage secure = objectMapper.readValue(object.toString(), SecureMessage.class);
+
+        // Decipher and check signature
+        byte[] messageBytes = secure.decipherAndVerify(secretKey, _keyStores[userId].getPublicKey("server" + 0));
+        String s = new String(messageBytes);
+        System.out.println("\n\n\n\n" + s + "\n\n\n\n");
+        assert(s.contains("Cannot submit reports from other users"));
 
     }
 
@@ -185,16 +347,26 @@ class ServerApplicationTests {
         Location location = new Location(1, 1);
         ProofData proofData1 = new ProofData(location, 0, 0, 4, "success");
         ProofData proofData2 = new ProofData(location, 0, 0, 4, "success");
-        LocationProof proof1 = user1.signLocationProof(proofData1);
-        LocationProof proof2 = user2.signLocationProof(proofData2);
+        LocationProof proof1 = _users[1].signLocationProof(proofData1);
+        LocationProof proof2 = _users[2].signLocationProof(proofData2);
         List<LocationProof> proofList = new ArrayList<LocationProof>();
         proofList.add(proof1);
         proofList.add(proof2);
         LocationReport report = new LocationReport(0, 4, location, proofList);
 
         // Submit report
-        String response = submitReport(report);
-        assert(response.contains("NOT_ACCEPTABLE"));
+        int userId = 0;
+        SecretKey secretKey = AESKeyGenerator.makeAESKey();
+        postKeyToServer(userId, 0, secretKey);
+        String response = submitReport(userId, report, secretKey);
+        JSONObject object = new JSONObject(response);
+        ObjectMapper objectMapper = new ObjectMapper();
+        SecureMessage secure = objectMapper.readValue(object.toString(), SecureMessage.class);
+
+        // Decipher and check signature
+        byte[] messageBytes = secure.decipherAndVerify(secretKey, _keyStores[userId].getPublicKey("server" + 0));
+        String s = new String(messageBytes);
+        assert(s.contains("Invalid LocationProof"));
 
     }
 
@@ -204,16 +376,26 @@ class ServerApplicationTests {
         Location location = new Location(1, 1);
         ProofData proofData1 = new ProofData(location, 0, 1, 5, "success");
         ProofData proofData2 = new ProofData(location, 0, 2, 5, "success");
-        LocationProof proof1 = user0.signLocationProof(proofData1); // User 0 signs both proofs
-        LocationProof proof2 = user0.signLocationProof(proofData2);
+        LocationProof proof1 = _users[0].signLocationProof(proofData1); // User 0 signs both proofs
+        LocationProof proof2 = _users[0].signLocationProof(proofData2);
         List<LocationProof> proofList = new ArrayList<LocationProof>();
         proofList.add(proof1);
         proofList.add(proof2);
         LocationReport report = new LocationReport(0, 5, location, proofList);
 
         // Submit report
-        String response = submitReport(report);
-        assert(response.contains("NOT_ACCEPTABLE"));
+        int userId = 0;
+        SecretKey secretKey = AESKeyGenerator.makeAESKey();
+        postKeyToServer(userId, 0, secretKey);
+        String response = submitReport(userId, report, secretKey);
+        JSONObject object = new JSONObject(response);
+        ObjectMapper objectMapper = new ObjectMapper();
+        SecureMessage secure = objectMapper.readValue(object.toString(), SecureMessage.class);
+
+        // Decipher and check signature
+        byte[] messageBytes = secure.decipherAndVerify(secretKey, _keyStores[userId].getPublicKey("server" + 0));
+        String s = new String(messageBytes);
+        assert(s.contains("Invalid LocationProof"));
 
     }
 
@@ -223,86 +405,40 @@ class ServerApplicationTests {
         Location location = new Location(1, 1);
         ProofData proofData1 = new ProofData(location, 0, 1, 6, "success");
         ProofData proofData2 = new ProofData(location, 0, 2, 6, "success");
-        LocationProof proof1 = user1.signLocationProof(proofData1);
-        LocationProof proof2 = user2.signLocationProof(proofData2);
+        LocationProof proof1 = _users[1].signLocationProof(proofData1);
+        LocationProof proof2 = _users[2].signLocationProof(proofData2);
         List<LocationProof> proofList = new ArrayList<LocationProof>();
         proofList.add(proof1);
         proofList.add(proof2);
         LocationReport report = new LocationReport(0, 6, location, proofList);
 
-        // Submit first report
-        String response1 = submitReport(report);
-        System.out.println(response1);
-        assert(!response1.contains("CONFLICT"));
-
-        // Submit same report -> Replay attack
-        String response2 = submitReport(report);
-        System.out.println(response2);
-        assert(response2.contains("CONFLICT"));
-
-    }
-
-
-    public SecureMessage secureMessage(LocationReport report, KeyPair keyPair) throws Exception {
-        // encrypt using server public key, sign using client private key
-        ObjectMapper objectMapper = new ObjectMapper();
-        byte[] bytes = objectMapper.writeValueAsBytes(report);
-        SecureMessage secureLocationReport = new SecureMessage(bytes, serverKeys[0], keyPair.getPrivate());
-
-        return secureLocationReport;
-    }
-
-    public String submitReport(LocationReport r) throws Exception {
-        SecureMessage message = secureMessage(r, keyPair0);
-
-        System.out.println(r);
-        CloseableHttpClient client = HttpClients.createDefault();
-        HttpPost httpPost = new HttpPost("http://localhost:9000/location-report");
-
-        StringEntity entity = new StringEntity(asJsonString(message));
-        httpPost.setEntity(entity);
-        httpPost.setHeader("Accept","application/json");
-        httpPost.setHeader("Content-type", "application/json");
-
-        CloseableHttpResponse response2 = client.execute(httpPost);
-        return new String(response2.getEntity().getContent().readAllBytes());
-    }
-
-    public LocationReport obtainReport(int userId, int epoch) throws Exception {
-        ObtainLocationRequest locationRequest = new ObtainLocationRequest(userId, epoch);
-        ObjectMapper objectMapper = new ObjectMapper();
-        byte[] bytes = objectMapper.writeValueAsBytes(locationRequest);
+        // Submit report
+        int userId = 0;
         SecretKey secretKey = AESKeyGenerator.makeAESKey();
-        SecureMessage secureRequest = new SecureMessage(bytes, secretKey, serverKeys[0], keyPair0.getPrivate());
+        postKeyToServer(userId, 0, secretKey);
+        SecureMessage message = makeMessage(userId, report, secretKey);
 
-        CloseableHttpClient client = HttpClients.createDefault();
-        HttpPost httpPost2 = new HttpPost("http://localhost:9000/obtain-location-report");
-        StringEntity entity2 = new StringEntity(asJsonString(secureRequest));
-        httpPost2.setEntity(entity2);
-        httpPost2.setHeader("Accept","application/json");
-        httpPost2.setHeader("Content-type", "application/json");
-        CloseableHttpResponse response2 = client.execute(httpPost2);
-        String responseString = new String(response2.getEntity().getContent().readAllBytes());
-        System.out.println(responseString);
-        if (responseString.length() == 0) return null;
-
-        JSONObject object = new JSONObject(responseString);
-
-        ObjectMapper m = new ObjectMapper();
-        SecureMessage secure = m.readValue(object.toString(), SecureMessage.class);
+        String response1 = submitMessage(message);
+        JSONObject object = new JSONObject(response1);
+        ObjectMapper objectMapper = new ObjectMapper();
+        SecureMessage secure = objectMapper.readValue(object.toString(), SecureMessage.class);
 
         // Decipher and check signature
-        byte[] messageBytes = secure.decipherAndVerify(keyPair0.getPrivate(), serverKeys[0]);
-        return LocationReport.getFromBytes(messageBytes);
+        byte[] messageBytes = secure.decipherAndVerify(secretKey, _keyStores[userId].getPublicKey("server" + 0));
+        String s = new String(messageBytes);
+        assert(!s.contains("Message not fresh"));
+
+        // Submit same report -> Replay attack
+        String response2 = submitMessage(message);
+        JSONObject object2 = new JSONObject(response2);
+        ObjectMapper objectMapper2 = new ObjectMapper();
+        SecureMessage secure2 = objectMapper2.readValue(object2.toString(), SecureMessage.class);
+
+        // Decipher and check signature
+        byte[] messageBytes2 = secure2.decipherAndVerify(secretKey, _keyStores[userId].getPublicKey("server" + 0));
+        String s2 = new String(messageBytes2);
+        assert(s2.contains("Message not fresh"));
+
     }
 
-    public static String asJsonString(final Object obj) {
-        try {
-            return new ObjectMapper().writeValueAsString(obj);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-*/
 }

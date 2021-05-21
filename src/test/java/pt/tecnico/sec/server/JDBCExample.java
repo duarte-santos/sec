@@ -5,6 +5,8 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
 
+import static pt.tecnico.sec.Constants.DATABASE_NAME;
+
 public class JDBCExample {
     // JDBC driver name and database URL
     private static final String JDBC_DRIVER = "com.mysql.cj.jdbc.Driver";
@@ -16,7 +18,20 @@ public class JDBCExample {
     private static final String DATABASE_NAME = "sec";
 
 
-    public static void dropDatabase() {
+    public static void dropDatabases(int serverCount) {
+        for (int serverId = 0; serverId < serverCount; serverId++)
+            dropDatabase(serverId);
+    }
+
+    public static void createDatabases(int serverCount) {
+        for (int serverId = 0; serverId < serverCount; serverId++)
+            createDatabase(serverId);
+    }
+
+
+    public static void dropDatabase(int serverId) {
+
+        String databaseName = DATABASE_NAME + serverId;
 
         Connection conn = null;
         Statement stmt = null;
@@ -34,7 +49,7 @@ public class JDBCExample {
             System.out.println("Deleting database...");
             stmt = conn.createStatement();
 
-            String sql = "DROP DATABASE IF EXISTS " + DATABASE_NAME;
+            String sql = "DROP DATABASE IF EXISTS " + databaseName;
             stmt.executeUpdate(sql);
             System.out.println("Database deleted successfully...");
         }
@@ -69,7 +84,9 @@ public class JDBCExample {
     }
 
 
-    public static void createDatabase() {
+    public static void createDatabase(int serverId) {
+
+        String databaseName = DATABASE_NAME + serverId;
 
         Connection conn = null;
         Statement stmt = null;
@@ -87,7 +104,7 @@ public class JDBCExample {
             System.out.println("Creating database...");
             stmt = conn.createStatement();
 
-            String sql = "CREATE DATABASE IF NOT EXISTS " + DATABASE_NAME;
+            String sql = "CREATE DATABASE IF NOT EXISTS " + databaseName;
             stmt.executeUpdate(sql);
             System.out.println("Database created successfully...");
         }

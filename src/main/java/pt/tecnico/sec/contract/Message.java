@@ -44,7 +44,7 @@ public class Message {
 
     @JsonIgnore
     public Long checkNounce(Long prevNounce) {
-        if (_nounce == null || (prevNounce != null && _nounce < prevNounce))
+        if (_nounce == null || (prevNounce != null && _nounce <= prevNounce))
             throw new IllegalArgumentException("Message not fresh!");
         //System.out.println("Message is fresh!");
         return _nounce;
