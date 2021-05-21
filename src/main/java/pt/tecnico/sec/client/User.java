@@ -1,6 +1,5 @@
 package pt.tecnico.sec.client;
 
-import org.apache.commons.codec.binary.Hex;
 import org.springframework.http.HttpEntity;
 import org.springframework.web.client.RestTemplate;
 import pt.tecnico.sec.client.domain.Grid;
@@ -37,6 +36,7 @@ public class User {
     private final Map<Integer, List<LocationProof>> _proofs =  new HashMap<>();
 
     private static final Map<Integer, Integer> _sKeysCreationEpoch = new HashMap<>();
+    private static final Map<Integer, Long> _serverNounces = new HashMap<>();
 
     public User(Grid grid, int id, int serverCount, JavaKeyStore keyStore) {
         _grid = grid;
@@ -191,7 +191,7 @@ public class User {
         System.out.println(locationReport);
 
         SignedLocationReport signedLocationReport = new SignedLocationReport(locationReport, _keyStore.getPersonalPrivateKey());
-        Message request = new Message(0, signedLocationReport);
+        Message request = new Message(signedLocationReport);
 
         // Send report
         Message response = postToServers(request, "/submit-location-report");
@@ -211,7 +211,7 @@ public class User {
     public LocationReport obtainReport(int epoch) throws Exception {
         // Create request
         ObtainLocationRequest locationRequest = new ObtainLocationRequest(_id, epoch);
-        Message request = new Message(0, locationRequest);
+        Message request = new Message(locationRequest);
 
         // Perform request
         Message response = postToServers(request, "/obtain-location-report");
@@ -252,7 +252,7 @@ public class User {
     public List<LocationProof> obtainWitnessProofs(Set<Integer> epochs) throws Exception {
         // Create request
         WitnessProofsRequest witnessProofsRequest = new WitnessProofsRequest(_id, epochs);
-        Message request = new Message(0, witnessProofsRequest);
+        Message request = new Message(witnessProofsRequest);
 
         // Perform request
         Message response = postToServers(request, "/request-proofs");
@@ -280,6 +280,7 @@ public class User {
     /* ====[              Server communication              ]==== */
     /* ========================================================== */
 
+    @SuppressWarnings("DuplicatedCode")
     private Message sendRequest(int serverId, SecureMessage secureRequest, SecretKey secretKey, String endpoint) throws Exception {
         PublicKey serverKey = _keyStore.getPublicKey("server" + serverId);
         HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
@@ -287,8 +288,11 @@ public class User {
 
         if (secureResponse == null) return null;
 
-        // Check response's signature and decipher TODO freshness
-        return secureResponse.decipherAndVerifyMessage( secretKey, serverKey);
+        // Check response's signature, freshness and decipher
+        Message response = secureResponse.decipherAndVerifyMessage( secretKey, serverKey);
+        Long nounce = response.checkNounce(_serverNounces.get(serverId));
+        _serverNounces.put(serverId, nounce);
+        return response;
     }
 
     private Message postToServers(Message message, String endpoint) throws Exception {
@@ -310,7 +314,7 @@ public class User {
         HttpEntity<SecureMessage> httpRequest = new HttpEntity<>(secureRequest);
         SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + "/secret-key", httpRequest, SecureMessage.class);
 
-        // Check response's signature and decipher TODO freshness
+        // Check response's signature and decipher
         assert secureResponse != null;
         return secureResponse.decipherAndVerifyMessage( myKey, serverKey);
     }
@@ -356,21 +360,21 @@ public class User {
 
     public byte[] solvePuzzle(byte[] message) throws NoSuchAlgorithmException {
 
-        System.out.println("Generating proof of work...");
+        System.out.print("Generating proof of work...");
 
         int i;
-        byte[] nonce;
+        byte[] nounce;
         byte[] messageWithNonce;
         byte[] hash;
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
 
-        // Try to find the nonce to get n leading zeros
+        // Try to find the nounce to get n leading zeros
         for (i=0; ;i++){
 
-            nonce = ByteBuffer.allocate(POW_N+2).putInt(i).array();
-            messageWithNonce = new byte[message.length + nonce.length];
+            nounce = ByteBuffer.allocate(POW_N+2).putInt(i).array();
+            messageWithNonce = new byte[message.length + nounce.length];
             System.arraycopy(message, 0, messageWithNonce,0, message.length);
-            System.arraycopy(nonce, 0, messageWithNonce, message.length, nonce.length);
+            System.arraycopy(nounce, 0, messageWithNonce, message.length, nounce.length);
 
             hash = digest.digest(messageWithNonce);
 
@@ -385,10 +389,7 @@ public class User {
             if (found) break;
 
         }
-
-        System.out.println("Number of iterations: " + i);
-        System.out.println("Generated nounce: " + Hex.encodeHexString(nonce));
-        System.out.println("Message hash: " + Hex.encodeHexString(hash));
+        System.out.println("Done!");
         return messageWithNonce;
     }
 

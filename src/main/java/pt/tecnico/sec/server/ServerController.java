@@ -38,13 +38,13 @@ public class ServerController {
     /* ========================================================== */
 
     public SecureMessage secureOKMessage(int senderId) throws Exception {
-        Message m = new Message(0, OK);
+        Message m = new Message(OK);
         return _serverApp.cipherAndSignMessage(senderId, m);
     }
 
     public SecureMessage secureExceptionMessage(int senderId, Exception exception) {
         try {
-            Message m = new Message(0, exception);
+            Message m = new Message(exception);
             return _serverApp.cipherAndSignMessage(senderId, m);
         } catch (Exception e) { return null; }
     }
@@ -65,7 +65,7 @@ public class ServerController {
             else report = new SignedLocationReport(dbLocationReport);
 
             // encrypt using same secret key and client/HA public key, sign using server private key
-            Message response = new Message(0, report);
+            Message response = new Message(report);
             return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), response);
 
         } catch (Exception e) {
@@ -132,7 +132,7 @@ public class ServerController {
             }
 
             // encrypt and send response
-            Message response = new Message(0, locationProofs);
+            Message response = new Message(locationProofs);
             return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), response);
 
         } catch (Exception e) {
@@ -170,7 +170,7 @@ public class ServerController {
             }
 
             // encrypt and send response
-            Message response = new Message(0, new UsersAtLocation(loc, ep, reports) );
+            Message response = new Message(new UsersAtLocation(loc, ep, reports) );
             return _serverApp.cipherAndSignMessage(secureRequest.get_senderId(), response);
 
         } catch (Exception e) {
@@ -193,7 +193,7 @@ public class ServerController {
             _serverApp.saveSecretKey(secureMessage.get_senderId(), newSecretKey);
 
             // Send secure response
-            Message response = new Message(0, OK);
+            Message response = new Message(OK);
             return _serverApp.cipherAndSignKeyResponse(secureMessage.get_senderId(), response);
 
         } catch (Exception e) {

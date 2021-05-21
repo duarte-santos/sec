@@ -35,6 +35,7 @@ public class ServerApplication {
     public final RestTemplate _restTemplate = new RestTemplate();
 
     private static final Map<Integer, Boolean> _secretKeysUsed = new ConcurrentHashMap<>();
+    private static final Map<Integer, Long> _nounces = new ConcurrentHashMap<>();
 
     public static void main(String[] args) {
         try {
@@ -130,7 +131,7 @@ public class ServerApplication {
 
     public SecureMessage cipherAndSignKeyException(int receiverId, Exception exception) {
         try {
-            Message m = new Message(0, exception);
+            Message m = new Message(exception);
             return cipherAndSignKeyResponse(receiverId, m);
         } catch (Exception e) {
             System.out.println(e.getMessage());
@@ -153,6 +154,8 @@ public class ServerApplication {
             message = ObjectMapperHandler.getMessageFromBytes(messageBytes);
         }
         else message = secureMessage.decipherAndVerifyMessage(secret, verifyKey);
+        Long nounce = message.checkNounce(_nounces.get(senderId));
+        _nounces.put(senderId, nounce);
         return message;
     }
 
@@ -193,9 +196,11 @@ public class ServerApplication {
         if (secureMessage == null) throw new IllegalArgumentException("Cannot decipher null broadcast message.");
         int senderId = secureMessage.get_senderId();
         PublicKey verifyKey = getPublicKey(senderId);
-        String alias = (senderId >= 1000) ? "server" + (senderId - 1000) : "user" + (senderId);
+        String alias = "server" + (senderId - 1000);
         SecretKey secret = _keyStore.getSecretKey(alias);
         BroadcastMessage message = secureMessage.decipherAndVerifyBroadcastMessage(secret, verifyKey);
+        Long nounce = message.checkNounce(_nounces.get(senderId));
+        _nounces.put(senderId, nounce);
         message.checkOrigin();
         return message;
     }
@@ -254,6 +259,7 @@ public class ServerApplication {
     }
 
     public Message postBroadcastToServer(int serverId, BroadcastMessage message, String endpoint) throws Exception {
+        message.reset_nounce();
         SecureMessage secureRequest = cipherAndSignBroadcastMessage(serverId+1000, message);
         serverSecretKeyUsed(serverId+1000);
         HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
@@ -279,7 +285,6 @@ public class ServerApplication {
         SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + "/secret-key", httpRequest, SecureMessage.class);
 
         // Check response's signature and decipher
-        // TODO : freshness
         assert secureResponse != null;
         return secureResponse.decipherAndVerifyMessage( myKey, serverKey);
     }
@@ -315,7 +320,7 @@ public class ServerApplication {
             saveSecretKey(serverId+1000, newSecretKey);
 
             // Tell other servers to refresh keys
-            response = postToServer(serverId, new Message(0, null), "/refresh-secret-keys");
+            response = postToServer(serverId, new Message(null), "/refresh-secret-keys");
             if (!response.isOKString())
                 throw new IllegalArgumentException("Error sending refresh keys request.");
         }

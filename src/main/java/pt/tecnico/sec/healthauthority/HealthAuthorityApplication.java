@@ -31,6 +31,8 @@ public class HealthAuthorityApplication {
     private static int _serverCount;
 
     private static final Map<Integer, Integer> _sKeysUsages = new HashMap<>();
+    private static final Map<Integer, Long> _serverNounces = new HashMap<>();
+
 
     public static void main(String[] args) {
         try {
@@ -176,7 +178,7 @@ public class HealthAuthorityApplication {
     public LocationReport obtainReport(int userId, int epoch) throws Exception {
         // Create request
         ObtainLocationRequest locationRequest = new ObtainLocationRequest(userId, epoch);
-        Message request = new Message(0, locationRequest);
+        Message request = new Message(locationRequest);
 
         // Perform request
         Message response = postToServers(request, "/obtain-location-report");
@@ -206,7 +208,7 @@ public class HealthAuthorityApplication {
     public UsersAtLocation obtainUsers(Location location, int epoch) throws Exception {
         // Create request
         ObtainUsersRequest usersRequest = new ObtainUsersRequest(location, epoch);
-        Message request = new Message(0, usersRequest);
+        Message request = new Message(usersRequest);
 
         // Perform request
         Message response = postToServers(request, "/users");
@@ -235,6 +237,7 @@ public class HealthAuthorityApplication {
     /* ====[              Server communication              ]==== */
     /* ========================================================== */
 
+    @SuppressWarnings("DuplicatedCode")
     private Message sendRequest(int serverId, SecureMessage secureRequest, SecretKey secretKey, String endpoint) throws Exception {
         PublicKey serverKey = _keyStore.getPublicKey("server" + serverId);
         HttpEntity<SecureMessage> request = new HttpEntity<>(secureRequest);
@@ -242,8 +245,11 @@ public class HealthAuthorityApplication {
 
         if (secureResponse == null) return null;
 
-        // Check response's signature and decipher TODO freshness
-        return secureResponse.decipherAndVerifyMessage( secretKey, serverKey);
+        // Check response's signature, freshness and decipher
+        Message response = secureResponse.decipherAndVerifyMessage( secretKey, serverKey);
+        Long nounce = response.checkNounce(_serverNounces.get(serverId));
+        _serverNounces.put(serverId, nounce);
+        return response;
     }
 
     private Message postToServers(Message message, String endpoint) throws Exception {
@@ -263,7 +269,7 @@ public class HealthAuthorityApplication {
         HttpEntity<SecureMessage> httpRequest = new HttpEntity<>(secureRequest);
         SecureMessage secureResponse = _restTemplate.postForObject(getServerURL(serverId) + "/secret-key", httpRequest, SecureMessage.class);
 
-        // Check response's signature and decipher TODO freshness
+        // Check response's signature and decipher
         assert secureResponse != null;
         return secureResponse.decipherAndVerifyMessage( myKey, serverKey);
     }

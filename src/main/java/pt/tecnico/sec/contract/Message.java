@@ -1,5 +1,6 @@
 package pt.tecnico.sec.contract;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import pt.tecnico.sec.client.report.LocationProof;
 
@@ -14,23 +15,23 @@ import static pt.tecnico.sec.Constants.OK;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class Message {
 
-    private Integer _nonce;
+    private Long _nounce;
     private Object _data;
 
     public Message() {
     }
 
-    public Message(Integer nonce, Object data) {
-        _nonce = nonce;
+    public Message(Object data) {
+        _nounce = System.currentTimeMillis();
         _data = data;
     }
 
-    public Integer get_nonce() {
-        return _nonce;
+    public Long get_nounce() {
+        return _nounce;
     }
 
-    public void set_nonce(Integer _nonce) {
-        this._nonce = _nonce;
+    public void set_nounce(Long _nounce) {
+        this._nounce = _nounce;
     }
 
     public Object get_data() {
@@ -41,10 +42,18 @@ public class Message {
         this._data = _data;
     }
 
+    @JsonIgnore
+    public Long checkNounce(Long prevNounce) {
+        if (_nounce == null || (prevNounce != null && _nounce < prevNounce))
+            throw new IllegalArgumentException("Message not fresh!");
+        System.out.println("Message is fresh!");
+        return _nounce;
+    }
+
     @Override
     public String toString() {
         return "Message{" +
-                "_nonce=" + _nonce +
+                "_nounce=" + _nounce +
                 ", _data=" + _data +
                 '}';
     }
@@ -54,12 +63,12 @@ public class Message {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Message message = (Message) o;
-        return Objects.equals(_nonce, message._nonce) && Objects.equals(_data, message._data);
+        return Objects.equals(_nounce, message._nounce) && Objects.equals(_data, message._data);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(_nonce, _data);
+        return Objects.hash(_nounce, _data);
     }
 
     /* ========================================================== */
