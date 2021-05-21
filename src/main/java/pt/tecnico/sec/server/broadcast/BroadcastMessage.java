@@ -38,13 +38,6 @@ public class BroadcastMessage {
     }
 
     @JsonIgnore
-    public Long checkNounce(Long prevNounce) {
-        // required window because of threads
-        if (_nounce == null || (prevNounce != null && _nounce < prevNounce - 1000))
-            throw new IllegalArgumentException("Broadcast message not fresh!");
-        return _nounce;
-    }
-    @JsonIgnore
     public void reset_nounce() {
         _nounce = System.currentTimeMillis();
     }
